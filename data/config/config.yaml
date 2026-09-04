@@ -1,0 +1,33 @@
+# unmarkable server configuration.
+#
+# Small on purpose. Everything about the racing — points, lines, courses, and the
+# detection tuning — lives in the club/series programme files under clubs/, because
+# that is what a club owns and what changes. What is left here is the listener.
+
+site:
+  name: "Unmarkable Racing"
+  contact: "unmarkable@mortbay.org"
+
+server:
+  # 8081 is sailing-pf, 8082 is sail-jinx, 8888 is the sailing-pf admin connector.
+  port: 8083
+
+  # Reconstruct the externally-visible URL from X-Forwarded-* headers. Set true when
+  # something else terminates the connection — the proxy in front of
+  # https://unmarkable.mortbay.org — and false when this server is reached directly.
+  # Never turn it on for a directly-exposed server: those headers are whatever the
+  # client sent.
+  forwardedHeaders: false
+
+  # One line per request in the ordinary log — on the Pi, `journalctl -u unmarkable`.
+  # On by default. The clients here are phones on marginal connections, so "did the
+  # record actually arrive" is the question that will be asked, and this is what
+  # answers it.
+  requestLog: true
+
+  # The course editor saves as you type, so this is on by default or the editor simply
+  # does not work. It is a real exposure and not a small one: with it on, ANYTHING THAT
+  # CAN REACH THIS PORT CAN REWRITE THE COURSE FILES, because there is no authentication
+  # on writes yet. Correct for a laptop on a desk; set false — or put a login in front of
+  # it — before this server is reachable from anywhere else. It warns at startup.
+  configWrites: true

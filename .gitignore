@@ -1,0 +1,29 @@
+# Compiled class file
+*.class
+*.log
+
+# Package files
+*.jar
+*.war
+*.zip
+*.tar.gz
+
+# JVM crash logs
+hs_err_pid*
+replay_pid*
+
+# Maven / IDE
+target/
+.idea/
+*.iml
+
+# Node, if the Capacitor shell arrives
+node_modules/
+client/android/
+client/ios/
+
+# The race records. Boats' own accounts of their races: real people, real tracks,
+# and this repo is public. Promote a sanitised race to src/test/resources if you
+# want fixtures.
+data/store/
+data/backups/

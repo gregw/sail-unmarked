@@ -1,0 +1,4 @@
+site:
+  name: "Test"
+server:
+  port: 0

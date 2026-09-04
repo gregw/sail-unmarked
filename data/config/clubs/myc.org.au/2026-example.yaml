@@ -1,0 +1,195 @@
+# Manly Cove circuit — the worked course from the brief, section 06.
+#
+# One file per club and series. The path is the identity: this file is filed under
+# clubs/myc.org.au/ and named 2026-example, so its club is "myc.org.au" and its series
+# is "2026-example". Nothing here is resolved from any other file.
+#
+# ---------------------------------------------------------------------------------
+# NO COORDINATES ARE ASSERTED IN THIS FILE. Every position below is null, waiting on a
+# survey. The brief is explicit that real positions are to be supplied and not guessed,
+# so this file loads, reports every unsurveyed point as a problem, and refuses to
+# pretend it knows where Sow and Pigs is.
+# ---------------------------------------------------------------------------------
+
+name: Manly Cove circuit (example)
+datum: WGS84
+
+notes: >
+  The example course from the project brief, in the originator's words: an east-west
+  start and finish line in Manly Cove, a line going infinitely due east from Sow and
+  Pigs reef, a line going infinitely south from Shark Island, a 100 m line in Obelisk
+  Bay parallel to the coast, a line going infinitely south from Sow and Pigs, then
+  finish. The required crossing senses below are INFERRED from the course order, not
+  stated by the originator, and must be confirmed before anybody races this.
+
+# Detection tuning for this series. Every number is a default set against data that
+# does not exist yet — they are configuration so they can be tuned against real logged
+# tracks from these waters rather than argued about.
+defaults:
+  confirmFixes: 3          # N in the 3-and-3 rule
+  accuracyBandM: null      # fixed half-width, or null to use each fix's stated accuracy
+  qc:
+    minSatellites: 4       # receiver-metadata pre-filter: necessary, not sufficient
+    maxAccuracyM: 25
+    maxSpeedKn: 40         # the kinematic gate — the primary defence against flyers
+
+# ---------------------------------------------------------------------------------
+# Points. Surveyed once, referred to by id, so a correction is one edit. Sow and Pigs
+# is shared by two lines, which is exactly why this section exists.
+# ---------------------------------------------------------------------------------
+points:
+  sow-and-pigs:
+    name: Sow and Pigs reef
+    latitude: -33.836894
+    longitude: 151.270799
+    notes: >
+      Shared fixed end of both Sow and Pigs lines.
+  sowpigs-east-handle:
+    name: East of Sow and Pigs
+    latitude: -33.837451
+    longitude: 151.273570
+    notes: >
+      Sets the 090 bearing of sowpigs-east, and nothing else — the line runs through this
+      point and on forever, so sliding it along 090 leaves the line unchanged. Place it
+      where the fleet actually crosses: it is half of the midpoint that the legs either side
+      are measured to.
+  sowpigs-south-handle:
+    name: South of Sow and Pigs
+    latitude: -33.838520
+    longitude: 151.270777
+    notes: >
+      Sets the 180 bearing of sowpigs-south. Same handle role as above.
+  shark-island:
+    name: Shark Island
+    latitude: -33.858848
+    longitude: 151.258084
+  shark-south-handle:
+    name: South of Shark Island
+    latitude: -33.861409
+    longitude: 151.258932
+    notes: >
+      Sets the 180 bearing of shark-south. Shore-limited in practice.
+  manly-cove-w:
+    name: Manly Cove line, west end
+    latitude: -33.804420
+    longitude: 151.276182
+    notes: >
+      On shore. A finite end on the beach cannot be crossed near, so it cannot be argued
+      about.
+  manly-cove-e:
+    name: Manly Cove line, east end
+    latitude: -33.804492
+    longitude: 151.284226
+    notes: >
+      On shore.
+  obelisk-s:
+    name: Obelisk Bay line, starboard end
+    latitude: -33.831737
+    longitude: 151.263984
+  obelisk-p:
+    name: Obelisk Bay line, port end
+    latitude: -33.832815
+    longitude: 151.262993
+    notes: >
+      100 m from obelisk-n, parallel to the coast.
+  shark-west-handle:
+    latitude: -33.858282
+    longitude: 151.254644
+
+# ---------------------------------------------------------------------------------
+# Lines. Two ends, named port and starboard: a FORWARD crossing leaves the port end to
+# port and the starboard end to starboard, and a REVERSE crossing does the opposite.
+# The names are relative to a forward crossing, so a line crossed both ways — the
+# Manly Cove line, which is both the start and the finish — is forward once and
+# reverse once.
+#
+# An end with `infinite: true` is a BEARING, NOT A PLACE: the line runs out through
+# that point and keeps going, so the point says which way the line goes and not where
+# it stops. That is why the rule needs no exception at infinity — an infinite end is
+# always on the side its name says, and only a finite end can be missed.
+#
+# Lines are defined here rather than inside a course because they are reused: the same
+# start line appears in every course a club sails.
+# ---------------------------------------------------------------------------------
+lines:
+  manly-cove:
+    name: Manly Cove start/finish line
+    port:      {at: manly-cove-e}
+    starboard: {at: manly-cove-w}
+    notes: >
+      Runs 090/270 between two shore points, spanning the cove. Crossed southbound to start
+      and northbound to finish. Both ends on shore, so there is no near-end crossing to
+      dispute.
+  sowpigs-east:
+    name: Sow and Pigs, east
+    port:      {at: sow-and-pigs}
+    starboard: {at: sowpigs-east-handle, infinite: true}
+    notes: >
+      Half-infinite, running 090 from the reef. Required crossing southbound.
+  shark-south:
+    name: Shark Island, south
+    port:      {at: shark-island}
+    starboard: {at: shark-south-handle, infinite: true}
+    notes: >
+      Half-infinite, running 180 from the island; shore-limited in practice, which is why it
+      can be infinite without being crossable at the far end. Crossed westbound.
+  obelisk:
+    name: Obelisk Bay line
+    port:      {at: obelisk-s}
+    starboard: {at: obelisk-p}
+    notes: >
+      Finite, 100 m, parallel to the coast. Crossed northbound.
+  sowpigs-south:
+    name: Sow and Pigs, south
+    port:      {at: sow-and-pigs}
+    starboard: {at: sowpigs-south-handle, infinite: true}
+    notes: >
+      Half-infinite, running 180 from the same reef as sowpigs-east. The two lines share
+      their finite end, which is why sow-and-pigs is a named point.
+  shark-west:
+    name: Shark west
+    port:      {at: shark-west-handle, infinite: true}
+    starboard: {at: shark-island}
+
+# ---------------------------------------------------------------------------------
+# Courses. A sequence of steps; THE FIRST STEP IS THE START AND THE LAST IS THE
+# FINISH, so there are no roles to write down and nothing that can disagree with the
+# order. The letters drawn on a course diagram (S, 1, 2, … F) are derived from
+# position for the same reason.
+#
+# A leg is measured between the midpoints of consecutive lines' two defined points.
+# `lengthNm` on a step overrides the leg INTO that step, for a length that is a matter
+# of record rather than of geometry.
+# ---------------------------------------------------------------------------------
+courses:
+  manly-cove-circuit:
+    name: Manly Cove circuit
+    notes: >
+      Crossing senses are inferred from the course order and are UNVERIFIED. Once the points
+      are surveyed, check each one against the geometry before racing it.
+    sequence:
+      - line: manly-cove
+        cross: forward
+        notes: >
+          Start. Southbound out of the cove.
+      - line: sowpigs-east
+        cross: reverse
+        notes: >
+          Southbound.
+      - line: sowpigs-south
+        cross: reverse
+        notes: >
+          Eastbound.
+      - line: obelisk
+        cross: reverse
+        notes: >
+          Northbound.
+      - line: shark-south
+        cross: reverse
+        notes: >
+          Westbound.
+      - {line: shark-west, cross: forward}
+      - line: manly-cove
+        cross: reverse
+        notes: >
+          Finish. Northbound into the cove.

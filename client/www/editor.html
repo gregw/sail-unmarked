@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Course editor</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  /* The editor is a shore-side page at a desk, so it lays out wide and assumes a mouse.
+     The on-water screens are a different problem and share only the palette. */
+  body { padding: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* Everything global sits on one bar directly above the chart it acts on: which
+     programme, which background, and the state of the last edit. */
+  .chartbar {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 7px 12px; border-bottom: 1px solid var(--panel2); background: var(--panel);
+  }
+  .chartbar h1 { font-size: 15px; white-space: nowrap; }
+  .chartbar select { width: auto; }
+
+  select, button {
+    font-family: var(--body); font-size: 13px; color: var(--ink);
+    background: var(--panel2); border: 1px solid #24405a; border-radius: 4px;
+    padding: 5px 10px; cursor: pointer;
+  }
+  button:hover { border-color: var(--line); }
+  button.on { background: var(--line); color: var(--sea); border-color: var(--line); }
+  button:disabled { opacity: 0.4; cursor: default; border-color: #24405a; }
+  button.danger:hover { border-color: var(--warn); color: var(--warn); }
+  .seg { display: flex; }
+  .seg button { border-radius: 0; }
+  .seg button:first-child { border-radius: 4px 0 0 4px; }
+  .seg button:last-child { border-radius: 0 4px 4px 0; }
+
+  main { flex: 1 1 auto; display: flex; min-height: 0; }
+  .chartcol { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+  #map { flex: 1 1 auto; min-height: 0; background: var(--sea); cursor: grab; display: block; }
+
+  /* A column of three regions. Only the two that hold variable content scroll, and each
+     only when it actually overflows — the old fixed max-height put a bar on a nine-row
+     list that had room to spare. */
+  aside {
+    width: 495px; flex: 0 0 495px; border-left: 1px solid var(--panel2);
+    background: var(--panel); display: flex; flex-direction: column; overflow: hidden;
+  }
+  .paneTop { flex: 0 0 auto; padding: 10px 14px 0; }
+  /* Three surfaces, getting lighter as they get more interactive: the pane, the list of
+     things on it, and the fields that edit one. Before this the list and the pane were
+     the same shade and the boundary had to be inferred from the row hover. */
+  #listWrap {
+    flex: 0 1 auto; overflow-y: auto; min-height: 0; margin: 0 14px;
+    background: #1a2c3e; border: 1px solid #223a51; border-radius: 5px; padding: 4px;
+  }
+  #formWrap { flex: 1 1 auto; overflow-y: auto; min-height: 0; padding: 4px 14px 14px; border-top: 1px solid var(--panel2); margin-top: 8px; }
+
+  .paneHead { display: flex; align-items: center; gap: 8px; margin: 10px 0 6px; }
+  .paneHead h2 { font-size: 15px; }
+  .paneHead .sp { flex: 1 1 auto; }
+  .paneHead button { padding: 3px 9px; font-size: 12px; }
+
+  /* One line per entry. What each thing IS goes in the form below; the list is for
+     finding it, and a second line per row halved how many could be seen at once. */
+  .row {
+    display: flex; align-items: baseline; gap: 8px;
+    padding: 3px 7px; border-radius: 3px; cursor: pointer; border: 1px solid transparent;
+  }
+  .row .trail { margin-left: auto; }
+  .row:hover { background: var(--panel2); }
+  .row.on { background: var(--panel2); border-color: var(--ok); }
+  .small { font-size: 11px; }
+  .label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+
+  input, textarea, aside select {
+    width: 100%; font-family: var(--mono); font-size: 12px;
+    background: #1e3348; color: var(--ink); border: 1px solid #33587a;
+    border-radius: 4px; padding: 5px 7px; margin-bottom: 6px;
+  }
+  input:hover, textarea:hover, aside select:hover { border-color: #47749c; }
+  input:focus, textarea:focus, select:focus { outline: none; border-color: var(--line); }
+  textarea { resize: vertical; line-height: 1.4; }
+  #form .label { display: block; margin-bottom: 2px; }
+  .pair { display: flex; gap: 8px; }
+  .pair > div { flex: 1 1 0; min-width: 0; }
+
+  /* A line end: which point it is, whether it runs on, and a way to say so by pointing. */
+  .endblock { border: 1px solid var(--panel2); border-radius: 4px; padding: 7px 8px; margin-bottom: 8px; }
+  .endblock .label { margin-bottom: 3px; }
+  .endblock select { margin-bottom: 6px; }
+  select { width: 100%; }
+  .endrow { display: flex; align-items: center; gap: 10px; }
+  .endrow .pick { flex: 0 0 auto; font-size: 12px; padding: 3px 8px; }
+  .cb { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 4px; cursor: pointer; }
+  .cb input { width: auto; margin: 0; }
+
+  /* Course labels grow under the pointer. The transform itself is set in JS, about the
+     label's own anchor; this only makes the change move rather than jump. */
+  .cmark { transition: transform 0.12s ease-out; cursor: default; }
+
+  /* One row per crossing: its letter, the line, the sense, and a way to remove it.
+     A gate's alternatives are indented under the step they belong to, because a gate is
+     a choice at one step and never a step of its own. */
+  .stepblock { border: 1px solid var(--panel2); border-radius: 4px; padding: 4px 5px; margin-bottom: 4px; }
+  .steprow { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; }
+  .steprow:last-child { margin-bottom: 0; }
+  .steprow.alt { padding-left: 12px; }
+  .steprow .grow { flex: 1 1 auto; }
+  .steprow select { flex: 1 1 auto; margin: 0; font-size: 11px; padding: 2px 4px; }
+  .steprow button { flex: 0 0 auto; padding: 2px 6px; font-size: 11px; }
+  .seq {
+    flex: 0 0 20px; text-align: center; font-family: var(--mono); font-size: 11px;
+    color: var(--line);
+  }
+
+  /* Explanation lives behind these rather than in the pane. The pane is for the thing
+     being edited; a paragraph you have already read is just something in the way. */
+  .info {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 15px; height: 15px; border-radius: 50%; cursor: help;
+    border: 1px solid var(--muted); color: var(--muted);
+    font-family: var(--mono); font-size: 10px; line-height: 1; flex: 0 0 auto;
+  }
+  .info:hover { border-color: var(--line); color: var(--line); }
+  #infopop {
+    position: fixed; z-index: 50; max-width: 330px; display: none;
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 5px;
+    padding: 9px 11px; font-size: 12px; line-height: 1.5; color: var(--ink);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.45);
+  }
+  #infopop b { color: var(--line); }
+</style>
+</head>
+<body>
+
+<main>
+  <div class="chartcol">
+    <div class="chartbar">
+      <h1>Course editor</h1>
+      <select id="programme" title="club and series"></select>
+      <select id="basemap" title="chart background"></select>
+      <button id="undo">Nothing to undo</button>
+      <span id="save" class="mono" style="font-size:11px"></span>
+      <span id="status" class="mono" style="font-size:11px"></span>
+      <span style="flex:1 1 auto"></span>
+      <a href="index.html" class="small">&larr; Home</a>
+    </div>
+    <svg id="map" viewBox="0 0 700 500"></svg>
+  </div>
+  <aside>
+    <div class="paneTop">
+      <div class="seg">
+        <button data-tab="points">Points</button>
+        <button data-tab="lines">Lines</button>
+        <button data-tab="courses" class="on">Courses</button>
+      </div>
+      <div class="paneHead">
+        <h2 id="paneTitle">Courses</h2>
+        <span class="info" id="paneInfo">?</span>
+        <span class="sp"></span>
+        <button id="add">Add</button>
+      </div>
+    </div>
+    <div id="listWrap"><div id="pointList"></div></div>
+    <div id="formWrap"><div id="form"></div></div>
+  </aside>
+</main>
+
+<div id="infopop"></div>
+
+<script type="module" src="editor.js"></script>
+</body>
+</html>

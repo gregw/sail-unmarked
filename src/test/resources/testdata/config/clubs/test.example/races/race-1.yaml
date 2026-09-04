@@ -1,0 +1,9 @@
+series: fixture
+name: Fixture race
+course: up-and-back
+format: rollingStart
+windowOpen:  2026-01-01T07:00:00Z
+windowClose: 2026-01-01T07:30:00Z
+parameters: {someFutureKnob: 3}
+entrants:
+  - {boatId: boat-1, boatName: Bombora, sailNumber: AUS1, tcf: 1.02}

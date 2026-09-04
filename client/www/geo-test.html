@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Geo and projection spec</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<p class="kicker">Executable specification</p>
+<h1>Geo and projection</h1>
+<p class="muted">
+  The same assertions <span class="mono">tools/run-js-tests.mjs</span> runs in the
+  Maven build, imported from <span class="mono">geo-test.js</span> rather than copied,
+  so the page and the build cannot disagree.
+</p>
+
+<div id="summary" class="panel mono">Running&hellip;</div>
+<div id="results" class="panel"></div>
+
+<script type="module">
+import { run } from './geo-test.js';
+
+const results = [];
+run((description, ok) => results.push({ description, ok }));
+
+const failed = results.filter((r) => !r.ok);
+document.getElementById('summary').innerHTML = failed.length === 0
+  ? `<span class="ok">${results.length} passed</span>`
+  : `<span class="warn">${failed.length} of ${results.length} FAILED</span>`;
+
+document.getElementById('results').innerHTML =
+  `<ul>${results.map((r) =>
+    `<li class="${r.ok ? 'muted' : 'warn'}">${r.ok ? '&check;' : '&cross;'} ${r.description}</li>`
+  ).join('')}</ul>`;
+</script>
+
+</body>
+</html>

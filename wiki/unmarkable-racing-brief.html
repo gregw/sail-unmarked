@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unmarkable Racing - Project Brief</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600&family=Barlow+Condensed:wght@500;600;700&family=Share+Tech+Mono&display=swap');
+
+  :root {
+    --mono: 'Share Tech Mono', monospace;
+    --disp: 'Barlow Condensed', sans-serif;
+    --body: 'Barlow', sans-serif;
+    --ink: #1c2b39;
+    --ink2: #45586a;
+    --faint: #6c7f92;
+    --rule: #d7e0e8;
+    --accent: #1e5caa;
+    --accent2: #0f8a8a;
+    --paper: #f5f7fa;
+    --code: #0f1b27;
+
+    --sea: #0e1a26;
+    --panel: #13212f;
+    --panel2: #17293a;
+    --line: #35b5e8;
+    --muted: #7f97ad;
+    --ink-d: #e6eef6;
+    --fromside: #4a86cf;
+    --toside: #e08a3a;
+    --cog: #aebfce;
+    --ok: #2fd07a;
+    --warn: #ff5f56;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--paper); color: var(--ink); font-family: var(--body); line-height: 1.6; }
+  .wrap { max-width: 780px; margin: 0 auto; padding: 46px 22px 90px; }
+
+  h1 { font-family: var(--disp); font-size: 40px; font-weight: 700; letter-spacing: 0.01em; line-height: 1.02; }
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.22em; color: var(--accent); text-transform: uppercase; margin-bottom: 10px; }
+  .lede { font-size: 18px; color: var(--ink2); margin-top: 14px; font-weight: 300; }
+  .tag { font-family: var(--disp); font-size: 17px; font-weight: 500; color: var(--accent2); letter-spacing: 0.02em; margin-top: 6px; }
+
+  h2 { font-family: var(--disp); font-size: 26px; font-weight: 700; margin: 46px 0 6px; padding-top: 20px; border-top: 2px solid var(--ink); letter-spacing: 0.01em; }
+  h2 .n { color: var(--accent); font-family: var(--mono); font-size: 15px; margin-right: 10px; vertical-align: 2px; }
+  h3 { font-family: var(--disp); font-size: 19px; font-weight: 600; margin: 26px 0 4px; color: var(--ink); letter-spacing: 0.01em; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 10px 0 10px 22px; }
+  li { margin: 6px 0; }
+  strong { font-weight: 600; }
+  em { font-style: italic; color: var(--ink2); }
+
+  .callout { background: #eaf1f8; border-left: 3px solid var(--accent); padding: 14px 18px; margin: 20px 0; border-radius: 0 8px 8px 0; }
+  .callout.warnbox { background: #fff4ec; border-left-color: #d98a45; }
+  .callout .h { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; }
+  .callout.warnbox .h { color: #b8702c; }
+  .callout p { margin: 6px 0; font-size: 15px; }
+
+  code { font-family: var(--mono); font-size: 13px; background: #e7edf3; padding: 1px 5px; border-radius: 4px; color: #244; }
+  pre { background: var(--code); color: #cfe3f2; font-family: var(--mono); font-size: 12.5px; line-height: 1.65; padding: 16px 18px; border-radius: 10px; overflow-x: auto; margin: 16px 0; }
+  pre .c { color: #6f8ba3; }
+  pre .k { color: #7fd0f0; }
+  pre .v { color: #e0b06a; }
+
+  table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); font-weight: 400; }
+  td .mono { font-family: var(--mono); font-size: 12px; }
+
+  .phones { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; margin: 22px 0 8px; }
+  .phone { width: 232px; background: #05090d; border-radius: 26px; padding: 9px; border: 1px solid #223341; }
+  .screen { background: var(--sea); border-radius: 18px; overflow: hidden; display: flex; flex-direction: column; min-height: 428px; }
+  .statusbar { display: flex; justify-content: space-between; padding: 7px 13px 3px; font-family: var(--mono); font-size: 8px; color: var(--muted); letter-spacing: 0.06em; }
+  .schead { padding: 3px 13px 4px; display: flex; justify-content: space-between; align-items: baseline; }
+  .schead .name { font-family: var(--disp); font-size: 15px; font-weight: 700; color: #e6eef6; letter-spacing: 0.04em; }
+  .schead .st { font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.08em; }
+  .st.appr { color: var(--line); } .st.ok { color: var(--ok); } .st.warn { color: var(--warn); }
+  .phone.wide { width: 300px; }
+  .st.gold { color: #e0b34a; }
+  .modes { display: flex; gap: 5px; padding: 2px 15px 3px; }
+  .mode { font-family: var(--mono); font-size: 8px; letter-spacing: 0.07em; padding: 3px 9px; border-radius: 6px; border: 1px solid #1d2f3f; color: #566779; background: #0f1c28; }
+  .mode.on { background: #4a86cf; border-color: #4a86cf; color: #06131d; }
+  .subhead { font-family: var(--mono); font-size: 9px; color: var(--muted); letter-spacing: 0.05em; padding: 2px 15px 6px; }
+  .subhead b { color: #e6eef6; font-weight: 400; }
+  .callout.two { background: #eef3ee; border-left-color: #3f8f6a; } .callout.two .h { color: #2f7d58; }
+  .stepper { display: flex; gap: 4px; padding: 0 13px 6px; }
+  .pill { flex: 1; text-align: center; font-family: var(--mono); font-size: 7px; letter-spacing: 0.06em; padding: 3px 0; border-radius: 5px; color: #566779; background: #0f1c28; border: 1px solid #1d2f3f; }
+  .schead .mk { font-family: var(--mono); font-size: 8.5px; color: var(--muted); letter-spacing: 0.08em; }
+  .modesel { display: flex; gap: 4px; padding: 0 13px 6px; }
+  .mseg { flex: 1; text-align: center; font-family: var(--mono); font-size: 7px; letter-spacing: 0.04em; padding: 3px 0; border-radius: 5px; color: #566779; background: #0f1c28; border: 1px solid #1d2f3f; }
+  .mseg.on { background: #35b5e8; border-color: #35b5e8; color: #06131d; }
+  .nextleg { display: flex; align-items: center; justify-content: space-between; padding: 2px 15px 8px; gap: 12px; }
+  .nl-label { font-family: var(--mono); font-size: 9px; letter-spacing: 0.1em; color: var(--muted); line-height: 1.3; }
+  .nl-label b { display: block; font-family: var(--disp); font-size: 19px; font-weight: 700; color: var(--ink-d); letter-spacing: 0.04em; }
+  .nl-arrow { flex-shrink: 0; }
+  .omodes { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; margin: 16px 0 6px; }
+  .ocard { background: #fff; border: 1px solid var(--rule); border-radius: 14px; padding: 14px 14px 12px; width: 320px; }
+  .ocard h4 { font-family: var(--disp); font-size: 17px; font-weight: 700; color: #16283a; text-align: center; letter-spacing: 0.02em; margin: 0; }
+  .ocard .rot { font-family: var(--mono); font-size: 9px; letter-spacing: 0.1em; text-align: center; text-transform: uppercase; margin: 2px 0 10px; }
+  .rot.turns { color: #c07800; } .rot.fixed { color: #2f7d58; }
+  .oframes { display: flex; gap: 6px; align-items: center; justify-content: center; }
+  .obetween { font-family: var(--mono); font-size: 9px; color: var(--faint); text-align: center; line-height: 1.1; }
+  .ocap { font-family: var(--body); font-size: 12.5px; color: var(--ink2); text-align: center; margin-top: 9px; line-height: 1.45; }
+  .placeholder { max-width: 560px; margin: 14px auto 0; border: 2px dashed #aebfcb; border-radius: 14px; background: #fff; padding: 24px 22px; text-align: center; }
+  .placeholder .ptag { font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #8095a8; }
+  .placeholder h4 { font-family: var(--disp); font-size: 20px; font-weight: 700; color: #2a3b4a; margin: 8px 0; }
+  .placeholder p { font-size: 14px; color: var(--ink2); max-width: 460px; margin: 6px auto 0; }
+  .pill.on.appr { color: #06131d; background: var(--line); border-color: var(--line); }
+  .pill.on.ok { color: #05130b; background: var(--ok); border-color: var(--ok); }
+  .pill.on.warn { color: #1a0605; background: var(--warn); border-color: var(--warn); }
+  .plot { width: 100%; display: block; }
+  .readouts { margin-top: auto; padding: 8px 9px 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .cell { background: var(--panel); border-radius: 8px; padding: 6px 8px; }
+  .cell.wide { grid-column: 1 / 3; background: var(--panel2); }
+  .cell .lbl { font-family: var(--mono); font-size: 7.5px; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; }
+  .cell .val { font-family: var(--disp); font-size: 20px; font-weight: 700; color: #e6eef6; line-height: 1.05; margin-top: 1px; }
+  .cell .val small { font-size: 10px; font-weight: 500; color: var(--muted); }
+  .cell .val.null { color: var(--muted); }
+  .msg { font-family: var(--mono); font-size: 8px; line-height: 1.45; letter-spacing: 0.02em; }
+  .msg.appr { color: var(--line); } .msg.ok { color: var(--ok); } .msg.warn { color: var(--warn); }
+
+  .caption { font-family: var(--mono); font-size: 11px; color: var(--faint); text-align: center; letter-spacing: 0.03em; margin: 4px 0 24px; line-height: 1.6; }
+
+  .legend { display: flex; gap: 10px 22px; flex-wrap: wrap; font-family: var(--mono); font-size: 11px; color: var(--ink2); letter-spacing: 0.03em; margin: 12px 0 6px; padding: 14px 16px; background: #fff; border: 1px solid var(--rule); border-radius: 10px; }
+  .legend .li { display: flex; align-items: center; gap: 8px; }
+
+  .foot { margin-top: 50px; padding-top: 18px; border-top: 1px solid var(--rule); font-family: var(--mono); font-size: 11px; color: var(--faint); line-height: 1.8; letter-spacing: 0.02em; }
+  .foot b { color: var(--ink2); font-weight: 400; }
+  .diagram { background: #0e1a26; border-radius: 14px; padding: 10px; margin: 14px 0 6px; border: 1px solid #223341; }
+  .diagram svg { width: 100%; height: auto; display: block; max-width: 560px; margin: 0 auto; }
+  .diagram object { display: block; width: 100%; max-width: 560px; margin: 0 auto; border: 0; }
+  .dcap { font-size: 14px; color: var(--ink2); margin: 8px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="kicker">Project brief &middot; for Claude Code</div>
+  <h1>Unmarkable Racing</h1>
+  <p class="tag">Sail racing around virtual marks.</p>
+  <p class="lede">An app for sailing races around virtual marks, where every mark is a line to be crossed via GPS rather than a point to be rounded. The intention of the application is both to allow more flexible traditional racing without the hassle of laying marks; and to support some new racing formats made possible by virtual marks and app tracking.</p>
+
+  <div class="callout">
+    <div class="h">Scope for this document</div>
+    <p>This document is a specification to read and plan from. The task is to understand the model, raise questions, and propose an architecture and a build order.  Until and implementation is developed, everything in this document is provisional.</p>
+    <p><strong>Revised after the first build.</strong> Sections 2, 5, 6, 7 and 8 have been brought into line with what was actually decided and implemented. The changes of substance: line ends are now named <span class="mono">port</span> and <span class="mono">starboard</span>; the crossing test is stated as two separate tests, sense and extent; the system has one declared resolution of <b>one metre</b>; and <b>the configuration sketch in section 6 has been replaced outright</b> &mdash; the original was wrong in specific ways, listed there so they are not reintroduced. The working notes live in <span class="mono">CLAUDE.md</span>, which is now the more current of the two on anything to do with the schema.</p>
+  </div>
+
+  <h2><span class="n">01</span>Introduction</h2>
+  <p>The core idea is to replace the rounding of a physical mark (checked with the eyeball) with the crossing of a virtual line (checked by the app).
+      A line is used rather than a point mark to avoid the need for Racing Rule of Sailing 18 (RRS18 - Mark Roundings) and to limit GPS accuracy issues that may create disputes over whether a boat clipped a rounding radius or not.
+      Already, fleets routinely cross the start lines without the benefit of RRS18 and often rely on GPS instruments to site the line as either one or both ends of the line cannot be seen. This application extends that style of crossing to every mark rounding.</p>
+  <p><strong>RRS 18 (mark-room) never applies at a virtual mark</strong>. There is no zone to reach and no inside or outside overlap to adjudicate. That is a deliberate safety/simplicity choice, not a side effect, and it shapes both the rules framing in section 4 and the crossing logic in section 2.</p>
+  <p>The system has two parts. A client on the boat that reads GPS, detects crossings, times them, and stores its own race record, working with no network. A server on shore that distributes course and format definitions and aggregates results. The dividing principle, stated once and relied on throughout: <strong>a boat's own rounding and timing are computed entirely on the device and never wait on a server</strong>.</p>
+
+  <h2><span class="n">02</span>Virtual marks: the core model</h2>
+
+  <h3>Lines, not points</h3>
+  <p>A virtual mark is a line. A crossing is valid when the boat passes from the required side to the opposite side in the required direction. There is no proximity radius and no single point of contest.</p>
+
+  <p>Lines are defined by two points, as current start/finish lines are today. However, either or both ends may be defined to be infinite, so a line may not be geographically limited if that suites the course design.  Furthermore, either/both ends of a line may be placed on shore, to avoid issues with near-end crossings. These lines can be used to mimic traditional marks and course infrastructure:
+  </p>
+  <ul>
+    <li><strong>Start/Finish Line:</strong> A finite virtual line can exactly represent a traditional start/finish line marked by a boat and pin. There is obviously no visual indication on the water of the line end, but boats are often unsighted to the line ends anyway. The application will provide easy to understand visualisations to help a boat cross a line, similar to start sequence instrument displays that are already used.   In some circumstances, partial or fully infinite lines can be used to replace lines defined by shore infrastructure and a bearing.</li>
+    <li><strong>Rounding Mark:</strong>A virtual line can be used to replace a rounding mark. Boats much approach that line and get a positive indication from the application of a crossing before changing course onto the next leg. If the rounding is likely to be contested, then a finite line perpendicular to the approaching leg can be used and will be crossed by the fleet similar to a starting line is today.  A lightly contested rounding (e.g. pursuit race) can be modelled with a half infinite line, starting at a point where a traditional mark should be and extending infinitely away in the direction of the approaching leg.</li>
+    <li><strong>Passing Mark:</strong> A virtual line parallel to the leg direction, but placed off to one side or the other of the course, can be used to mimic a passing mark.</li>
+    <li><strong>Gate Mark:</strong> A pair of virtual lines, parallel to the leg direction, placed either side of the gate location will mimic a gate mark by offering boats a choice of which to cross.</li>
+    <li><strong>Island Rounding:</strong> An island or landmark can be rounded by placing one or more half-infinite line(s) with non-infinite end(s) on the shore.</li>
+  </ul>
+
+  <h3>The ends are named port and starboard</h3>
+  <p>A line's two ends are called <span class="mono">port</span> and <span class="mono">starboard</span>, and those names are what orient it:</p>
+  <ul>
+    <li><strong>Forward</strong> &mdash; leave the port end to port and the starboard end to starboard.</li>
+    <li><strong>Reverse</strong> &mdash; leave the port end to starboard and the starboard end to port.</li>
+  </ul>
+  <p>The required sense is then legible off the line itself and there is no convention to memorise. Note that the names are defined <em>relative to a forward crossing</em> rather than being a property of the line sitting on its own, so a line crossed both ways &mdash; the leeward line that is start, mark 2 and finish &mdash; is forward once and reverse twice.</p>
+
+  <h3>Sense and extent are two different tests</h3>
+  <p>Deciding a crossing is two independent questions, and keeping them apart is what makes infinite ends behave.</p>
+  <table>
+    <thead><tr><th>Test</th><th>Question</th><th>Involves where the ends are?</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Sense</strong></td><td>Which way did the boat cross?</td><td>No. A sign test on the port&rarr;starboard orientation.</td></tr>
+      <tr><td><strong>Extent</strong></td><td>Did it cross the line, or its extension out past a finite end?</td><td>Only finite ends.</td></tr>
+    </tbody>
+  </table>
+  <p><strong>An infinite end is a bearing, not a place.</strong> The lat/long given for it is a point the line runs <em>through</em>, not where it stops. So the rule needs no exception at infinity: <em>a forward crossing leaves the port end to port and the starboard end to starboard; an infinite end is out along the line without limit, so it is always on the side its name says</em> &mdash; and therefore <strong>only a finite end can be missed</strong>.</p>
+  <p>"Leave the starboard end to starboard" is a mnemonic for the sense test written in the vocabulary of the extent test, which is why it sounds paradoxical at infinity: the <em>point</em> that defined an infinite end can easily fall on the other hand from the end itself. The point was never the end.</p>
+  <p>The Mark screen's three states in section 3 are exactly the combinations. <b>Approaching</b> is neither settled; <b>crossed</b> is both passed; <b>missed</b> is the sense test passed and the extent test failed.</p>
+    <h2><span class="n">05</span>Course definition</h2>
+    <p>Courses are built from the same lines as everything else. Each line is two points, each with an <span class="mono">infinite</span> flag, and a course is an ordered sequence of crossings over them. A crossing is a required sense, drawn as a triangle whose base sits on the line and whose apex points the way you must cross, carrying its sequence letter inside. One line can hold several triangles, so a single line can be the start, a rounding, and the finish at once.</p>
+    <p><strong>Lines are defined once and shared between courses</strong>, not owned by one. A club's start line is the same line in every course it appears in, and moving it should be one edit. The word is <em>line</em> rather than <em>mark</em> for the same reason it is throughout: courses may eventually mix real marks with virtual lines, and the two need different words.</p>
+    <p>The application will have course visualisation screens that can show either abstract courses like the ones below, or the actual virtual lines laid over a marine chart.</p>
+    <table>
+        <thead><tr><th>Field</th><th>Values</th><th>Shown as</th></tr></thead>
+        <tbody>
+        <tr><td>Two ends, named</td><td class="m">port, starboard</td><td>the two ends of the line</td></tr>
+        <tr><td>Position, each end</td><td class="m">a named point, or latitude / longitude</td><td>where the end is</td></tr>
+        <tr><td>Infinite, each end</td><td class="m">true / false</td><td>dot / triangle out along the line</td></tr>
+        <tr><td>Crossing sense</td><td class="m">forward / reverse</td><td>triangle on the line, base on the line, apex in the crossing direction</td></tr>
+        <tr><td>Sequence letter</td><td class="m">S, 1, 2, 3, &hellip;, F</td><td>the letter inside the triangle &mdash; <em>derived, not stored</em></td></tr>
+        <tr><td>Notes</td><td class="m">free text</td><td>nothing; it is for the reader of the file</td></tr>
+        </tbody>
+    </table>
+    <p>Forward means you leave the port end to port and the starboard end to starboard; reverse is the opposite. A crossing the wrong way is logged but ignored, so a rounding is a single crossing in the required sense, never an up-and-back.</p>
+    <p><strong>Roles and letters are positional.</strong> There is no <span class="mono">role: start</span> field. The first step of a course is the start and the last is the finish, and the sequence letters are derived from position for the same reason &mdash; a stored letter can disagree with the order it sits in. The two-lap windward/leeward below gets S, 2 and F onto one line for free, because that line simply appears three times in the sequence. A consequence: neither the first nor the last step may be a gate, and once real marks exist, neither may be a mark. You cannot start or finish on a point.</p>
+    <p><strong>A gate is a step that offers alternatives</strong>, each of which is an ordinary step, so the two sides need not be the same kind of thing &mdash; a gate with a virtual line one side and a real buoy the other is just a list with one of each in it. The leg into a gate is measured to the midpoint between its alternatives, so a course length does not depend on which side a given boat took.</p>
+
+    <h3>Leg length, and the handle</h3>
+    <p>A leg is measured <strong>between the midpoints of consecutive lines' two defined points</strong>, and a course length is the sum of its legs. A measured leg of zero is an error rather than a short leg: it means two steps share a reference point, which no course means. A step may override the leg into it outright, for a length that is a matter of record rather than of geometry.</p>
+    <p>The subtle part is deliberate. On an infinite end the point's <em>distance</em> along the bearing is arbitrary &mdash; sliding it leaves the line geometrically identical &mdash; so <strong>that point is the control handle for where the line is measured to</strong>. Place it where the fleet actually crosses. A course-design UI draws the leg straight to the midpoint and lets somebody drag the handle until the course looks like the one they meant. The same handle is what the distance-factor format in section 4 turns.</p>
+    <div class="legend">
+        <div class="li"><svg width="24" height="10"><line x1="2" y1="5" x2="22" y2="5" stroke="#35b5e8" stroke-width="3"/></svg>Line</div>
+        <div class="li"><svg width="14" height="12"><circle cx="7" cy="6" r="4.5" fill="#35b5e8"/></svg>Finite end (dot)</div>
+        <div class="li"><svg width="26" height="12"><line x1="2" y1="6" x2="14" y2="6" stroke="#35b5e8" stroke-width="3"/><polygon points="14,2 14,10 24,6" fill="#35b5e8"/></svg>Infinite end (triangle)</div>
+        <div class="li"><svg width="26" height="20"><line x1="2" y1="15" x2="24" y2="15" stroke="#35b5e8" stroke-width="2"/><polygon points="7,15 19,15 13,3" fill="none" stroke="#e6eef6" stroke-width="1.6"/></svg>Crossing, forward</div>
+        <div class="li"><svg width="26" height="20"><line x1="2" y1="5" x2="24" y2="5" stroke="#35b5e8" stroke-width="2"/><polygon points="7,5 19,5 13,17" fill="none" stroke="#e6eef6" stroke-width="1.6"/></svg>Crossing, reverse</div>
+        <div class="li"><svg width="14" height="14"><polygon points="2,12 12,12 7,2" fill="none" stroke="#2fd07a" stroke-width="1.6"/></svg>Start&nbsp;&nbsp;<svg width="14" height="14"><polygon points="2,2 12,2 7,12" fill="none" stroke="#ff5f56" stroke-width="1.6"/></svg>Finish</div>
+    </div>
+
+    <h3>Two-lap windward / leeward</h3>
+    <p class="dcap">The base case. A start / leeward / finish line carrying start up, mark 2 down and finish down; a windward line carrying 1 and 3 up. Read the leeward line in course order and its triangles are forward, reverse, reverse.</p>
+    <div class="diagram"><object type="image/svg+xml" data="course-2lap-wl.svg" style="width:100%;max-width:560px;aspect-ratio:780/540;display:block;margin:0 auto"></object></div>
+
+    <h3>Triangle, sausage, sausage</h3>
+    <p class="dcap">Start up (S), round the windward gate (1), reach out to the wing and back (2, first lap only), down through the start line (3), then two sausages up and down the windward gate: 4 up, 5 down, 6 up, finish down (F).</p>
+    <div class="diagram"><object type="image/svg+xml" data="course-tss.svg" style="width:100%;max-width:560px;aspect-ratio:640/700;display:block;margin:0 auto"></object></div>
+
+    <h3>Triple sausage, detached gates</h3>
+    <p class="dcap">Three beats to the windward gate (1, 3, 5) with two downwind gate roundings (2, 4). Here the gates are detached: rather than hanging off the ends of the start line, each is its own pair of half-infinite lines set below and to the sides, rounded either side.</p>
+    <div class="diagram"><object type="image/svg+xml" data="course-triple-sausage.svg" style="width:100%;max-width:560px;aspect-ratio:640/700;display:block;margin:0 auto"></object></div>
+
+  <h3>Crossing detection</h3>
+  <p>Detect a crossing as the intersection of the segment between two successive quality fixes with the line, not as proximity to the line. Proximity misreads a fast crossing of a thin line and cannot give a clean crossing instant.</p>
+
+  <h3>Fix quality control</h3>
+  <p>A single out-of-position fix is more dangerous to a line test than to almost anything else. If a flyer lands on the far side, the segment out and the segment back both cut the line, manufacturing a matched pair of crossings the boat never made. Fixes must be quality controlled. Layer the controls:</p>
+  <ol>
+    <li><strong>Receiver metadata pre-filter:</strong> reject on fix type, low satellite count, or a stated accuracy worse than a generous threshold. Necessary but not sufficient, since a wrong fix sometimes still reports optimistic accuracy.</li>
+    <li><strong>Kinematic plausibility gate (primary defence):</strong> from the last known-good position and time, reject any fix whose implied ground speed is physically impossible for a boat. There is large headroom between real boat motion and a genuine flyer, so this gate has almost no false positives and catches the gross outliers that cause false crossings.</li>
+    <li><strong>Confirmed side change:</strong> do not let any single segment commit a rounding. Catches the moderate outlier that passes the kinematic gate.</li>
+  </ol>
+  <p>Prefer clean rejection and interpolation across good fixes over a heavy smoother. A filter aggressive enough to reject outliers also lags true position and biases the crossing instant, which is the one quantity the score depends on.</p>
+
+  <h3>Confirmation and timing</h3>
+  <p>These are two separate jobs and must stay separate.</p>
+  <ul>
+    <li><strong>Validity</strong> requires at least N consecutive quality fixes confirming the required side, a segment that intersects the line, then at least N consecutive quality fixes confirming the opposite side. Default N is 3, giving a 3-and-3 rule. A single flyer cannot produce 3 consecutive confirmed fixes on the far side, so it fails. N is a tunable default, not a fixed truth. See the open questions.</li>
+    <li><strong>Time</strong> is the interpolated instant at which the segment cuts the line. It is never the time of any fix. Taking the time from a confirming fix biases it, early if from the last near-side fix, late if from the first far-side fix.</li>
+  </ul>
+
+  <h3>Direction, ducks, and latching</h3>
+  <p>Trigger only on a confirmed crossing in the required direction. Log wrong-direction crossings for audit but do not score them. Once a required-direction crossing is confirmed it latches and stands, so nothing later can un-make it. This is monotone and needs no running parity that a late bad fix could corrupt. The taut-string winding test used for point marks is not used, because it is undefined for a line: a line holds no loops.</p>
+
+  <h3>Accuracy band</h3>
+  <p>A boat is resolved to a side only when it is clear of the line by more than the fix uncertainty. Close to the line it is not yet on either side, which stops a boat sitting on the line from generating a burst of phantom crossings. Whether the band width should be a fixed declared value or the per-fix stated accuracy is an open choice, noted in section 8. Both are implemented; a null declared width selects the per-fix behaviour.</p>
+  <p>Note that this band belongs to the <em>sense</em> test &mdash; it is about the line, not about the ends. There is deliberately no equivalent band at an endpoint; see below.</p>
+
+  <h3>One metre, and a hard edge</h3>
+  <p><strong>The resolution of the whole system is one metre.</strong> Every distance computed, displayed or scored against is rounded to the nearest metre, and the figure is declared once on each side of the client/server split so the two cannot drift. GNSS on a phone does not honestly resolve better than this, and a scoring edge that moves with the twelfth decimal place of a float is one nobody can argue in front of a protest committee.</p>
+  <p>The consequence is deliberate and blunt: <strong>a finite end is a hard edge. If you miss, you miss.</strong> There is no unresolved state at an endpoint and no band of doubt to fall into. This settles what was previously listed as an open question about endpoints in open water.</p>
+  <p>That rule is only defensible if the boat was told, so what the application owes the sailor instead is <strong>warning</strong>. The Mark screen projects the boat's COG onto the line, reports the margin in metres from that projected cut to the nearer <em>finite</em> end, and says loudly when the present course is running out past it &mdash; long before the boat gets there. An infinite end raises no warning, because it is not a hazard.</p>
+
+  <div class="callout">
+    <div class="h">Audit trail</div>
+    <p>Log raw fixes, the QC decision for each, and every crossing candidate including rejected ones. A contested result then has a defensible record, for example "fix at t rejected, implied ground speed 63 kn". This matters more here than in most apps, because the app is scoring people.</p>
+  </div>
+
+  <h2><span class="n">03</span>Example screens</h2>
+  <h3>Mark screen</h3>
+  <p>One Mark screen, shown in three states: approaching, crossed, and missed. The line, the boat, its COG projection, and the readout cells are identical across all three; only the state and the plotted data change. Every logged fix is coloured by the side it was resolved to, and drawn hollow when its foot fell beyond the line end. Crossed and Missed are alternate outcomes of the same approach, shown together, not a sequence.</p>
+  <p>There is no state chip. The arrow at the top points along the next leg and carries the state itself. It reads NEXT LEG while approaching and turns to THIS LEG the moment a valid crossing latches. Its colour is the state: grey outline approaching, solid green crossed, bold red outline missed until the boat crosses back. A small selector sets the orientation, shown here on North up.</p>
+
+  <div class="phones">
+
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span>18:41</span><span>GPS 12 SV</span></div>
+      <div class="schead"><span class="name">MARK 4</span><span class="mk">4 / 8</span></div>
+      <div class="modesel"><span class="mseg">LEG UP</span><span class="mseg on">NORTH UP</span><span class="mseg">LINE PERP</span></div>
+      <div class="nextleg">
+        <div class="nl-label">NEXT LEG<b>060&deg;</b></div>
+        <div class="nl-arrow"><object type="image/svg+xml" data="nextleg-approach.svg" width="58" height="52"></object></div>
+      </div>
+      <object class="plot" type="image/svg+xml" data="screen-mark-approach.svg" style="aspect-ratio:340/352"></object>
+      <div class="readouts">
+        <div class="cell"><div class="lbl">Perp dist</div><div class="val">84<small> m</small></div></div>
+        <div class="cell"><div class="lbl">Dist on COG</div><div class="val">102<small> m</small></div></div>
+        <div class="cell"><div class="lbl">COG</div><div class="val">030<small>&deg;</small></div></div>
+        <div class="cell"><div class="lbl">SOG</div><div class="val">6.4<small> kn</small></div></div>
+        <div class="cell wide"><div class="msg appr">Approaching. Required side confirmed, 3 fixes.</div></div>
+      </div>
+    </div></div>
+
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span>18:42</span><span>GPS 12 SV</span></div>
+      <div class="schead"><span class="name">MARK 4</span><span class="mk">4 / 8</span></div>
+      <div class="modesel"><span class="mseg">LEG UP</span><span class="mseg on">NORTH UP</span><span class="mseg">LINE PERP</span></div>
+      <div class="nextleg">
+        <div class="nl-label">THIS LEG<b>060&deg;</b></div>
+        <div class="nl-arrow"><object type="image/svg+xml" data="nextleg-crossed.svg" width="58" height="52"></object></div>
+      </div>
+      <object class="plot" type="image/svg+xml" data="screen-mark-crossed.svg" style="aspect-ratio:340/352"></object>
+      <div class="readouts">
+        <div class="cell"><div class="lbl">Perp dist</div><div class="val">50<small> m</small></div></div>
+        <div class="cell"><div class="lbl">Dist on COG</div><div class="val null">&mdash;</div></div>
+        <div class="cell"><div class="lbl">COG</div><div class="val">038<small>&deg;</small></div></div>
+        <div class="cell"><div class="lbl">SOG</div><div class="val">6.6<small> kn</small></div></div>
+        <div class="cell wide"><div class="msg ok">Crossed 18:42:07. Required direction. Latched. 3 + 3.</div></div>
+      </div>
+    </div></div>
+
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span>18:42</span><span>GPS 11 SV</span></div>
+      <div class="schead"><span class="name">MARK 4</span><span class="mk">4 / 8</span></div>
+      <div class="modesel"><span class="mseg">LEG UP</span><span class="mseg on">NORTH UP</span><span class="mseg">LINE PERP</span></div>
+      <div class="nextleg">
+        <div class="nl-label">NEXT LEG<b>060&deg;</b></div>
+        <div class="nl-arrow"><object type="image/svg+xml" data="nextleg-missed.svg" width="58" height="52"></object></div>
+      </div>
+      <object class="plot" type="image/svg+xml" data="screen-mark-missed.svg" style="aspect-ratio:340/352"></object>
+      <div class="readouts">
+        <div class="cell"><div class="lbl">Perp dist</div><div class="val">49<small> m</small></div></div>
+        <div class="cell"><div class="lbl">Dist on COG</div><div class="val null">&mdash;</div></div>
+        <div class="cell"><div class="lbl">COG</div><div class="val">321<small>&deg;</small></div></div>
+        <div class="cell"><div class="lbl">SOG</div><div class="val">5.9<small> kn</small></div></div>
+        <div class="cell wide"><div class="msg warn">Side change was past the E end. No crossing.</div></div>
+      </div>
+    </div></div>
+
+  </div>
+
+  <p>In words for the terminal: each screen is the same Mark view. The top arrow points along the bearing to the following mark, 060 here, grey while approaching, green once a crossing latches, red on a miss. The plot shows the virtual line in cyan, the boat, a dashed COG projection with a ring where it cuts the line, the recent fixes coloured by side, and either the interpolated crossing ringed in green with its time, or the rejected crossing marked past the end in red. The readouts give perpendicular distance, distance along COG (a dash once the COG no longer cuts the line), COG, SOG, and a status line.</p>
+
+  <h3>Orientation modes</h3>
+  <p>The display is switchable between three orientations, set by the selector on the Mark screen. Leg up and Line perp both turn the whole display when the boat crosses onto the next leg. North up never turns.</p>
+
+  <div class="omodes">
+    <div class="ocard">
+      <h4>Leg up</h4>
+      <div class="rot turns">Turns on cross</div>
+      <div class="oframes">
+        <object type="image/svg+xml" data="orient-legup-a.svg" width="118" height="138"></object>
+        <div class="obetween">cross<br>&rarr;</div>
+        <object type="image/svg+xml" data="orient-legup-b.svg" width="118" height="138"></object>
+      </div>
+      <p class="ocap">The current leg points up. On a cross the display turns so the new leg is up, the this-leg arrow points straight up, and the line just crossed swings behind.</p>
+    </div>
+
+    <div class="ocard">
+      <h4>North up</h4>
+      <div class="rot fixed">Never turns</div>
+      <div class="oframes">
+        <object type="image/svg+xml" data="orient-northup.svg" width="118" height="138"></object>
+      </div>
+      <p class="ocap">North stays at the top and nothing turns on a cross. The line and boat sit at their true bearings and the arrow points at the real next-leg bearing.</p>
+    </div>
+
+    <div class="ocard">
+      <h4>Line perpendicular</h4>
+      <div class="rot turns">Turns on cross</div>
+      <div class="oframes">
+        <object type="image/svg+xml" data="orient-lineperp-a.svg" width="118" height="138"></object>
+        <div class="obetween">cross<br>&rarr;</div>
+        <object type="image/svg+xml" data="orient-lineperp-b.svg" width="118" height="138"></object>
+      </div>
+      <p class="ocap">The live line is drawn square across the top, so you always approach straight up. On a cross the next line squares up and the old one swings behind.</p>
+    </div>
+  </div>
+
+  <h3>Course screen</h3>
+  <div class="placeholder">
+    <div class="ptag">Placeholder &middot; to be supplied</div>
+    <h4>Course screen</h4>
+    <p>An open-sea chart of the race area, north up, showing the virtual mark lines in the app's line styling (finite lines with two ends, half-infinite lines fading to an infinity mark, start and finish picked out) and the live GPS track of every boat with your own highlighted. No coastline model. A worked example is to be supplied.</p>
+  </div>
+
+  <h3>Live place, circuit format</h3>
+  <p>The second screen answers a different question: where you stand in the fleet right now, on handicap, when boats started at different times, carry different handicaps, and are on different parts of the course. It is the live view behind the circuit format's rankings. The idea is to place every boat at the moment its handicap-adjusted time equals yours, and compare how far each has got.</p>
+  <p>There are two modes, and the mode decides where the handicap is applied so it is never applied twice. In a <strong>same-course race</strong> every boat sails the same distance and the handicap sits in the time, so the reference clock is your corrected elapsed time (elapsed by your TCF) and boats are compared by distance to finish at that corrected time. In a <strong>corrected-distance race</strong> the handicap sits in each boat's course length instead, first home on actual elapsed wins, so the same picture is used with the reference clock set to your actual elapsed time and no TCF applied. The screen below shows the same-course mode only.</p>
+
+  <div class="phones">
+    <div class="phone wide"><div class="screen">
+      <div class="statusbar"><span>18:57</span><span>GPS 12 SV &middot; live</span></div>
+      <div class="schead"><span class="name">LIVE PLACE</span><span class="st gold">4th / 6</span></div>
+      <div class="modes"><span class="mode on">SAME COURSE</span><span class="mode">CORR DISTANCE</span></div>
+      <div class="subhead">handicap in time &middot; compared at your corrected elapsed <b>56:00</b></div>
+
+      <object class="plot" type="image/svg+xml" data="screen-live-place.svg" style="aspect-ratio:300/336"></object>
+    </div></div>
+  </div>
+
+  <div class="legend">
+    <div class="li"><svg width="22" height="10"><rect x="1" y="2" width="20" height="6" rx="1" fill="#4a86cf"/></svg>Confirmed, sailed</div>
+    <div class="li"><svg width="22" height="10"><rect x="1" y="2" width="20" height="6" fill="#4a86cf" opacity="0.28"/><rect x="1" y="2" width="20" height="6" fill="url(#projB)"/></svg>Projected to your corr time</div>
+    <div class="li"><svg width="22" height="10"><line x1="1" y1="5" x2="21" y2="5" stroke="#4a86cf" stroke-width="2.6"/></svg>Sailed on past your corr time</div>
+    <div class="li"><svg width="20" height="14"><g transform="translate(9,7)" fill="#4a86cf"><path d="M-7,-4 L1,-4 L7,0 L1,4 L-7,4 Z"/><path d="M-2,-4 L-2,-9 L3,-4 Z"/></g></svg>Position at your corr time</div>
+    <div class="li"><svg width="14" height="12"><circle cx="7" cy="6" r="2.6" fill="#fff" stroke="#4a86cf" stroke-width="1.6"/></svg>Current position</div>
+  </div>
+
+  <p>Reading it in words, since a terminal will not render the SVG. The horizontal axis is percent of the shared course by distance to finish, 0 at the left, the finish at the right. Your corrected elapsed time is the reference clock, here 56:00, drawn as the white vertical line. Each boat's arrow head sits at where that boat was, is, or will be when its own corrected elapsed time equals 56:00, so the heads form a corrected ladder and the head furthest right is leading. A boat already past that corrected time is solid up to it with a thin line running on to its current position. A boat not yet there is solid to its current position with a projected segment reaching on to where it is expected to be. Your own arrow is solid only, because at your corrected time you are exactly where you are.</p>
+
+  <div class="callout two">
+    <div class="h">Two teaching cases in the mock</div>
+    <p>Bombora sits behind you on the water, its current dot is left of your line, yet its projection reaches past you, so on corrected time it is ahead. Currawong is the mirror, physically ahead with its current dot past your line, but its position at your corrected time is behind you. Current position and corrected standing are different questions, which is why the screen carries both the boat head and the current dot.</p>
+  </div>
+
+  <h2><span class="n">04</span>Race formats</h2>
+  <p>Each format uses the virtual-mark machinery to dissolve the mass start and the single rounding point, which is where contact risk concentrates.</p>
+
+  <h3>Self-timed rolling start</h3>
+  <p>Each boat starts in its own time within a window. Its clock starts when it crosses the start line, timestamped by the device. This removes the start-line scrum and needs no committee-boat sightline.</p>
+
+  <h3>Distance-factor handicap</h3>
+  <p>Convert each boat's TCF to a distance factor, then set that boat an individual virtual mark so its course length is adjusted. First home, or fastest elapsed, wins. Handicap becomes visible and raceable on the water rather than a results-sheet calculation after the finish.</p>
+  <p>The mechanism, now settled. A course designates certain lines as <strong>handicap-adjustable</strong>, and each boat is assigned its own <strong>sub-line</strong> on one. Typically a half-infinite line running along the leg direction from a finite end, so that <strong>the finite end is the knob</strong>: the line only exists from that end outward, so pushing it further out forces the boat to sail further before there is any line there to cross. The server slides that line's two defined points along the line until the resulting midpoint makes the leg before plus the leg after come to that boat's required distance. Where a course designates several such lines, the handicap distance is shared between them.</p>
+  <p>This reuses machinery the model already has rather than adding any. The midpoint of a line's two points is already how a leg is measured, and the point given for an infinite end already changes no geometry &mdash; so it was already free to be used as a handle, and the handicap is simply what turns it. Note where this puts the server: it is now in the <em>geometry</em>, computing each boat's course before the start, and still not in the <em>rounding</em>. A boat caches its own course and detects and times its own crossings from raw GNSS exactly as before.</p>
+  <p>The conversion from a TCF to a length delta interacts with leg geometry and wind angle, and remains open &mdash; see section 8.</p>
+
+  <h3>Circuit, join anywhere</h3>
+  <p>Boats join a defined loop at any point, finish where they entered, and are ranked live. Because the loop is location-agnostic, boats from different clubs can each sail the same circuit from their own home water, on their own evening window, without travelling to a common start. This is aimed squarely at participation decline and calendar congestion. Live rankings are network-dependent and degrade gracefully to last-known standings. A boat's own record never depends on the network.</p>
+
+  <h3>Rules framing: RRS as the default</h3>
+  <p>The default is the Racing Rules of Sailing, with one exclusion: <strong>RRS 18 (mark-room) never applies at a virtual mark</strong>. There is no point to touch and no inside or outside overlap to adjudicate, so boats meeting near a line fall back on the Part 2 right-of-way rules alone. Spreading the fleet in time and space through the formats above already leaves those rules little to govern.</p>
+  <p>COLREGS could be used instead, and is the more honest choice for the asynchronous and cross-club formats. RRS Part 2 displaces the collision regulations only as a mutual agreement among competitors who have collectively accepted it, and boats from different clubs, on their own time windows, often never in sight of each other, have made no such agreement. Where that mutual basis is absent, COLREGS is the rule set with real standing between two boats that happen to meet while independently sailing the same loop. This is a per-event choice to be stated in the sailing instructions, not something the app decides.</p>
+
+
+  <h2><span class="n">06</span>Worked course</h2>
+  <p>The example course, in the originator's words:</p>
+  <div class="callout">
+    <p>An east-west start and finish line in Manly Cove, a line going infinitely due east from Sow and Pigs reef, a line going infinitely south from Shark Island, a 100 m line in Obelisk Bay parallel to the coast, a line going infinitely south from Sow and Pigs, then finish.</p>
+  </div>
+  <p>Structured against the line model. The two lines from Sow and Pigs share a single fixed end at the reef, which is why points are named and defined once rather than written out per line. The Seq column is <em>derived</em> from the order of the rows, not stored.</p>
+  <table>
+    <thead><tr><th>Seq</th><th>Line</th><th>Port end</th><th>Starboard end</th><th>Bearing</th><th>Compass sense</th></tr></thead>
+    <tbody>
+      <tr><td>S</td><td>Manly Cove line</td><td>east, on shore</td><td>west, on shore</td><td class="mono">090 / 270</td><td>southbound (start)</td></tr>
+      <tr><td>1</td><td>Sow and Pigs east</td><td>the reef</td><td>&infin; along 090</td><td class="mono">090</td><td>southbound</td></tr>
+      <tr><td>2</td><td>Shark Island south</td><td>the island</td><td>&infin; along 180 (shore-limited)</td><td class="mono">180</td><td>westbound</td></tr>
+      <tr><td>3</td><td>Obelisk Bay line</td><td>north</td><td>south</td><td class="mono">along coast</td><td>northbound</td></tr>
+      <tr><td>4</td><td>Sow and Pigs south</td><td>the reef</td><td>&infin; along 180</td><td class="mono">180</td><td>eastbound</td></tr>
+      <tr><td>F</td><td>Manly Cove line</td><td>east, on shore</td><td>west, on shore</td><td class="mono">090 / 270</td><td>northbound (finish)</td></tr>
+    </tbody>
+  </table>
+  <p>The compass column is a <em>description</em> of this particular course, not part of the model. In the file each crossing is <span class="mono">forward</span> or <span class="mono">reverse</span> against the line's own port/starboard order, because a compass sense is ambiguous for a line lying near the direction of travel and goes silently wrong the moment somebody edits the line. Which end is port and which starboard here follows from the required sense, and is unverified along with it.</p>
+
+  <div class="callout warnbox">
+    <div class="h">Flagged as unverified</div>
+    <p>The required crossing senses are inferred from the course order, not stated by the originator. They must be set explicitly per line in configuration, and confirmed against the geometry once the points are surveyed.</p>
+    <p>No coordinates are given here on purpose. Real positions and the datum (WGS84 is assumed) are to be supplied, not guessed. Every position below is <span class="mono">null</span>, and the server reports each unsurveyed point as a problem rather than pretending to know it.</p>
+  </div>
+
+  <p>The configuration, as implemented. Shape and vocabulary are settled; the values are not.</p>
+  <pre><span class="c"># clubs/myc.org.au/2026-example.yaml</span>
+<span class="c"># One file per club and series. The PATH is the identity: this file is filed</span>
+<span class="c"># under clubs/myc.org.au/ and named 2026-example, so its club is myc.org.au and</span>
+<span class="c"># its series is 2026-example. Nothing here resolves from any other file.</span>
+
+<span class="k">name</span>: <span class="v">Manly Cove circuit (example)</span>
+<span class="k">datum</span>: <span class="v">WGS84</span>
+
+<span class="k">defaults</span>:
+  <span class="k">confirmFixes</span>: <span class="v">3</span>            <span class="c"># N for the 3-and-3 rule; tunable</span>
+  <span class="k">accuracyBandM</span>: <span class="v">null</span>        <span class="c"># fixed half-width, or null for per-fix accuracy</span>
+  <span class="k">qc</span>:
+    <span class="k">minSatellites</span>: <span class="v">4</span>         <span class="c"># metadata pre-filter: necessary, not sufficient</span>
+    <span class="k">maxAccuracyM</span>: <span class="v">25</span>
+    <span class="k">maxSpeedKn</span>: <span class="v">40</span>           <span class="c"># the kinematic gate: the primary defence</span>
+
+<span class="c"># Points, surveyed once and referred to by id, so a correction is one edit.</span>
+<span class="c"># Sow and Pigs is shared by two lines, which is why this section exists.</span>
+<span class="k">points</span>:
+  <span class="k">sow-and-pigs</span>:
+    <span class="k">name</span>: <span class="v">Sow and Pigs reef</span>
+    <span class="k">latitude</span>: <span class="v">null</span>
+    <span class="k">longitude</span>: <span class="v">null</span>
+  <span class="k">sowpigs-east-handle</span>:
+    <span class="k">latitude</span>: <span class="v">null</span>
+    <span class="k">longitude</span>: <span class="v">null</span>
+    <span class="k">notes</span>: <span class="v">Sets the 090 bearing of sowpigs-east and nothing else. Place it</span>
+           where the fleet <span class="k">crosses</span>: <span class="v">it is half of the midpoint the legs</span>
+           <span class="v">either side are measured to.</span>
+  <span class="k">shark-island</span>: { <span class="k">latitude</span>: null, <span class="k">longitude</span>: null }
+  <span class="k">manly-cove-w</span>: { <span class="k">latitude</span>: null, <span class="k">longitude</span>: null, <span class="k">notes</span>: On shore. }
+  <span class="k">manly-cove-e</span>: { <span class="k">latitude</span>: null, <span class="k">longitude</span>: null, <span class="k">notes</span>: On shore. }
+
+<span class="c"># Lines. FORWARD leaves the port end to port and the starboard end to</span>
+<span class="c"># starboard; REVERSE does the opposite. An end with infinite: true is a</span>
+<span class="c"># BEARING, NOT A PLACE -- the line runs out through that point and keeps</span>
+<span class="c"># going, which is why only a finite end can be missed.</span>
+<span class="k">lines</span>:
+  <span class="k">manly-cove</span>:
+    <span class="k">name</span>: <span class="v">Manly Cove start/finish line</span>
+    <span class="k">port</span>:      { <span class="k">at</span>: manly-cove-e }
+    <span class="k">starboard</span>: { <span class="k">at</span>: manly-cove-w }
+    <span class="k">notes</span>: <span class="v">Both ends on shore, so there is no near-end crossing to dispute.</span>
+  <span class="k">sowpigs-east</span>:
+    <span class="k">port</span>:      { <span class="k">at</span>: sow-and-pigs }
+    <span class="k">starboard</span>: { <span class="k">at</span>: sowpigs-east-handle, <span class="k">infinite</span>: true }
+  <span class="k">shark-south</span>:
+    <span class="k">port</span>:      { <span class="k">at</span>: shark-island }
+    <span class="k">starboard</span>: { <span class="k">at</span>: shark-south-handle, <span class="k">infinite</span>: true }
+
+<span class="c"># Courses. THE FIRST STEP IS THE START AND THE LAST IS THE FINISH, so there</span>
+<span class="c"># are no roles to write down and nothing that can disagree with the order.</span>
+<span class="c"># The letters S, 1, 2, ... F are derived from position.</span>
+<span class="k">courses</span>:
+  <span class="k">manly-cove-circuit</span>:
+    <span class="k">name</span>: <span class="v">Manly Cove circuit</span>
+    <span class="k">closed</span>: <span class="v">false</span>
+    <span class="k">sequence</span>:
+      - { <span class="k">line</span>: <span class="v">manly-cove</span>,    <span class="k">cross</span>: <span class="v">forward</span>, <span class="k">notes</span>: <span class="v">Start. Southbound.</span> }
+      - { <span class="k">line</span>: <span class="v">sowpigs-east</span>,  <span class="k">cross</span>: <span class="v">forward</span> }
+      - { <span class="k">line</span>: <span class="v">shark-south</span>,   <span class="k">cross</span>: <span class="v">forward</span> }
+      - { <span class="k">line</span>: <span class="v">obelisk</span>,       <span class="k">cross</span>: <span class="v">forward</span> }
+      - { <span class="k">line</span>: <span class="v">sowpigs-south</span>, <span class="k">cross</span>: <span class="v">forward</span> }
+      - { <span class="k">line</span>: <span class="v">manly-cove</span>,    <span class="k">cross</span>: <span class="v">reverse</span>, <span class="k">notes</span>: <span class="v">Finish. Northbound.</span> }</pre>
+
+  <div class="callout warnbox">
+    <div class="h">What the earlier sketch got wrong</div>
+    <p>Recorded so it is not reintroduced. The first version of this section proposed a different shape, and each of these was a defect rather than a matter of taste.</p>
+    <p><strong><span class="mono">type: finite | half_infinite</span> contradicted the model.</strong> The end type belongs to each <em>end</em>, and hoisting it to the line forced two incompatible schemas &mdash; <span class="mono">end_a</span>/<span class="mono">end_b</span> for one kind of line, <span class="mono">fixed_end</span> plus <span class="mono">bearing_deg</span> for the other &mdash; behind a <span class="mono">type</span> key that was derivable from the ends anyway.</p>
+    <p><strong><span class="mono">cross: S</span> collided with itself.</strong> It meant "southbound", while <span class="mono">S</span> is also the sequence letter for the start: two meanings for one letter, two lines apart in the same file, with <span class="mono">cross: N</span> on the Obelisk line one keystroke from being read as a sequence letter too.</p>
+    <p><strong>Compass senses are not safe to store.</strong> Ambiguous for a line lying near the direction of travel, and silently wrong the moment somebody edits the line. Forward/reverse moves with the line.</p>
+    <p><strong><span class="mono">marks:</span></strong> re-imported the word the whole design exists to remove, and leaves nothing to call a real mark when mixed courses arrive.</p>
+    <p><strong><span class="mono">TBD</span> in a numeric field is a parse error, not a placeholder.</strong> An unsupplied position is <span class="mono">null</span>, and is reported as a problem by name.</p>
+    <p><strong>snake_case is not the house style.</strong> sail-jinx and sailing-pf are camelCase throughout, and matching them matters more than which is nicer.</p>
+  </div>
+
+  <h3>Races are their own files</h3>
+  <p>A programme file holds what is reusable all season: the surveyed points, the lines, the courses. A race is one night &mdash; a course chosen from that programme, the format, that format's parameters, and the entry list &mdash; and lives in its own file at <span class="mono">clubs/&lt;club&gt;/races/&lt;raceId&gt;.yaml</span>. Filing the two together would mean opening the file that holds the coordinates every time somebody enters a boat.</p>
+  <p><strong>The race schema is still open.</strong> What each format actually needs is unsettled, so its parameters are carried as a free map that round-trips, rather than a schema asserted ahead of the requirement.</p>
+
+  <h2><span class="n">07</span>Technology</h2>
+
+  <h3>Client, on the boat</h3>
+  <p>The UI is HTML, CSS, and JavaScript. The wrapper decides how that same build reaches a phone versus a browser, and whether it can log GPS while backgrounded, which is the deciding constraint.</p>
+  <ul>
+    <li><strong>Wrapper: Capacitor.</strong> One web codebase wraps as native Android and iOS, where a background-geolocation plugin gives continuous tracking with the screen off. The same build without the native shell is the browser fallback, so the fallback is the same product, not a second one.</li>
+    <li><strong>Offline-first, non-negotiable.</strong> The course and format definitions are downloaded and cached before the start. Crossing detection, fix QC, and latching all run on-device from raw GNSS, which needs no network. GNSS also provides a precise time source worth using in preference to the system clock.</li>
+    <li><strong>Network is opportunistic only.</strong> Results sync when signal returns, and live circuit rankings degrade to last-known standings. The boat's own rounding and timing never wait on a server.</li>
+  </ul>
+  <div class="callout warnbox">
+    <div class="h">Verify at build time</div>
+    <p>Background-geolocation behaviour, iOS Safari suspension of the Geolocation API in the fallback, and Capacitor and plugin version details all shift over time. Treat the direction of these constraints as sound and confirm the current specifics when building rather than taking them as settled here.</p>
+  </div>
+
+  <h3>Server, on shore</h3>
+  <p>Java 21 on an embedded Jetty 12 server, YAML configuration, and JSON file persistence, following the same approach as the sail-jinx and sailing-pf projects. Maven, Jackson, no database and no framework. Port 8083, since 8081 and 8082 are those two projects and 8888 is sailing-pf's admin connector. Initial deployment on a Raspberry Pi, served at unmarkable.mortbay.org (proposed).</p>
+  <ul>
+    <li>Serve course, format, and handicap definitions to clients.</li>
+    <li>Receive and store race records as JSON files.</li>
+    <li>Aggregate results and compute live circuit rankings.</li>
+    <li>Optionally compute distance factors from Performance Factors, reusing the sailing-pf read side.</li>
+  </ul>
+  <p>The server is explicitly outside the rounding path. It distributes and aggregates, it does not adjudicate a crossing. The distance-factor format is the one place it computes geometry &mdash; each boat's sub-line, before the start &mdash; and even there the boat still detects and times its own crossings from raw GNSS.</p>
+
+  <h4 style="font-family:var(--disp);font-size:17px;margin:20px 0 4px">Positions are SignalK's</h4>
+  <p><span class="mono">latitude</span> and <span class="mono">longitude</span>, spelled out, <strong>signed decimal degrees</strong>, WGS84. This is not a preference: the SignalK specification's <span class="mono">schemas/definitions.json</span> documents the <span class="mono">deg</span> unit as "latitude or longitude in decimal degrees" and defines <span class="mono">navigation.position</span> as <span class="mono">{latitude, longitude, altitude}</span>. Matching it means a position off a SignalK stream drops in with no conversion, and a conversion is where a hemisphere gets inverted.</p>
+  <p>Degrees and decimal minutes &mdash; <span class="mono">33 48.072 S</span> &mdash; is what a chart and a plotter show, so it belongs <em>on screen, in both directions</em>, where a bad transcription can be caught by the person who made it. It does not belong in a file, where the same mistake is a silently displaced mark.</p>
+
+  <div class="callout">
+    <div class="h">Conventions taken from the repositories</div>
+    <p>The sail-jinx and sailing-pf repositories have now been read, and the conventions here are theirs rather than assertions: records for models with compact constructors for defaults, Allman braces, defensive loading that reports and skips rather than throwing, unknown YAML and JSON properties ignored so a newer file loads on an older build, clubs keyed by domain, atomic writes with an append-only journal, and a <span class="mono">StaticResourceServlet</span> that resolves <span class="mono">&lt;!-- INCLUDE --&gt;</span> without a templating engine.</p>
+    <p>One convention is worth naming because it decides where the important code goes. sail-jinx keeps its scoring in <span class="mono">static/scoring.js</span> with <span class="mono">scoring-test.html</span> as an executable specification run from the Maven build. The same split applies here for the same reason: the logic that decides a result runs on the boat, so it is JavaScript, and its specification runs in the build or it rots.</p>
+  </div>
+
+  <h3>Data flow</h3>
+  <ol>
+    <li>Client fetches course and format config from the server before the start and caches it.</li>
+    <li>Client logs raw fixes, QC decisions, and crossings locally throughout the race.</li>
+    <li>Client posts its race record to the server when signal allows; the server stores it as JSON.</li>
+    <li>Server aggregates records and serves standings; the circuit format polls for live rankings when connected.</li>
+  </ol>
+
+  <h2><span class="n">08</span>Open questions</h2>
+  <p>Two of the original seven have been answered by the first build and are struck through with what was decided. The rest stand, and none of them should be answered by asserting a number in code.</p>
+  <ul>
+    <li><strong>Confirmation count N.</strong> The 3-and-3 default should be tuned against real logged tracks from the intended waters, where multipath off the rig and off nearby structures clusters. Sustained multipath could in principle produce consecutive bad fixes, which argues for either a higher count or a harder kinematic gate.</li>
+    <li><strong>Accuracy band.</strong> Fixed declared width versus per-fix stated accuracy. The per-fix option is more honest but gives a time-varying effective line width. Both are implemented and the choice is a configuration key; which is right is undecided without logged accuracy figures from the actual devices.</li>
+    <li><s><strong>Finite line endpoints in open water.</strong></s> <strong>Answered.</strong> One-metre resolution throughout, and the end is a hard edge: if you miss, you miss. The obligation moves to the interface, which must warn on the COG projection running near or past a finite end well before the boat gets there. See section 2. What remains is building the screen that does the warning.</li>
+    <li><strong>Asynchronous window width.</strong> How far apart in time boats can sail the same loop before differing wind and tide mean they are no longer racing the same course.</li>
+    <li><strong>Distance-factor conversion.</strong> The <em>mechanism</em> is settled &mdash; the server slides a designated line's points along itself until the midpoint gives the required leg lengths, with the finite end as the knob. The <em>conversion</em> from a TCF to that length delta is not, and interacts with leg geometry and wind angle. Also open: how the distance is shared when a course designates several adjustable lines.</li>
+    <li><strong>QC thresholds as configuration.</strong> Kinematic ceiling, minimum satellites, accuracy limit. All are configuration keys already; all are currently defaults asserted against no data.</li>
+    <li><s><strong>Datum.</strong></s> <strong>Answered:</strong> WGS84, signed decimal degrees, SignalK field names. <strong>Coordinate supply is still open</strong> &mdash; how marks get surveyed and by whom. Every position in the repository is <span class="mono">null</span> today.</li>
+    <li><strong>Race and format schema.</strong> What each format actually needs: how a rolling-start window is expressed, how wide an asynchronous circuit window may be, where a boat's TCF comes from. Carried as a free map until there is a requirement to shape it.</li>
+    <li><strong>Authentication on record submission.</strong> There is none. Anything can post a record for any boat. Reads should stay open &mdash; a club publishes its results &mdash; but a write is somebody's race result. sail-jinx has a working Jetty OpenID setup to copy.</li>
+    <li><strong>Capacitor.</strong> Not yet present. Background-geolocation behaviour, iOS Safari suspending the Geolocation API in the browser fallback, and plugin versions all shift; confirm at build time rather than from section 7.</li>
+  </ul>
+
+  <div class="foot">
+    <b>Provenance and uncertainty.</b><br>
+    &middot; The line model, formats, QC approach, and rules framing are settled from the design discussion and stated with confidence.<br>
+    &middot; The port/starboard end naming, the sense/extent split, the one-metre resolution, the positional roles, the leg-measurement rule and the file layout are settled from the design discussion that followed the first build, and are implemented.<br>
+    &middot; The configuration in section 6 replaces an earlier sketch that was withdrawn. What was wrong with it is recorded beside it deliberately.<br>
+    &middot; Required crossing senses in the worked course are inferred, not stated, and must be set and confirmed in config.<br>
+    &middot; No coordinates are asserted anywhere; every position is null until a survey is supplied.<br>
+    &middot; The client technology recommendation is firm in direction; version-specific and OS-specific claims are still to be verified at build time, and Capacitor is not yet present.<br>
+    &middot; The server conventions are now taken from the sail-jinx and sailing-pf repositories, which have been read, rather than assumed.<br>
+    &middot; The coordinate format is taken from the SignalK specification, which has been read.<br>
+    &middot; On-screen values are illustrative placeholders to show layout, not computed positions.<br>
+    &middot; The three screens in section 3 are not built. The crossing detector beneath them is, and is specified by tests that run in the build.
+  </div>
+
+</div>
+</body>
+</html>

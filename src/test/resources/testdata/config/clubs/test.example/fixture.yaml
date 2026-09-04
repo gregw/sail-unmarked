@@ -1,0 +1,53 @@
+# Synthetic fixture. These coordinates are made up to exercise the geometry and are
+# not, and do not claim to be, anywhere real. Positions in data/config/ stay null
+# until somebody surveys them; a test needs numbers, so it invents its own.
+#
+# Laid out as a square kilometre grid near the equator-crossing-free part of nowhere,
+# so distances are easy to check by hand:
+#   leeward line   runs east-west at latitude 0.000, from lon -0.005 to +0.005
+#   windward line  runs east-west at latitude 0.018 (~2 km north)
+
+name: Geometry fixture
+datum: WGS84
+
+points:
+  leeward-w:  {latitude: 0.0,   longitude: -0.005}
+  leeward-e:  {latitude: 0.0,   longitude: 0.005}
+  windward-w: {latitude: 0.018, longitude: -0.005}
+  windward-e: {latitude: 0.018, longitude: 0.005}
+  offset-w:   {latitude: 0.009, longitude: -0.005}
+  offset-e:   {latitude: 0.009, longitude: 0.005}
+
+lines:
+  leeward:
+    port:      {at: leeward-w}
+    starboard: {at: leeward-e}
+  windward:
+    port:      {at: windward-w}
+    starboard: {at: windward-e}
+  half-infinite:
+    port:      {at: offset-w}
+    starboard: {at: offset-e, infinite: true}
+
+courses:
+
+  up-and-back:
+    name: Up and back
+    sequence:
+      - {line: leeward,  cross: forward}
+      - {line: windward, cross: forward}
+      - {line: leeward,  cross: reverse}
+
+  overridden:
+    name: Up and back, leg declared
+    sequence:
+      - {line: leeward,  cross: forward}
+      - {line: windward, cross: forward, lengthNm: 5.0}
+      - {line: leeward,  cross: reverse}
+
+  broken:
+    name: Names a line that is not here
+    sequence:
+      - {line: leeward, cross: forward}
+      - {line: nowhere, cross: forward}
+      - {line: leeward, cross: reverse}

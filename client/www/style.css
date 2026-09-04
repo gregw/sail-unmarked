@@ -1,0 +1,68 @@
+/*
+ * The on-water palette from the brief. Dark by default and not by preference: these
+ * screens are read in a cockpit, one-handed, in glare or at dusk, by somebody who has
+ * something else to be doing. Every value here is from wiki/unmarkable-racing-brief.html
+ * so the app and its own design document cannot drift apart.
+ */
+:root {
+  --sea: #0e1a26;
+  --panel: #13212f;
+  --panel2: #17293a;
+  --line: #35b5e8;       /* the virtual line itself, everywhere it is drawn */
+  --muted: #7f97ad;
+  --ink: #e6eef6;
+  --fromside: #4a86cf;   /* fixes resolved to the required side */
+  --toside: #e08a3a;     /* fixes resolved to the far side */
+  --cog: #aebfce;
+  --ok: #2fd07a;         /* crossed, latched */
+  --warn: #ff5f56;       /* missed */
+  --mono: 'Share Tech Mono', ui-monospace, monospace;
+  --disp: 'Barlow Condensed', system-ui, sans-serif;
+  --body: 'Barlow', system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--sea);
+  color: var(--ink);
+  font-family: var(--body);
+  line-height: 1.5;
+  padding: 16px;
+}
+
+h1 { font-family: var(--disp); font-size: 28px; font-weight: 700; letter-spacing: 0.01em; }
+h2 { font-family: var(--disp); font-size: 19px; font-weight: 600; margin: 24px 0 8px; color: var(--line); }
+
+.kicker {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--panel2);
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin: 10px 0;
+}
+
+.mono { font-family: var(--mono); }
+.muted { color: var(--muted); }
+.ok { color: var(--ok); }
+.warn { color: var(--warn); }
+
+a { color: var(--line); }
+
+ul { list-style: none; }
+li { padding: 3px 0; }
+
+/* The readout cells on the Mark screen: value large, unit small, label smaller still. */
+.readout { display: flex; gap: 20px; flex-wrap: wrap; }
+.readout div { min-width: 92px; }
+.readout .label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+.readout .value { font-family: var(--disp); font-size: 30px; font-weight: 600; line-height: 1.1; }
+.readout .unit { font-size: 12px; color: var(--muted); margin-left: 3px; }

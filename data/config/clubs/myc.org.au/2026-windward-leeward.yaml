@@ -1,0 +1,103 @@
+# Two-lap windward/leeward, and the triple-sausage variant with a gate.
+#
+# This file exists to demonstrate two things the Manly Cove course does not:
+#
+#   1. ONE LINE, THREE STEPS. The leeward line is the start, mark 2, and the finish.
+#      It appears three times in the sequence and needs no special treatment, because
+#      roles are positional and the letters are derived. Read it in course order and
+#      its senses are forward, reverse, reverse — which is exactly the three triangles
+#      drawn on it in wiki/course-2lap-wl.svg.
+#
+#   2. A GATE. A step may offer alternatives instead of naming one line, and a boat
+#      satisfies it by satisfying any one of them. The alternatives are ordinary
+#      steps, so a gate does not require both sides to be the same kind of thing —
+#      when real marks arrive, a gate with a virtual line one side and a buoy the
+#      other is just a list with one of each in it.
+#
+# No coordinates are asserted here either. See the test fixtures for a populated one.
+
+name: Windward/leeward (shape demonstration)
+datum: WGS84
+
+points:
+  leeward-port:
+    name: Leeward line
+    latitude: -33.821793
+    longitude: 151.270751
+  leeward-starboard:
+    name: Leeward line
+    latitude: -33.822736
+    longitude: 151.272085
+  windward-port:
+    name: Windward line
+    latitude: -33.817131
+    longitude: 151.275413
+  windward-starboard:
+    name: Windward line
+    latitude: -33.818101
+    longitude: 151.276870
+  gate-l-port:
+    latitude: -33.823653
+    longitude: 151.268393
+  gate-l-starboard:
+    latitude: -33.822979
+    longitude: 151.269349
+  gate-r-port:
+    latitude: -33.824227
+    longitude: 151.270677
+  gate-r-starboard:
+    latitude: -33.824919
+    longitude: 151.269782
+
+lines:
+  leeward:
+    name: Leeward line
+    port:      {at: leeward-port}
+    starboard: {at: leeward-starboard}
+    notes: >
+      Start, mark 2 and finish. One line, three crossings.
+  windward:
+    name: Windward line
+    port:      {at: windward-port}
+    starboard: {at: windward-starboard}
+  gate-left:
+    name: Windward gate, left
+    port:      {at: gate-l-port}
+    starboard: {at: gate-l-starboard}
+  gate-right:
+    name: Windward gate, right
+    port:      {at: gate-r-port}
+    starboard: {at: gate-r-starboard}
+
+courses:
+  two-lap-wl:
+    name: Two-lap windward/leeward
+    notes: >
+      The base case. wiki/course-2lap-wl.svg draws it.
+    sequence:
+      - {line: leeward, cross: forward}
+      - {line: windward, cross: forward}
+      - {line: leeward, cross: reverse}
+      - {line: windward, cross: forward}
+      - {line: leeward, cross: reverse}
+  two-lap-wl-gate:
+    name: Two-lap windward/leeward, windward gate
+    notes: >
+      As above, but the windward mark is a gate and the boat picks a side. The leg into a
+      gate is measured to the midpoint between its alternatives, so the course length does
+      not depend on which side a given boat took — a length that varied per boat would make
+      the live-place axis mean different things for different boats.
+    sequence:
+      - {line: leeward, cross: forward}
+      - {line: windward, cross: forward}
+      - gate:
+          - {line: gate-left, cross: forward}
+          - {line: gate-right, cross: forward}
+        notes: >
+          Either side.
+      - {line: windward, cross: forward}
+      - gate:
+          - {line: gate-left, cross: forward}
+          - {line: gate-right, cross: forward}
+      - {line: windward, cross: forward}
+      - {line: leeward, cross: reverse}

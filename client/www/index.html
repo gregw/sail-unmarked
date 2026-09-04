@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Unmarkable Racing</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<p class="kicker">Unmarkable Racing</p>
+<h1>Sail racing around virtual marks</h1>
+
+<div class="panel">
+  <p class="muted">
+    <strong>Scaffold.</strong> This page proves the server serves the client and that the
+    programme endpoints answer. The Mark, Course and Live Place screens described in
+    <span class="mono">wiki/unmarkable-racing-brief.html</span> &sect;3 are not built yet.
+  </p>
+  <p class="muted" style="margin-top:8px">
+    The crossing detector, which is the part that decides a race, <em>is</em> built and
+    specified &mdash; <a href="crossing-test.html">run its spec</a>, or the
+    <a href="geo-test.html">geo spec</a> behind the chart.
+  </p>
+  <p style="margin-top:8px">
+    <a href="editor.html"><strong>Course editor</strong></a> &mdash; place points on a
+    chart and export them as YAML.
+  </p>
+</div>
+
+<h2>Programmes</h2>
+<div id="programmes" class="panel"><span class="muted">Loading&hellip;</span></div>
+
+<h2>Server</h2>
+<div id="server" class="panel"><span class="muted">Loading&hellip;</span></div>
+
+<script type="module">
+const el = (id) => document.getElementById(id);
+
+async function json(path) {
+  const response = await fetch(path);
+  if (!response.ok) throw new Error(`${path}: ${response.status}`);
+  return response.json();
+}
+
+try {
+  const config = await json('/api/config');
+  el('server').innerHTML = `
+    <div class="mono">${config.site.name} &middot; version ${config.version}</div>
+    ${config.programmeErrors.length
+      ? `<div class="warn" style="margin-top:6px">${config.programmeErrors.length} programme file(s) had problems</div>`
+      : '<div class="ok" style="margin-top:6px">All programme files loaded</div>'}`;
+} catch (e) {
+  el('server').innerHTML = `<span class="warn">${e.message}</span>`;
+}
+
+try {
+  const programmes = await json('/api/programmes');
+  el('programmes').innerHTML = programmes.length === 0
+    ? '<span class="muted">No programmes configured.</span>'
+    : programmes.map((p) => `
+        <div style="margin-bottom:10px">
+          <div class="mono">${p.club} / ${p.series}</div>
+          <div>${p.name}</div>
+          <ul class="muted">${[...p.courses].map((c) => `<li>&middot; ${c}</li>`).join('')}</ul>
+          ${p.problems.length
+            ? `<div class="warn mono" style="font-size:11px">${p.problems.length} problem(s) &mdash; positions not yet supplied</div>`
+            : ''}
+        </div>`).join('');
+} catch (e) {
+  el('programmes').innerHTML = `<span class="warn">${e.message}</span>`;
+}
+</script>
+
+</body>
+</html>
