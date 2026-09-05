@@ -27,3 +27,9 @@ client/ios/
 # want fixtures.
 data/store/
 data/backups/
+
+#Other projects
+/nemesis-delta
+/sailing-pf
+/sail-jinx
+
