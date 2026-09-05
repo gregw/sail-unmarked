@@ -30,6 +30,17 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * and the order disagree. The two-lap windward/leeward gets S, 2 and F onto one line for
  * free, because that line simply appears three times.
  *
+ * <h2>Entry points, on a closed course</h2>
+ * {@code entry} marks a step a boat may join a cycle at. It means nothing on an open
+ * course, which has one start and one finish by position.
+ *
+ * <p>The rule that makes it work is a deliberate simplification: <b>a line crossed to
+ * begin a lap must be crossed again, in the same sense, to end it.</b> So an entry point
+ * is a start and a finish at once, and a boat's lap is bounded by the same crossing twice
+ * rather than by two different ones. That puts the burden on course design — a cycle wants
+ * lines that a boat passes once per lap — and takes it off the scoring, which would
+ * otherwise have to decide which of several crossings closed the loop.
+ *
  * <h2>Leg length</h2>
  * {@code lengthNm} overrides the length of the leg <em>into</em> this step. Left out, the
  * leg is measured between the reference points of this step and the one before it — see
@@ -41,6 +52,7 @@ public record CourseStep(
     @JsonProperty("cross") Direction cross,
     @JsonProperty("gate") List<CourseStep> gate,
     @JsonProperty("lengthNm") Double lengthNm,
+    @JsonProperty("entry") boolean entry,
     @JsonProperty("notes") String notes)
 {
     public CourseStep

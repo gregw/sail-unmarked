@@ -268,6 +268,8 @@ public final class ProgrammeWriter
                         out.append("          - ").append(stepInline(alternative)).append('\n');
                     if (step.lengthNm() != null)
                         out.append("        lengthNm: ").append(trim(step.lengthNm())).append('\n');
+                    if (step.entry())
+                        out.append("        entry: true\n");
                     notes(out, step.notes(), 8);
                 }
                 else if (step.notes() != null && !step.notes().isBlank())
@@ -276,6 +278,8 @@ public final class ProgrammeWriter
                     out.append("        cross: ").append(sense(step)).append('\n');
                     if (step.lengthNm() != null)
                         out.append("        lengthNm: ").append(trim(step.lengthNm())).append('\n');
+                    if (step.entry())
+                        out.append("        entry: true\n");
                     notes(out, step.notes(), 8);
                 }
                 else
@@ -293,6 +297,10 @@ public final class ProgrammeWriter
             .append(", cross: ").append(sense(step));
         if (step.lengthNm() != null)
             out.append(", lengthNm: ").append(trim(step.lengthNm()));
+        // Only when true, and only meaningful on a closed course: a boat may begin and end
+        // a lap at this crossing.
+        if (step.entry())
+            out.append(", entry: true");
         return out.append('}').toString();
     }
 
@@ -356,7 +364,7 @@ public final class ProgrammeWriter
      * unfold and fold again gives the same text, even if not the same line breaks as
      * whoever typed it first.
      */
-    private static void notes(StringBuilder out, String notes, int indent)
+    static void notes(StringBuilder out, String notes, int indent)
     {
         if (notes == null || notes.isBlank())
             return;
@@ -390,7 +398,7 @@ public final class ProgrammeWriter
     }
 
     /** Where a folded note wraps. */
-    private static final int WRAP = 92;
+    static final int WRAP = 92;
 
     /**
      * Six decimal places, or {@code null}.
@@ -399,13 +407,13 @@ public final class ProgrammeWriter
      * and therefore loses nothing. Writing the full double instead would put seventeen
      * digits in a file a person reads and claim a precision nobody has.
      */
-    private static String number(Double value)
+    static String number(Double value)
     {
         return value == null ? "null" : String.format(Locale.ROOT, "%.6f", value);
     }
 
     /** Quote only when the value would otherwise not survive the YAML round trip. */
-    private static String scalar(String value)
+    static String scalar(String value)
     {
         String trimmed = value.strip();
         boolean safe = !trimmed.isEmpty()

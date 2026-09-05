@@ -6,7 +6,10 @@
  * — which is exactly the kind of error a test has to catch instead of an eye.
  */
 
-import { ARROW_CENTROID, LABEL, TRIANGLE, arrowHead, darken, forwardNormal, rampColour, seats, track, triangle } from './coursedraw.js';
+import {
+  ARROW_CENTROID, LABEL, MERGE_FRACTION, ROLE_COLOUR, TRIANGLE,
+  arrowHead, darken, forwardNormal, roleColour, seats, track, triangle,
+} from './coursedraw.js';
 
 export function run(check) {
   // ------------------------------------------------------- which way is forward
@@ -98,18 +101,23 @@ export function run(check) {
     return r > g && g > b;
   })());
   check('a colour it cannot parse is passed through', darken('var(--ok)') === 'var(--ok)');
-  check('every ramp colour darkens to something legible on it',
-    [0, 0.25, 0.5, 0.75, 1].every((t) => darken(rampColour(t)) !== rampColour(t)));
+  check('every role colour darkens to something legible on it',
+    Object.values(ROLE_COLOUR).every((c) => darken(c) !== c));
 
-  // ---------------------------------------------------------------- the ramp
-  // Colour carries course order, which is what tells four near-parallel legs up the same
-  // beat apart. It is never the only channel — arrows and letters carry it too.
-  check('the ramp starts at the start triangle green', rampColour(0) === 'rgb(47,208,122)');
-  check('...and ends at the finish triangle red', rampColour(1) === 'rgb(255,95,86)');
-  check('...passing through the mid tone', rampColour(0.5) === 'rgb(224,138,58)');
-  check('...moving all the way along', rampColour(0.25) !== rampColour(0.75));
-  check('out of range is clamped, not wrapped', rampColour(-3) === rampColour(0) && rampColour(9) === rampColour(1));
-  check('a missing position does not produce garbage', rampColour(undefined).startsWith('rgb('));
+  // ------------------------------------------------------- what a leg is FOR
+  // Sequence position was the wrong thing to colour by. On a cycle there is no sequence to
+  // be far through, and even on an open course the useful question about a leg is not "how
+  // far along" but "does a lap start here, or end here".
+  check('a leg that starts a lap is green', roleColour(true, false) === ROLE_COLOUR.start);
+  check('a leg that ends one is red', roleColour(false, true) === ROLE_COLOUR.finish);
+  check('everything between is one neutral colour', roleColour(false, false) === ROLE_COLOUR.leg);
+  check('...so the two that matter stand out', ROLE_COLOUR.leg !== ROLE_COLOUR.start
+    && ROLE_COLOUR.leg !== ROLE_COLOUR.finish);
+  // A cycle's entry point is always both: a line crossed to begin a lap is crossed again
+  // the same way to end it.
+  check('a leg that does both asks for a gradient instead', roleColour(true, true) === null);
+  check('the start colour is the start triangle\'s green', ROLE_COLOUR.start === 'rgb(47,208,122)');
+  check('the finish colour is the finish triangle\'s red', ROLE_COLOUR.finish === 'rgb(255,95,86)');
 
   // ---------------------------------------------------------------- the track
   const cross = (bx, by, ax, ay) => ({ base: { x: bx, y: by }, apex: { x: ax, y: ay } });
@@ -196,6 +204,40 @@ export function run(check) {
   check('a merge does too', merges.every((s) => s.d.includes('A')));
   check('both sides of the gate carry the same course position', splits[0].t === splits[1].t);
 
+  // ------------------------------------------------- and where a gate JOINS again
+  // Not at the gate. Boats that took different sides sail their own line down the leg and
+  // converge near the mark ahead, not at the one behind. Drawing the join at the gate as
+  // well made the split look like a decorative bulge rather than a choice with a cost.
+  const gateApexY = 80;
+  const nextBaseY = -200;
+  const expected = gateApexY + MERGE_FRACTION * (nextBaseY - gateApexY);
+  const joinY = Number(/,(-?[\d.]+)$/.exec(merges[0].d.trim().split(' ').pop())[1]);
+  check(`the join sits ${MERGE_FRACTION * 100}% down the leg (y ${joinY.toFixed(0)} vs ${expected.toFixed(0)})`,
+    Math.abs(joinY - expected) < 14);
+  check('...which is well clear of the gate it left', Math.abs(joinY - gateApexY) > 100);
+  check('...and short of the mark it is heading for', Math.abs(joinY - nextBaseY) > 20);
+  check('the trunk picks up from there, not from the gate',
+    Math.abs(Number(/^M[-\d.]+,(-?[\d.]+)/.exec(gated.filter((s) => s.kind === 'leg')[1].d)[1]) - expected) < 14);
+
+  // The two sides run their own line, so they are still apart at the halfway mark.
+  const halfway = (gateApexY + nextBaseY) / 2;
+  check('the alternatives are still separated halfway down the leg',
+    merges.every((s) => /L(-?[\d.]+),/.test(s.d))
+    && Math.abs(Number(/L(-?[\d.]+),/.exec(merges[0].d)[1]) - Number(/L(-?[\d.]+),/.exec(merges[1].d)[1])) > 0);
+
+  // The fraction is a knob, not a constant baked into the geometry.
+  const early = track([
+    { crossings: [cross(0, 400, 0, 380)] },
+    { crossings: [cross(-40, 100, -40, 80), cross(40, 100, 40, 80)] },
+    { crossings: [cross(0, -200, 0, -220)] },
+  ], { mergeFraction: 0.1 }).filter((s) => s.kind === 'merge');
+  const earlyJoin = Number(/,(-?[\d.]+)$/.exec(early[0].d.trim().split(' ').pop())[1]);
+  check('joining earlier moves it back towards the gate', earlyJoin > joinY);
+
+  // A leg out of a plain crossing has no join to move.
+  check('a non-gate leg starts at the apex itself',
+    /^M0\.0,380\.0/.test(gated.filter((s) => s.kind === 'leg')[0].d));
+
   // A gate at both ends of a leg: merge out of one, trunk, split into the next.
   const between = track([
     { crossings: [cross(-30, 200, -30, 180), cross(30, 200, 30, 180)] },
@@ -208,6 +250,33 @@ export function run(check) {
     && between.filter((s) => s.kind === 'split').length === 2);
   check('...and the trunk itself needs no corner, the branches having turned already',
     !between.find((s) => s.kind === 'leg').d.includes('A'));
+
+  // ------------------------------------------------------------ closing a cycle
+  // A closed course is a loop, and drawing it open leaves the one gap a boat never sails.
+  const loop = [
+    { crossings: [cross(0, 200, 0, 180)] },
+    { crossings: [cross(200, 0, 200, -20)] },
+    { crossings: [cross(0, -200, 0, -220)] },
+  ];
+  const openLegs = track(loop).filter((s) => s.kind === 'leg');
+  const cycleLegs = track(loop, { closed: true }).filter((s) => s.kind === 'leg');
+  check('an open course has one leg fewer than it has steps', openLegs.length === 2);
+  check('a cycle joins the last mark back to the first', cycleLegs.length === 3);
+  check('...and that leg runs from the last step to the first',
+    cycleLegs[2].from === 2 && cycleLegs[2].to === 0);
+  check('a cycle of one step has nothing to close', track([loop[0]], { closed: true }).filter((s) => s.kind === 'leg').length === 0);
+
+  // Every segment says which step it leads to, so a gate's branches can be lettered with
+  // the same step as the trunk they belong to.
+  const branched = track([
+    { crossings: [cross(0, 300, 0, 280)] },
+    { crossings: [cross(-40, 100, -40, 80), cross(40, 100, 40, 80)] },
+  ]);
+  const onLeg = branched.filter((s) => s.kind !== 'crossing');
+  check('the trunk and both branches lead to the same step',
+    onLeg.every((s) => s.to === 1) && onLeg.length === 3);
+  check('...and know which step they left', onLeg.every((s) => s.from === 0));
+  check('a crossing belongs to its own step', branched.find((s) => s.kind === 'crossing').to === 0);
 
   check('a one-step course has one crossing and no legs', track([{ crossings: [cross(0, 0, 0, 10)] }]).length === 1);
   check('an empty course draws nothing', track([]).length === 0);

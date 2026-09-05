@@ -20,54 +20,58 @@ name: Windward/leeward (shape demonstration)
 datum: WGS84
 
 points:
-  leeward-port:
+  leeward-p:
     name: Leeward line
-    latitude: -33.821793
-    longitude: 151.270751
-  leeward-starboard:
+    latitude: -33.821748
+    longitude: 151.270412
+  leeward-s:
     name: Leeward line
-    latitude: -33.822736
-    longitude: 151.272085
-  windward-port:
+    latitude: -33.822925
+    longitude: 151.272039
+  windward-p:
     name: Windward line
     latitude: -33.817131
     longitude: 151.275413
-  windward-starboard:
+  windward-s:
     name: Windward line
     latitude: -33.818101
     longitude: 151.276870
-  gate-l-port:
-    latitude: -33.823653
-    longitude: 151.268393
-  gate-l-starboard:
-    latitude: -33.822979
-    longitude: 151.269349
-  gate-r-port:
-    latitude: -33.824227
-    longitude: 151.270677
-  gate-r-starboard:
-    latitude: -33.824919
-    longitude: 151.269782
+  gate-l-p:
+    name: gate-l-port
+    latitude: -33.821542
+    longitude: 151.271051
+  gate-l-s:
+    name: gate-l-starboard
+    latitude: -33.820940
+    longitude: 151.271757
+  gate-r-p:
+    name: gate-r-port
+    latitude: -33.821802
+    longitude: 151.272963
+  gate-r-s:
+    name: gate-r-starboard
+    latitude: -33.822431
+    longitude: 151.272303
 
 lines:
   leeward:
     name: Leeward line
-    port:      {at: leeward-port}
-    starboard: {at: leeward-starboard}
+    port:      {at: leeward-p}
+    starboard: {at: leeward-s}
     notes: >
       Start, mark 2 and finish. One line, three crossings.
   windward:
     name: Windward line
-    port:      {at: windward-port}
-    starboard: {at: windward-starboard}
+    port:      {at: windward-p}
+    starboard: {at: windward-s}
   gate-left:
     name: Windward gate, left
-    port:      {at: gate-l-port}
-    starboard: {at: gate-l-starboard}
+    port:      {at: gate-l-p}
+    starboard: {at: gate-l-s}
   gate-right:
     name: Windward gate, right
-    port:      {at: gate-r-port}
-    starboard: {at: gate-r-starboard}
+    port:      {at: gate-r-p}
+    starboard: {at: gate-r-s}
 
 courses:
   two-lap-wl:

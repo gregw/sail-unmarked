@@ -9,8 +9,6 @@ import org.mortbay.sailing.unmarkable.model.Course;
 import org.mortbay.sailing.unmarkable.model.Line;
 import org.mortbay.sailing.unmarkable.model.Position;
 import org.mortbay.sailing.unmarkable.model.Programme;
-import org.mortbay.sailing.unmarkable.model.Race;
-import org.mortbay.sailing.unmarkable.model.RaceFormat;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.closeTo;
@@ -129,28 +127,7 @@ public class ProgrammeLibraryTest
         assertThat(library.loadErrors(), hasSize(0));
     }
 
-    @Test
-    public void racesAreLoadedFromTheirOwnFiles()
-    {
-        // clubs/<club>/races/<id>.yaml is a race; anything else directly under the club
-        // is a programme. A race must not end up parsed as a programme, or vice versa.
-        Race race = library.race("test.example", "race-1").orElseThrow();
-        assertThat(race.id(), is("race-1"));
-        assertThat(race.club(), is("test.example"));
-        assertThat(race.course(), is("up-and-back"));
-        assertThat(race.format(), is(RaceFormat.ROLLING_START));
-        assertThat(race.entrants().get(0).tcf(), is(1.02));
-        assertThat(library.programmes().keySet(), contains("test.example/fixture"));
-    }
 
-    @Test
-    public void unsettledFormatParametersStillRoundTrip()
-    {
-        // The race schema is explicitly TBD, so parameters is a free map: a format's
-        // settings can be written down and carried before anybody names them.
-        assertThat(library.race("test.example", "race-1").orElseThrow()
-            .parameters().get("someFutureKnob"), is(3));
-    }
 
     @Test
     public void unsurveyedPointsAreProblemsNotFailures()

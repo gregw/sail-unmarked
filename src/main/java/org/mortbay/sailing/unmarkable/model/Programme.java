@@ -35,6 +35,7 @@ public record Programme(
     @JsonProperty("series") String series,
     @JsonProperty("name") String name,
     @JsonProperty("datum") String datum,
+    @JsonProperty("timezone") String timezone,
     @JsonProperty("defaults") Detection defaults,
     @JsonProperty("points") Map<String, NamedPoint> points,
     @JsonProperty("lines") Map<String, Line> lines,
@@ -48,8 +49,15 @@ public record Programme(
         // can be refused loudly, rather than being quietly a hundred metres out.
         if (datum == null || datum.isBlank())
             datum = "WGS84";
+        // Races are written as a date and a clock time, the way they are published, so
+        // something has to say which clock. It belongs to the club rather than to each
+        // race night: a club races in one place, and repeating the zone on every race is
+        // how one of them ends up wrong after a daylight-saving change.
+        if (timezone == null || timezone.isBlank())
+            timezone = "Australia/Sydney";
         if (defaults == null)
             defaults = new Detection(0, null, null);
+        java.time.ZoneId.of(timezone);   // fail loudly here rather than at race time
         points = keyById(points, NamedPoint::id, (p, id) ->
             new NamedPoint(id, p.name(), p.latitude(), p.longitude(), p.notes()));
         lines = keyById(lines, Line::id, (l, id) ->

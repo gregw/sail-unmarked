@@ -41,11 +41,40 @@ public record Course(
      */
     public String sequenceLetter(int index)
     {
+        // A closed course has no start and no finish of its own — a boat begins and ends
+        // wherever it joined — so S and F would be claiming something untrue about it.
+        // Every step is simply numbered, and which of them may be joined at is marked.
+        if (closed)
+            return Integer.toString(index + 1);
         if (index == 0)
             return "S";
         if (index == sequence.size() - 1)
             return "F";
         return Integer.toString(index);
+    }
+
+    /** The steps a boat may begin and end a lap at. Empty on an open course. */
+    @JsonIgnore
+    public List<CourseStep> entryPoints()
+    {
+        return closed ? sequence.stream().filter(CourseStep::entry).toList() : List.of();
+    }
+
+    /**
+     * True when some line on this course can carry a per-boat sub-line, which is what a
+     * distance-corrected race needs.
+     *
+     * <p>A half-infinite line is the shape that works: its finite end is the knob, so
+     * pushing that end out along the bearing makes a boat sail further before there is any
+     * line to cross. A finite line has no such freedom.
+     */
+    @JsonIgnore
+    public boolean hasAdjustableLine(Map<String, Line> lines)
+    {
+        return sequence.stream()
+            .flatMap(step -> step.alternatives().stream())
+            .map(step -> lines.get(step.line()))
+            .anyMatch(line -> line != null && line.halfInfinite());
     }
 
     /**

@@ -8,8 +8,11 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
+import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -20,7 +23,8 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import org.mortbay.sailing.unmarkable.model.RaceRecord;
+import org.mortbay.sailing.unmarkable.model.CourseRecord;
+import org.mortbay.sailing.unmarkable.model.CourseSnapshot;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,15 +34,21 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Layout under {@code <root>/store/}:
  * <pre>
- *   records/{club}/{series}/{raceId}/{boatId}.json  — one boat's race record
- *   journal/{yyyy-MM}.jsonl                         — append-only, every accepted post
+ *   records/{club}/{course}/{date}/{boatId}-{HHmmss}.json  — one boat's run at a course
+ *   courses/{revision}.json                                — a course design somebody sailed
+ *   journal/{yyyy-MM}.jsonl                                — append-only, every accepted post
  * </pre>
  *
- * <p>One file per boat, rather than one per race, because the writers are independent:
- * forty phones post whenever their own signal comes back, and a race-shaped file would
- * make every one of those a read-modify-write of a document the others are also writing.
- * A boat's record is also the natural unit of everything else — it is what gets resubmitted
- * with the full track later, and what a protest looks at.
+ * <p>One file per run, because the writers are independent: forty phones post whenever
+ * their own signal comes back, and a shared file would make every one of those a
+ * read-modify-write of a document the others are also writing. Filed by course and day,
+ * because without races that is what an evening's sailing has in common; the start time
+ * in the name is what lets one boat sail the same course twice in a day.
+ *
+ * <p><b>Course designs are archived by revision, and only once a boat has joined one.</b>
+ * There is no value in keeping every geometry the editor ever produced — most were typed
+ * over a second later — but a design somebody actually sailed has to survive being edited
+ * afterwards, or its records become uninterpretable.
  *
  * <p>Three properties are not optional here, for the same reason as in sail-jinx, and one
  * more that is particular to this application:
@@ -73,7 +83,11 @@ public class JsonStore
     private static final DateTimeFormatter JOURNAL_MONTH =
         DateTimeFormatter.ofPattern("yyyy-MM").withZone(ZoneOffset.UTC);
 
+    /** The start time in a record's filename, so two runs in a day do not collide. */
+    private static final DateTimeFormatter STAMP = DateTimeFormatter.ofPattern("HHmmss");
+
     private final Path recordsDir;
+    private final Path coursesDir;
     private final Path journalDir;
     private final List<String> loadErrors = new ArrayList<>();
 
@@ -81,12 +95,14 @@ public class JsonStore
     {
         Path storeDir = dataRoot.resolve("store");
         this.recordsDir = storeDir.resolve("records");
+        this.coursesDir = storeDir.resolve("courses");
         this.journalDir = storeDir.resolve("journal");
     }
 
     public void start() throws IOException
     {
         Files.createDirectories(recordsDir);
+        Files.createDirectories(coursesDir);
         Files.createDirectories(journalDir);
         LOG.info("Store at {}", recordsDir.toAbsolutePath());
     }
@@ -100,62 +116,128 @@ public class JsonStore
      * of one version and half of another. The journal keeps what was replaced, so a
      * resubmission that quietly dropped a crossing is still visible afterwards.
      */
-    public void save(RaceRecord record) throws IOException
+    public void save(CourseRecord record) throws IOException
     {
-        Path file = recordFile(record.club(), record.series(), record.raceId(), record.boatId());
+        Path file = recordFile(record);
         Files.createDirectories(file.getParent());
         writeAtomic(file, MAPPER.writeValueAsBytes(record));
         journal("record", record);
     }
 
-    public Optional<RaceRecord> record(String club, String series, String raceId, String boatId)
+    /**
+     * Archive a course design under its revision, if it is not already there.
+     *
+     * <p>Written once and never rewritten: a revision names one geometry, so a second
+     * snapshot with the same revision is the same course and re-writing it would only risk
+     * replacing a good file with a worse one.
+     */
+    public void archive(CourseSnapshot snapshot) throws IOException
     {
-        Path file = recordFile(club, series, raceId, boatId);
+        Path file = coursesDir.resolve(safe(snapshot.revision()) + ".json");
+        if (Files.exists(file))
+            return;
+        Files.createDirectories(coursesDir);
+        writeAtomic(file, MAPPER.writeValueAsBytes(snapshot));
+        journal("course", snapshot);
+    }
+
+    /** The archived design a record names, so a track can still be read months later. */
+    public Optional<CourseSnapshot> course(String revision)
+    {
+        Path file = coursesDir.resolve(safe(revision) + ".json");
         if (!Files.isRegularFile(file))
             return Optional.empty();
         try
         {
-            return Optional.of(MAPPER.readValue(Files.readAllBytes(file), RaceRecord.class));
+            return Optional.of(MAPPER.readValue(Files.readAllBytes(file), CourseSnapshot.class));
         }
         catch (IOException e)
         {
             loadErrors.add(file + ": " + e.getMessage());
-            LOG.error("Could not read record {}", file, e);
+            LOG.error("Could not read course {}", file, e);
             return Optional.empty();
         }
     }
 
-    /** Every boat's record for one race, skipping any that will not read. */
-    public List<RaceRecord> race(String club, String series, String raceId)
+    /** Every run at a course on one day, skipping any file that will not read. */
+    public List<CourseRecord> day(String club, String course, LocalDate date)
     {
-        Path dir = recordsDir.resolve(club).resolve(series).resolve(raceId);
+        return readAll(recordsDir.resolve(safe(club)).resolve(safe(course)).resolve(date.toString()));
+    }
+
+    /**
+     * Every ranked run at one course geometry, quickest first.
+     *
+     * <p>Only {@link org.mortbay.sailing.unmarkable.model.JoinMode#RECORD} runs, and only
+     * against the SAME revision: a course edited between two attempts is two courses, and
+     * ranking across the edit would be comparing different water.
+     */
+    public List<CourseRecord> best(String club, String course, String revision)
+    {
+        Path dir = recordsDir.resolve(safe(club)).resolve(safe(course));
         if (!Files.isDirectory(dir))
             return List.of();
-        List<RaceRecord> records = new ArrayList<>();
+        List<CourseRecord> ranked = new ArrayList<>();
+        try (Stream<Path> days = Files.list(dir))
+        {
+            days.filter(Files::isDirectory).sorted().forEach(day -> readAll(day).stream()
+                .filter(CourseRecord::ranked)
+                .filter(r -> revision == null || revision.equals(r.courseRevision()))
+                .forEach(ranked::add));
+        }
+        catch (IOException e)
+        {
+            loadErrors.add(dir + ": " + e.getMessage());
+        }
+        ranked.sort(Comparator.comparingLong(r -> r.elapsedSeconds().orElse(Long.MAX_VALUE)));
+        return ranked;
+    }
+
+    private List<CourseRecord> readAll(Path dir)
+    {
+        if (!Files.isDirectory(dir))
+            return List.of();
+        List<CourseRecord> records = new ArrayList<>();
         try (Stream<Path> files = Files.list(dir))
         {
-            files.filter(f -> f.getFileName().toString().endsWith(".json"))
-                .sorted()
-                .forEach(f ->
+            files.filter(f -> f.getFileName().toString().endsWith(".json")).sorted().forEach(f ->
+            {
+                try
                 {
-                    try
-                    {
-                        records.add(MAPPER.readValue(Files.readAllBytes(f), RaceRecord.class));
-                    }
-                    catch (IOException e)
-                    {
-                        // Skipped and reported. One boat's bad file must not empty the
-                        // results for the whole fleet.
-                        loadErrors.add(f + ": " + e.getMessage());
-                        LOG.error("Could not read record {}", f, e);
-                    }
-                });
+                    records.add(MAPPER.readValue(Files.readAllBytes(f), CourseRecord.class));
+                }
+                catch (IOException e)
+                {
+                    // Skipped and reported. One boat's bad file must not empty the results
+                    // for everyone who sailed that evening.
+                    loadErrors.add(f + ": " + e.getMessage());
+                    LOG.error("Could not read record {}", f, e);
+                }
+            });
         }
         catch (IOException e)
         {
             loadErrors.add(dir + ": " + e.getMessage());
         }
         return records;
+    }
+
+    /**
+     * Where a run is filed.
+     *
+     * <p>The start time is in the NAME rather than only in the file, so a boat may sail the
+     * same course twice in a day and so a resubmission of the same run — the ordinary case,
+     * when the full track arrives later over wifi — lands on the same file and supersedes
+     * it rather than accumulating.
+     */
+    private Path recordFile(CourseRecord record)
+    {
+        Instant at = record.startTime() != null ? record.startTime() : Instant.now();
+        ZonedDateTime local = at.atZone(ZoneOffset.UTC);
+        return recordsDir.resolve(safe(record.club()))
+            .resolve(safe(record.course()))
+            .resolve(local.toLocalDate().toString())
+            .resolve(safe(record.boatId()) + "-" + STAMP.format(local) + ".json");
     }
 
     public List<String> loadErrors()

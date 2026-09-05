@@ -19,7 +19,6 @@ import org.mortbay.sailing.unmarkable.model.Course;
 import org.mortbay.sailing.unmarkable.model.Line;
 import org.mortbay.sailing.unmarkable.model.NamedPoint;
 import org.mortbay.sailing.unmarkable.model.Programme;
-import org.mortbay.sailing.unmarkable.model.Race;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -58,7 +57,6 @@ public class ProgrammeLibrary
     private final Path clubsDir;
     private final Map<String, Programme> programmes = new LinkedHashMap<>();
     private final Map<String, Path> files = new LinkedHashMap<>();
-    private final Map<String, Race> races = new LinkedHashMap<>();
     private final List<String> loadErrors = new ArrayList<>();
 
     public ProgrammeLibrary(Path configDir)
@@ -72,17 +70,10 @@ public class ProgrammeLibrary
         return club + "/" + series;
     }
 
-    /** Key under which a race is addressed: {@code <club>/<raceId>}. */
-    public static String raceKey(String club, String raceId)
-    {
-        return club + "/" + raceId;
-    }
-
     public void load() throws IOException
     {
         programmes.clear();
         files.clear();
-        races.clear();
         loadErrors.clear();
         if (!Files.isDirectory(clubsDir))
         {
@@ -94,18 +85,9 @@ public class ProgrammeLibrary
             files.filter(Files::isRegularFile)
                 .filter(p -> p.getFileName().toString().endsWith(".yaml"))
                 .sorted()
-                .forEach(file ->
-                {
-                    // clubs/<club>/races/<raceId>.yaml is a race; anything else directly
-                    // under clubs/<club>/ is a programme.
-                    if (file.getParent().getFileName().toString().equals("races"))
-                        loadRace(file);
-                    else
-                        loadOne(file);
-                });
+                .forEach(this::loadOne);
         }
-        LOG.info("Loaded {} programme(s) and {} race(s) from {}",
-            programmes.size(), races.size(), clubsDir.toAbsolutePath());
+        LOG.info("Loaded {} programme(s) from {}", programmes.size(), clubsDir.toAbsolutePath());
         for (Programme programme : programmes.values())
         {
             for (String problem : programme.problems())
@@ -128,7 +110,8 @@ public class ProgrammeLibrary
                 loadErrors.add(file + ": says series '" + raw.series() + "' but is filed as '"
                     + series + "' — the path wins");
             Programme programme = new Programme(club, series, raw.name(), raw.datum(),
-                raw.defaults(), raw.points(), raw.lines(), raw.courses(), raw.notes());
+                raw.timezone(), raw.defaults(), raw.points(), raw.lines(), raw.courses(),
+                raw.notes());
             programmes.put(key(club, series), programme);
             files.put(key(club, series), file);
         }
@@ -141,35 +124,11 @@ public class ProgrammeLibrary
         }
     }
 
-    private void loadRace(Path file)
-    {
-        String raceId = file.getFileName().toString().replaceFirst("\\.yaml$", "");
-        String club = file.getParent().getParent().getFileName().toString();
-        try
-        {
-            Race raw = YAML_MAPPER.readValue(Files.readAllBytes(file), Race.class);
-            Race race = new Race(raceId, club, raw.series(), raw.name(), raw.course(),
-                raw.format(), raw.windowOpen(), raw.windowClose(), raw.parameters(),
-                raw.entrants(), raw.notes());
-            races.put(raceKey(club, raceId), race);
-        }
-        catch (Exception e)
-        {
-            String message = file + ": " + e.getMessage();
-            loadErrors.add(message);
-            LOG.error("Could not load race {}", message);
-        }
-    }
 
-    public Optional<Race> race(String club, String raceId)
-    {
-        return Optional.ofNullable(races.get(raceKey(club, raceId)));
-    }
 
-    public Map<String, Race> races()
-    {
-        return Collections.unmodifiableMap(races);
-    }
+
+
+
 
     public Optional<Programme> programme(String club, String series)
     {

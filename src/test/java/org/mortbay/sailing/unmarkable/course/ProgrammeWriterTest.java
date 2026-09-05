@@ -409,12 +409,12 @@ public class ProgrammeWriterTest
         Map<String, Course> courses = new LinkedHashMap<>();
         courses.put("two-lap", new Course("two-lap", "Two-lap windward/leeward", false,
             java.util.List.of(
-                new CourseStep("leeward", Direction.FORWARD, null, null, null),
+                new CourseStep("leeward", Direction.FORWARD, null, null, false, null),
                 new CourseStep(null, null, java.util.List.of(
-                    new CourseStep("gate-left", Direction.FORWARD, null, null, null),
-                    new CourseStep("gate-right", Direction.FORWARD, null, null, null)),
-                    null, "Either side."),
-                new CourseStep("leeward", Direction.REVERSE, null, null, "Finish. Northbound.")),
+                    new CourseStep("gate-left", Direction.FORWARD, null, null, false, null),
+                    new CourseStep("gate-right", Direction.FORWARD, null, null, false, null)),
+                    null, false, "Either side."),
+                new CourseStep("leeward", Direction.REVERSE, null, null, false, "Finish. Northbound.")),
             "The base case."));
         return courses;
     }
@@ -455,7 +455,7 @@ public class ProgrammeWriterTest
         assertThat(ProgrammeWriter.emitCourses(courses()), not(containsString("closed:")));
         Map<String, Course> loop = new LinkedHashMap<>();
         loop.put("c", new Course("c", null, true,
-            java.util.List.of(new CourseStep("a", Direction.FORWARD, null, null, null)), null));
+            java.util.List.of(new CourseStep("a", Direction.FORWARD, null, null, false, null)), null));
         assertThat(ProgrammeWriter.emitCourses(loop), containsString("    closed: true\n"));
     }
 

@@ -42,6 +42,19 @@ export function forwardNormal(dx, dy) {
 export const TRIANGLE = { half: 9.9, height: 16.5, minGap: 29 };
 
 /**
+ * How far down the leg the two sides of a gate come back together.
+ *
+ * Not at the gate: boats that took different sides sail their own line and converge near
+ * the mark ahead, not at the one behind. Measured to the next crossing, or to the midpoint
+ * of the next gate where the leg ends in one.
+ *
+ * Well down the leg rather than in the middle of it, because the two sides really are
+ * separate routes for almost the whole leg — they only come together at the last moment,
+ * as boats converge on the mark ahead.
+ */
+export const MERGE_FRACTION = 0.85;
+
+/**
  * The labels: the letter inside a crossing's triangle, and the letter on a leg saying
  * where that leg goes.
  *
@@ -106,35 +119,34 @@ export function triangle(at, along, normal) {
 }
 
 /**
- * Colour along the course, from the start to the finish.
+ * What a leg is FOR, as a colour.
  *
- * Green through orange to red, which is not decoration: the start triangle is already
- * green and the finish red, so a leg's colour says how far through the course it is in
- * the vocabulary the diagram already uses. This is what lets four near-parallel legs up
- * the same beat be told apart at a glance, which was the thing that made the first
- * version unreadable.
- *
- * Colour is never the only channel — every segment also carries an arrow and the letter
- * of the step it leads to — so the drawing still works for a reader who cannot separate
- * green from red.
+ * Sequence position was the wrong thing to colour by. On a cycle there is no sequence to
+ * be far through — a boat begins and ends wherever it joined — and even on an open course
+ * the useful question about a leg is not "how far along" but "does a lap start here, or
+ * end here". Green and red are the same green and red the start and finish already use;
+ * everything between is one neutral blue, so the two that matter stand out rather than
+ * competing with five shades of orange.
  */
-export function rampColour(t) {
-  const stops = [
-    [0.0, [47, 208, 122]],   // --ok, matching the start triangle
-    [0.5, [224, 138, 58]],   // --toside
-    [1.0, [255, 95, 86]],    // --warn, matching the finish triangle
-  ];
-  const at = Math.max(0, Math.min(1, Number.isFinite(t) ? t : 0));
-  for (let i = 0; i + 1 < stops.length; i++) {
-    const [t0, a] = stops[i];
-    const [t1, b] = stops[i + 1];
-    if (at <= t1 || i === stops.length - 2) {
-      const f = t1 === t0 ? 0 : (at - t0) / (t1 - t0);
-      const mix = a.map((v, k) => Math.round(v + (b[k] - v) * Math.max(0, Math.min(1, f))));
-      return `rgb(${mix.join(',')})`;
-    }
-  }
-  return 'rgb(255,95,86)';
+export const ROLE_COLOUR = {
+  start: 'rgb(47,208,122)',    // --ok
+  finish: 'rgb(255,95,86)',    // --warn
+  leg: 'rgb(74,134,207)',      // --fromside
+};
+
+/**
+ * The colour for a leg or a crossing, or null when it is both a start and a finish and
+ * therefore needs a gradient from one to the other.
+ *
+ * A cycle's entry point is always both: the rule is that a line crossed to begin a lap is
+ * crossed again the same way to end it, so the leg leaving one is somebody's first and the
+ * leg arriving is somebody else's last.
+ */
+export function roleColour(starting, finishing) {
+  if (starting && finishing) return null;
+  if (starting) return ROLE_COLOUR.start;
+  if (finishing) return ROLE_COLOUR.finish;
+  return ROLE_COLOUR.leg;
 }
 
 const sub = (p, q) => ({ x: p.x - q.x, y: p.y - q.y });
@@ -147,6 +159,7 @@ const rot90 = (v) => ({ x: -v.y, y: v.x });
 const rot = (v, a) => ({ x: v.x * Math.cos(a) - v.y * Math.sin(a), y: v.x * Math.sin(a) + v.y * Math.cos(a) });
 /** Signed angle from u to v. Positive is clockwise on screen, because y runs down. */
 const turn = (u, v) => Math.atan2(u.x * v.y - u.y * v.x, u.x * v.x + u.y * v.y);
+const lerp = (p, q, f) => ({ x: p.x + (q.x - p.x) * f, y: p.y + (q.y - p.y) * f });
 const mean = (points) => points.reduce(
   (acc, p) => ({ x: acc.x + p.x / points.length, y: acc.y + p.y / points.length }),
   { x: 0, y: 0 });
@@ -217,12 +230,18 @@ function tangentPath(from, headingOut, to, headingIn, radius) {
   return { d, straightFrom, straightTo };
 }
 
-function segment(d, from, to, t, kind) {
+function segment(d, from, to, t, kind, leg) {
   const direction = unit(sub(to, from));
   return {
     d,
     t,
     kind,
+    // Which leg this belongs to, and which step it leads to. Every segment of one leg —
+    // the trunk and both sides of a gate — leads to the same step, so they can all be
+    // lettered with it.
+    from: leg?.from,
+    to: leg?.to,
+    ends: { from: { ...from }, to: { ...to } },
     mid: { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 },
     // Degrees, for rotating an arrowhead onto the segment. Taken from the STRAIGHT part
     // of a path, which is where the arrow is drawn — an arrow on a curve points wrong.
@@ -231,9 +250,9 @@ function segment(d, from, to, t, kind) {
 }
 
 /** Build a segment from a tangent path, with the arrow on its straight portion. */
-function tangentSegment(from, headingOut, to, headingIn, radius, t, kind) {
+function tangentSegment(from, headingOut, to, headingIn, radius, t, kind, leg) {
   const path = tangentPath(from, headingOut, to, headingIn, radius);
-  const seg = segment(path.d, path.straightFrom, path.straightTo, t, kind);
+  const seg = segment(path.d, path.straightFrom, path.straightTo, t, kind, leg);
   seg.d = path.d;
   return seg;
 }
@@ -256,12 +275,20 @@ function tangentSegment(from, headingOut, to, headingIn, radius, t, kind) {
  * base to be on the crossing heading before it gets there. An instant corner would say the
  * boat pivots on the spot the moment it clears the line.
  *
- * <h2>Where a gate splits</h2>
- * At the gate, not halfway to it. The junction is the midpoint BETWEEN THE ALTERNATIVES
- * — the mean of their bases going in, of their apexes coming out — so the trunk runs to
- * the gate as one line and the two sides part company where the choice is actually made.
- * Splitting at the halfway point of the leg instead sent two long diagonals across open
- * water that crossed each other and crossed everything else.
+ * <h2>Where a gate splits, and where it joins</h2>
+ * <b>The split is at the gate.</b> Its junction is the midpoint BETWEEN THE ALTERNATIVES,
+ * so the trunk runs to the gate as one line and the two sides part company where the
+ * choice is actually made. Splitting at the halfway point of the leg instead sent two long
+ * diagonals across open water that crossed each other and crossed everything else.
+ *
+ * <b>The join is not.</b> Converging again the instant the gate is cleared would draw
+ * boats rejoining at the mark they have just left, which is not what happens: having taken
+ * different sides, they sail their own line down the leg and only come together near the
+ * next mark. So the merge junction sits {@link MERGE_FRACTION} of the way along the leg —
+ * measured to the next crossing, or to the midpoint of the next gate where there is one.
+ *
+ * The asymmetry is the point. A choice is made at the gate and paid for over the leg that
+ * follows, and drawing it symmetrically hid that.
  *
  * Both sides of a gate are the same tangent path as anything else: out of an apex on the
  * crossing heading, onto the trunk heading at the junction, and the mirror coming back.
@@ -271,6 +298,7 @@ function tangentSegment(from, headingOut, to, headingIn, radius, t, kind) {
  */
 export function track(steps, options = {}) {
   const radius = options.corner ?? 12;
+  const mergeAt = options.mergeFraction ?? MERGE_FRACTION;
   const segments = [];
   const span = Math.max(1, steps.length - 1);
   /** The heading a boat is on while crossing: base to apex, which is the required sense. */
@@ -279,34 +307,43 @@ export function track(steps, options = {}) {
   steps.forEach((step, i) => {
     for (const crossing of step.crossings) {
       segments.push(segment(`M${xy(crossing.base)} L${xy(crossing.apex)}`,
-        crossing.base, crossing.apex, i / span, 'crossing'));
+        crossing.base, crossing.apex, i / span, 'crossing', { from: i, to: i }));
     }
   });
 
-  for (let i = 0; i + 1 < steps.length; i++) {
+  // The legs, and on a CYCLE one more: from the last mark back to the first. A closed
+  // course is a loop, and drawing it open leaves the one gap a boat never sails.
+  const pairs = [];
+  for (let i = 0; i + 1 < steps.length; i++) pairs.push([i, i + 1]);
+  if (options.closed && steps.length > 1) pairs.push([steps.length - 1, 0]);
+
+  for (const [i, next] of pairs) {
     const from = steps[i].crossings;
-    const to = steps[i + 1].crossings;
+    const to = steps[next].crossings;
     if (!from.length || !to.length) continue;
     const t = (i + 0.5) / span;
+    const leg = { from: i, to: next };
 
     const K = mean(from.map((c) => c.apex));
     const J = mean(to.map((c) => c.base));
-    const trunk = unit(sub(J, K));
+    // The split stays at the gate; the join is carried down the leg toward the next mark.
+    const merge = from.length > 1 ? lerp(K, J, mergeAt) : K;
+    const trunk = unit(sub(J, merge));
 
     // At a gate junction the branches have already turned the boat onto the trunk, so the
     // trunk itself starts and ends unconstrained. At a plain crossing the trunk is the
     // thing that has to turn.
-    segments.push(tangentSegment(K, from.length > 1 ? null : heading(from[0]),
-      J, to.length > 1 ? null : heading(to[0]), radius, t, 'leg'));
+    segments.push(tangentSegment(merge, from.length > 1 ? null : heading(from[0]),
+      J, to.length > 1 ? null : heading(to[0]), radius, t, 'leg', leg));
 
     if (from.length > 1) {
       for (const crossing of from) {
-        segments.push(tangentSegment(crossing.apex, heading(crossing), K, trunk, radius, t, 'merge'));
+        segments.push(tangentSegment(crossing.apex, heading(crossing), merge, trunk, radius, t, 'merge', leg));
       }
     }
     if (to.length > 1) {
       for (const crossing of to) {
-        segments.push(tangentSegment(J, trunk, crossing.base, heading(crossing), radius, t, 'split'));
+        segments.push(tangentSegment(J, trunk, crossing.base, heading(crossing), radius, t, 'split', leg));
       }
     }
   }

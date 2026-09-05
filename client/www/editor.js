@@ -21,7 +21,8 @@
  * is git's job, not this page's.
  */
 
-import { ARROW_CENTROID, LABEL, TRIANGLE, arrowHead, darken, forwardNormal, rampColour, seats, track, triangle } from './coursedraw.js';
+import { ROLE_COLOUR, roleColour } from './coursedraw.js';
+import { ARROW_CENTROID, LABEL, TRIANGLE, arrowHead, darken, forwardNormal, seats, track, triangle } from './coursedraw.js';
 import {
   BASEMAPS,
   MapView,
@@ -56,6 +57,7 @@ const state = {
   selectedCourse: null,
   lengths: {},          // course id -> nm, computed by the server so there is one rule
   showTrack: true,
+  hideUnused: false,
   editing: null,        // snapshot taken when the current edit began
   undo: null,           // the one slot: state before the last completed edit
   saveState: 'idle',    // idle | saving | saved | error
@@ -125,8 +127,10 @@ async function loadProgramme(key) {
 
 /** Lines the loaded programme defines, drawn from whichever ends are placed. */
 function renderLines() {
+  const used = inUse();
   let out = '';
   for (const [id, line] of state.lines) {
+    if (used && !used.lines.has(id)) continue;
     const on = id === state.selectedLine && state.tab === 'lines';
     const port = endPosition(line.port);
     const starboard = endPosition(line.starboard);
@@ -193,6 +197,7 @@ function courseCrossings(course) {
   const steps = (course.sequence ?? []).map((step, index) => ({
     index,
     letter: courseLetter(course, index),
+    entry: !!(course.closed && step.entry),
     alternatives: (step.gate?.length ? step.gate : [step]).filter((a) => a.line),
   }));
   for (const step of steps) {
@@ -200,6 +205,18 @@ function courseCrossings(course) {
       if (!byLine.has(alternative.line)) byLine.set(alternative.line, []);
       byLine.get(alternative.line).push({ step, alternative });
     }
+  }
+
+  // A gate's alternatives are seated in OPPOSITE orders along their lines. Seated the
+  // same way, the two sides of lap one sit at the same end of each line and the two sides
+  // of lap two at the other, so both roundings split from nearly the same place and the
+  // paths run on top of each other. Reversing one line pulls the two roundings apart and
+  // sends each through its own spot.
+  const reversed = new Set();
+  for (const step of steps) {
+    step.alternatives.forEach((alternative, j) => {
+      if (j % 2 === 1) reversed.add(alternative.line);
+    });
   }
 
   const drawn = new Map();   // step index -> [{ base, apex, points, label, letter }]
@@ -215,7 +232,8 @@ function courseCrossings(course) {
     const along = { x: (bx - ax) / length, y: (by - ay) / length };
     const forward = forwardNormal(bx - ax, by - ay);
 
-    seats(uses.length, length).forEach((distance, i) => {
+    const positions = seats(uses.length, length);
+    (reversed.has(lineId) ? [...positions].reverse() : positions).forEach((distance, i) => {
       const { step, alternative } = uses[i];
       const at = { x: ax + along.x * distance, y: ay + along.y * distance };
       const normal = alternative.cross === 'REVERSE' || alternative.cross === 'reverse'
@@ -226,16 +244,47 @@ function courseCrossings(course) {
       drawn.get(step.index).push({
         ...shape,
         letter: step.letter,
+        entry: step.entry,
         line: lineId,
-        colour: rampColour(steps.length < 2 ? 0 : step.index / (steps.length - 1)),
       });
     });
   }
   return { steps, drawn };
 }
 
+/**
+ * The lines and points the selected course actually uses.
+ *
+ * Null when nothing is selected or the setting is off, which every caller reads as "show
+ * everything" — a tickbox that emptied the chart the moment no course was selected would
+ * look like a bug rather than a filter.
+ */
+function inUse() {
+  if (state.tab !== 'courses' || !state.hideUnused || !state.selectedCourse) return null;
+  const course = state.courses.get(state.selectedCourse);
+  if (!course) return null;
+  const lines = new Set();
+  const points = new Set();
+  for (const step of course.sequence ?? []) {
+    for (const alternative of (step.gate?.length ? step.gate : [step])) {
+      if (!alternative.line) continue;
+      lines.add(alternative.line);
+      const line = state.lines.get(alternative.line);
+      for (const end of [line?.port, line?.starboard]) {
+        if (end?.at) points.add(end.at);
+      }
+    }
+  }
+  return { lines, points };
+}
+
 /** S, then the ordinals, then F — derived from position, never stored. */
 function courseLetter(course, index) {
+  // A CLOSED course has neither a start nor a finish of its own: a boat begins and ends
+  // wherever it joined, so calling one step S and another F would claim something untrue
+  // about the course. Every step is numbered, and which may be joined at is ringed on the
+  // chart instead.
+  if (course.closed) return String(index + 1);
   if (index === 0) return 'S';
   if (index === (course.sequence ?? []).length - 1) return 'F';
   return String(index);
@@ -246,73 +295,102 @@ function renderCourse() {
   const course = state.courses.get(state.selectedCourse);
   if (!course) return '';
   const { steps, drawn } = courseCrossings(course);
+  const usable = steps.filter((step) => (drawn.get(step.index) ?? []).length);
+  if (!usable.length) return '';
+  const ordered = usable.map((step) => ({ crossings: drawn.get(step.index) }));
 
+  /**
+   * Which steps a lap may begin or end at.
+   *
+   * On a CYCLE, an entry point is both: the rule is that a line crossed to begin a lap is
+   * crossed again the same way to end it, so the leg leaving one is somebody's first and
+   * the leg arriving is somebody else's last. On an open course the first step starts and
+   * the last finishes, and nothing does both unless the course is two steps long.
+   */
+  const starts = usable.map((step, i) => (course.closed ? step.entry : i === 0));
+  const finishes = usable.map((step, i) => (course.closed ? step.entry : i === usable.length - 1));
+
+  let defs = '';
   let out = '';
+
+  /**
+   * A leg's paint: one colour, or a gradient when it both starts and finishes.
+   *
+   * The gradient runs along the segment, so a leg out of a cycle's entry point reads green
+   * where a lap begins and red where the next one ends.
+   */
+  const paint = (starting, finishing, ends, id) => {
+    const flat = roleColour(starting, finishing);
+    if (flat) return flat;
+    defs += `<linearGradient id="${id}" gradientUnits="userSpaceOnUse"`
+      + ` x1="${ends.from.x.toFixed(1)}" y1="${ends.from.y.toFixed(1)}"`
+      + ` x2="${ends.to.x.toFixed(1)}" y2="${ends.to.y.toFixed(1)}">`
+      + `<stop offset="0" stop-color="${ROLE_COLOUR.start}"/>`
+      + `<stop offset="1" stop-color="${ROLE_COLOUR.finish}"/></linearGradient>`;
+    return `url(#${id})`;
+  };
+
   if (state.showTrack) {
-    const usable = steps.filter((s) => (drawn.get(s.index) ?? []).length);
-    const ordered = usable.map((s) => ({ crossings: drawn.get(s.index) }));
+    const segments = track(ordered, { closed: course.closed });
+    segments.forEach((seg, n) => {
+      if (seg.kind === 'crossing') {
+        const colour = paint(starts[seg.from], finishes[seg.from], seg.ends, `cx${n}`);
+        out += `<path d="${seg.d}" fill="none" stroke="${colour}" stroke-width="2.4" opacity="0.95" stroke-linecap="round"/>`;
+        return;
+      }
+      // A leg is coloured by what it is FOR: it starts a lap if it leaves a step a boat
+      // may join at, and finishes one if it arrives at such a step.
+      const colour = paint(starts[seg.from], finishes[seg.to], seg.ends, `lg${n}`);
+      out += `<path d="${seg.d}" fill="none" stroke="${colour}" stroke-width="1.8" stroke-dasharray="6 4" opacity="0.95" stroke-linecap="round"/>`;
+    });
 
-    // Three redundant channels, because one was not enough. The screenshot that prompted
-    // this had four near-parallel legs up the same beat in one colour with no direction:
-    // impossible to follow. Now each segment carries its position in the course as
-    // COLOUR, its direction as an ARROW, and where it is going as a LETTER — so losing
-    // any one of them still leaves the drawing readable.
-    const segments = track(ordered);
-    for (const seg of segments) {
-      const colour = rampColour(seg.t);
-      out += `<path d="${seg.d}" fill="none" stroke="${colour}" stroke-width="${seg.kind === 'crossing' ? 2.4 : 1.8}" stroke-dasharray="${seg.kind === 'crossing' ? 'none' : '6 4'}" opacity="0.95" stroke-linecap="round"/>`;
-      if (seg.kind === 'crossing' || seg.kind === 'leg') continue;
-
-      // A gate branch gets a plain arrow: both sides of a gate lead to the same step, so
-      // lettering each one would repeat the trunk's answer twice.
-      out += `<circle cx="${seg.mid.x.toFixed(1)}" cy="${seg.mid.y.toFixed(1)}" r="7" fill="var(--sea)" opacity="0.9"/>`;
-      out += `<polygon points="${arrowHead(seg.mid, seg.angle, 5.5)}" fill="${colour}"/>`;
-    }
-
-    // The letter of the step each leg leads TO, which is the question the screenshot
-    // could not answer: of these four parallel lines, which one goes where?
-    // ONE marker per leg: a circle holding an arrowhead holding the letter. Two circles
-    // said two things where there is one — this leg, going that way, to there.
-    const legs = segments.filter((seg) => seg.kind === 'leg');
-    for (let i = 0; i + 1 < usable.length; i++) {
-      const leg = legs[i];
-      if (!leg) continue;
-      const colour = rampColour(leg.t);
-      const radians = (leg.angle * Math.PI) / 180;
-      // Offset so the arrowhead's own centroid — where the letter goes — lands on the
-      // circle's centre, rather than the point the arrow is drawn about.
-      const nose = { x: leg.mid.x - ARROW_CENTROID * LABEL.arrowPx * Math.cos(radians),
-        y: leg.mid.y - ARROW_CENTROID * LABEL.arrowPx * Math.sin(radians) };
-      out += `<g class="cmark" data-id="leg-${i}" data-ox="${leg.mid.x.toFixed(1)}" data-oy="${leg.mid.y.toFixed(1)}">`;
-      out += `<circle cx="${leg.mid.x.toFixed(1)}" cy="${leg.mid.y.toFixed(1)}" r="${LABEL.markR}" fill="var(--sea)" fill-opacity="0.92" stroke="${colour}" stroke-width="1.3"/>`;
-      out += `<polygon points="${arrowHead(nose, leg.angle, LABEL.arrowPx)}" fill="${colour}"/>`;
-      out += `<text x="${leg.mid.x.toFixed(1)}" y="${(leg.mid.y + LABEL.fontPx * 0.35).toFixed(1)}" text-anchor="middle" font-family="var(--mono)" font-size="${LABEL.fontPx}" font-weight="600" fill="${darken(colour)}">${esc(usable[i + 1].letter)}</text>`;
+    // EVERY arrow carries the step it leads to, the branches of a gate included. One
+    // lettered and one bare said the two halves of a split were different kinds of thing.
+    segments.forEach((seg, n) => {
+      if (seg.kind === 'crossing') return;
+      const colour = paint(starts[seg.from], finishes[seg.to], seg.ends, `mk${n}`);
+      const radians = (seg.angle * Math.PI) / 180;
+      const nose = { x: seg.mid.x - ARROW_CENTROID * LABEL.arrowPx * Math.cos(radians),
+        y: seg.mid.y - ARROW_CENTROID * LABEL.arrowPx * Math.sin(radians) };
+      // Grouped by the step this leg LEADS TO, which is the set that shares a letter:
+      // the trunk, both branches of a gate, and the triangles they arrive at.
+      out += `<g class="cmark" data-id="leg-${n}" data-group="step-${seg.to}" data-ox="${seg.mid.x.toFixed(1)}" data-oy="${seg.mid.y.toFixed(1)}">`;
+      out += `<circle cx="${seg.mid.x.toFixed(1)}" cy="${seg.mid.y.toFixed(1)}" r="${LABEL.markR}" fill="var(--sea)" fill-opacity="0.92" stroke="${colour}" stroke-width="1.3"/>`;
+      out += `<polygon points="${arrowHead(nose, seg.angle, LABEL.arrowPx)}" fill="${colour}"/>`;
+      out += `<text x="${seg.mid.x.toFixed(1)}" y="${(seg.mid.y + LABEL.fontPx * 0.35).toFixed(1)}" text-anchor="middle" font-family="var(--mono)" font-size="${LABEL.fontPx}" font-weight="600" fill="${darken(ROLE_COLOUR.leg)}">${esc(usable[seg.to].letter)}</text>`;
       out += `</g>`;
-    }
+    });
   }
-  for (const crossings of drawn.values()) {
-    for (const shape of crossings) {
-      // The triangle takes the same ramp colour as the track that runs through it, so a
-      // leg and the crossing it leads to are visibly the same moment in the course.
-      const accent = shape.colour;
-      // Grown about its BASE, which sits on the line: a triangle that swelled about its
-      // centre would lift off the line it belongs to.
-      out += `<g class="cmark" data-id="${esc(shape.letter)}@${esc(shape.line)}" data-ox="${shape.base.x.toFixed(1)}" data-oy="${shape.base.y.toFixed(1)}">`;
+
+  usable.forEach((step, i) => {
+    for (const shape of drawn.get(step.index)) {
+      const accent = paint(starts[i], finishes[i], { from: shape.base, to: shape.apex }, `tr${i}-${shape.line}`);
+      out += `<g class="cmark" data-id="${esc(shape.letter)}@${esc(shape.line)}" data-group="step-${i}" data-ox="${shape.base.x.toFixed(1)}" data-oy="${shape.base.y.toFixed(1)}">`;
+      // An entry point on a cycle is a start and a finish at once — a boat joins here and
+      // closes its lap by crossing the same line the same way again. Ringed rather than
+      // lettered, because a cycle has no S or F to give it.
+      if (shape.entry) {
+        const ring = { x: (shape.base.x + shape.apex.x) / 2, y: (shape.base.y + shape.apex.y) / 2 };
+        out += `<circle cx="${ring.x.toFixed(1)}" cy="${ring.y.toFixed(1)}" r="${TRIANGLE.height}" fill="none" stroke="var(--line)" stroke-width="1.6" stroke-dasharray="3 3"/>`;
+      }
       // Filled rather than outlined, because that is what lets the letter be DARKER than
       // the triangle: a letter in the triangle's own colour vanishes wherever the two
       // touch, and a darker one needs something bright to sit on.
       out += `<polygon points="${shape.points}" fill="${accent}" fill-opacity="0.92" stroke="${accent}" stroke-width="1.4"/>`;
-      out += `<text x="${shape.label.x.toFixed(1)}" y="${(shape.label.y + LABEL.fontPx * 0.35).toFixed(1)}" text-anchor="middle" font-family="var(--mono)" font-size="${LABEL.fontPx}" font-weight="600" fill="${darken(accent)}">${esc(shape.letter)}</text>`;
+      out += `<text x="${shape.label.x.toFixed(1)}" y="${(shape.label.y + LABEL.fontPx * 0.35).toFixed(1)}" text-anchor="middle" font-family="var(--mono)" font-size="${LABEL.fontPx}" font-weight="600" fill="${darken(ROLE_COLOUR.leg)}">${esc(shape.letter)}</text>`;
       out += `</g>`;
     }
-  }
-  return out;
+  });
+
+  return (defs ? `<defs>${defs}</defs>` : '') + out;
 }
 
 function renderPoints() {
+  const used = inUse();
   let out = '';
   for (const point of state.points.values()) {
     if (point.latitude == null) continue;
+    if (used && !used.points.has(point.id)) continue;
     const [x, y] = state.view.toPx(point);
     const on = point.id === state.selected;
     out += `<g class="pt" data-id="${esc(point.id)}" style="cursor:grab">`;
@@ -343,17 +421,30 @@ function render() {
   // re-rendering: hover fires constantly, and rebuilding the whole chart for each one
   // would make the map stutter. An SVG transform attribute also avoids the transform-box
   // rules that decide where a CSS transform-origin lands on an SVG element.
-  for (const g of svg.querySelectorAll('.cmark')) {
-    const ox = Number(g.dataset.ox);
-    const oy = Number(g.dataset.oy);
-    const grown = `translate(${ox} ${oy}) scale(${LABEL.hoverScale}) translate(${-ox} ${-oy})`;
+  // A hover lights the whole STEP, not the one shape under the pointer: the leg into it,
+  // both branches where that leg is a gate, and every triangle those branches reach. They
+  // all carry the same letter, so lighting one and not the others invites the reader to
+  // wonder which of them the letter belonged to.
+  const marks = [...svg.querySelectorAll('.cmark')];
+  for (const g of marks) {
+    const group = marks.filter((m) => m.dataset.group === g.dataset.group);
     g.addEventListener('mouseenter', () => {
-      g.setAttribute('transform', grown);
-      // Last in the document is topmost in SVG, so a grown label is not hidden behind
-      // whatever happened to be drawn after it.
+      for (const member of group) {
+        const ox = Number(member.dataset.ox);
+        const oy = Number(member.dataset.oy);
+        // Each grows about its OWN anchor — for a triangle that is its base, so it stays
+        // on its line rather than lifting off it.
+        member.setAttribute('transform',
+          `translate(${ox} ${oy}) scale(${LABEL.hoverScale}) translate(${-ox} ${-oy})`);
+        // Last in the document is topmost in SVG. The hovered shape is moved last so it
+        // ends up above the rest of its own group as well as above everything else.
+        if (member !== g) member.parentNode.appendChild(member);
+      }
       g.parentNode.appendChild(g);
     });
-    g.addEventListener('mouseleave', () => g.removeAttribute('transform'));
+    g.addEventListener('mouseleave', () => {
+      for (const member of group) member.removeAttribute('transform');
+    });
   }
 
   for (const g of svg.querySelectorAll('.pt')) {
@@ -389,7 +480,8 @@ function showTab(tab) {
   for (const button of document.querySelectorAll('[data-tab]')) {
     button.classList.toggle('on', button.dataset.tab === tab);
   }
-  el('paneTitle').textContent = { points: 'Points', lines: 'Lines', courses: 'Courses' }[tab];
+  el('paneTitle').textContent =
+    { points: 'Points', lines: 'Lines', courses: 'Courses' }[tab];
   el('add').disabled = false;
   el('paneInfo').dataset.info = INFO[tab];
   render();
@@ -416,8 +508,10 @@ const INFO = {
     + 'can be missed.',
   courses: '<b>Courses</b> are an ordered sequence of crossings over the lines. The first '
     + 'step is the start and the last is the finish, so the letters S, 1, 2 &hellip; F are '
-    + 'derived from position rather than stored. Not editable yet &mdash; courses are '
-    + 'drawn on the chart from the file.',
+    + 'derived from position rather than stored. A <b>gate</b> is a choice within one '
+    + 'step: the track splits at the gate and rejoins well down the next leg, because '
+    + 'boats that took different sides sail their own line and converge near the mark '
+    + 'ahead.',
 };
 
 /** Selecting is its own function because it decides what the map click will do. */
@@ -879,6 +973,8 @@ function renderCourseForm() {
     <input id="c_id" value="${esc(course.id)}" spellcheck="false">
     <label class="label" for="c_name">Long name</label>
     <input id="c_name" value="${esc(course.name ?? '')}">
+    <label class="cb" style="margin-bottom:8px"><input type="checkbox" id="c_closed"${course.closed ? ' checked' : ''}>
+      cycle &mdash; a loop with no start or finish of its own</label>
 
     <div class="paneHead" style="margin:12px 0 4px">
       <span class="label">Sequence</span>
@@ -891,7 +987,10 @@ function renderCourseForm() {
       <button id="c_alt">Add alternative</button>
     </div>
 
-    <label class="cb" style="margin-bottom:8px"><input type="checkbox" id="c_track"${state.showTrack ? ' checked' : ''}> show track</label>
+    <div class="endrow" style="margin-bottom:8px">
+      <label class="cb"><input type="checkbox" id="c_track"${state.showTrack ? ' checked' : ''}> show track</label>
+      <label class="cb"><input type="checkbox" id="c_unused"${state.hideUnused ? ' checked' : ''}> hide unused</label>
+    </div>
 
     <label class="label" for="c_notes">Notes</label>
     <textarea id="c_notes" rows="3" spellcheck="false">${esc(course.notes ?? '')}</textarea>
@@ -906,10 +1005,30 @@ function renderCourseForm() {
   el('c_notes').addEventListener('blur', endEdit);
   el('c_delete').addEventListener('click', deleteThing);
 
+  el('c_closed').addEventListener('change', (ev) => {
+    beginEdit();
+    course.closed = ev.target.checked;
+    // Entry points mean nothing on an open course, which has one start and one finish by
+    // position. Dropped rather than left dormant, so a course cannot carry a marking that
+    // says something untrue about it.
+    if (!course.closed) for (const step of course.sequence ?? []) step.entry = false;
+    state.courseFormFor = undefined;
+    endEdit();
+    render();
+  });
+
+  // Both are view settings, not edits: they change what is drawn, not what is stored, so
+  // neither saves nor consumes the undo slot.
   el('c_track').addEventListener('change', (ev) => {
-    // A view setting, not an edit: it changes what is drawn, not what is stored, so it
-    // neither saves nor consumes the undo slot.
     state.showTrack = ev.target.checked;
+    render();
+  });
+
+  // Only on this tab, and only while a course is selected — see inUse(). A club's water
+  // carries every line it ever races, and reading one course off a chart with all of them
+  // on it is the problem this solves.
+  el('c_unused').addEventListener('change', (ev) => {
+    state.hideUnused = ev.target.checked;
     render();
   });
 
@@ -965,7 +1084,10 @@ function lastLineId(course) {
 
 function renderSteps(course) {
   const steps = course.sequence ?? [];
-  const options = (selected) => [...state.lines.keys()]
+  // Alphabetical, not file order. The lists in the pane keep file order, which is the
+  // order somebody authored them in and is worth preserving; a dropdown is for FINDING a
+  // line, and a list you have to read all of is not a list you can find anything in.
+  const options = (selected) => [...state.lines.keys()].sort((a, b) => a.localeCompare(b))
     .map((id) => `<option value="${esc(id)}"${id === selected ? ' selected' : ''}>${esc(id)}</option>`)
     .join('');
 
@@ -980,6 +1102,9 @@ function renderSteps(course) {
             <span class="seq">${gate && j > 0 ? '&#8627;' : esc(courseLetter(course, i))}</span>
             <select data-step="${i}" data-alt="${j}" class="s_line">${options(entry.line)}</select>
             <button data-step="${i}" data-alt="${j}" class="s_dir" title="crossing sense">${senseOf(entry) === 'reverse' ? 'rev' : 'fwd'}</button>
+            ${course.closed && j === 0
+              ? `<button data-step="${i}" class="s_entry${step.entry ? ' on' : ''}" title="a boat may begin and end a lap here">&#8635;</button>`
+              : ''}
             ${j === 0
               ? `<button data-step="${i}" class="s_up" title="earlier">&uarr;</button>
                  <button data-step="${i}" class="s_down" title="later">&darr;</button>`
@@ -1017,6 +1142,11 @@ function renderSteps(course) {
       course.sequence.splice(i, 1);
     }
   });
+  // A line crossed to begin a lap must be crossed again, in the same sense, to end it —
+  // so an entry point is a start and a finish at once, and a lap is bounded by the same
+  // crossing twice. That is what keeps the scoring from having to decide which of several
+  // crossings closed the loop, and it puts the burden on course design instead.
+  on('s_entry', (i) => { course.sequence[i].entry = !course.sequence[i].entry; });
   on('s_up', (i) => { if (i > 0) course.sequence.splice(i - 1, 0, course.sequence.splice(i, 1)[0]); });
   on('s_down', (i) => {
     if (i < course.sequence.length - 1) course.sequence.splice(i + 1, 0, course.sequence.splice(i, 1)[0]);
@@ -1035,8 +1165,10 @@ function senseOf(entry) {
 function syncCourseForm(course) {
   if (!course) return;
   el('c_len').innerHTML = nm(course.id);
-  const check = el('c_track');
-  if (check) check.checked = state.showTrack;
+  const track = el('c_track');
+  if (track) track.checked = state.showTrack;
+  const unused = el('c_unused');
+  if (unused) unused.checked = state.hideUnused;
 }
 
 function renameCourse(oldId, newId) {
@@ -1057,6 +1189,12 @@ function renameCourse(oldId, newId) {
   state.courseFormFor = undefined;
   render();
 }
+
+
+
+
+
+
 
 /* -------------------------------------------------------------------- form */
 
@@ -1243,7 +1381,8 @@ function endEdit() {
   if (!before) return;
   const unchanged = before.points === JSON.stringify([...state.points])
     && before.lines === JSON.stringify([...state.lines])
-    && before.courses === JSON.stringify([...state.courses]);
+    && before.courses === JSON.stringify([...state.courses])
+;
   if (unchanged && before.renames.length === 0) return;
   state.undo = before;
   save(before.renames);
@@ -1292,6 +1431,9 @@ async function save(renames = []) {
         cross: step.gate?.length ? null : senseOf(step),
         gate: (step.gate ?? []).map((a) => ({ line: a.line ?? null, cross: senseOf(a) })),
         lengthNm: step.lengthNm ?? null,
+        // Only meaningful on a closed course, and dropped with it — a step cannot be left
+        // carrying a marking that says something untrue about an open course.
+        entry: !!(c.closed && step.entry),
         notes: step.notes ?? null,
       })),
     };
@@ -1341,6 +1483,7 @@ function cleanEnd(end) {
     infinite: !!end.infinite,
   };
 }
+
 
 function setSaveState(which, note = '') {
   state.saveState = which;

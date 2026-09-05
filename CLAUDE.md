@@ -69,7 +69,7 @@ No database, no framework, no outbound HTTP client. Port **8083** (8081 is saili
 ```bash
 mvn exec:java                              # serves http://localhost:8083/ from ./data
 mvn exec:java -Dunmarkable-data=/path/to/data
-mvn test                                   # 57 Java tests + 212 JS assertions
+mvn test                                   # 64 Java tests + 227 JS assertions
 node tools/run-js-tests.mjs                # just the JavaScript specs
 ```
 
@@ -161,11 +161,21 @@ a tickbox, because on a busy course it is a lot of ink.
 
 **Three redundant channels, because one was not enough.** The first version drew every leg
 in one colour with no direction, and a two-lap windward/leeward put four near-parallel legs
-up the same beat: unreadable. Each segment now carries its position in the course as
-**colour** (a green→orange→red ramp whose ends are the same green and red as the start and
-finish triangles), its direction as an **arrow** at the midpoint, and the letter of the
-step it leads to as a **label**. Losing any one channel still leaves the drawing readable,
-which also means it survives a reader who cannot separate green from red.
+up the same beat: unreadable. Each segment now carries a **colour**, its direction as an
+**arrow** at the midpoint, and the letter of the step it leads to as a **label** — on
+*every* arrow, the branches of a gate included, since one lettered and one bare said the
+two halves of a split were different kinds of thing.
+
+**Legs are coloured by what they are FOR, not by sequence position** (`ROLE_COLOUR`). A
+leg that leaves a step a lap may begin at is **green**, one that arrives at a step a lap
+may end at is **red**, everything between is one neutral **blue**. Sequence position was
+the wrong quantity: on a cycle there is no sequence to be far through, and even on an open
+course the useful question is not "how far along" but "does a lap start here". A leg that
+is *both* — which a cycle's entry point always is — draws as an SVG **gradient** from green
+to red along its own length.
+
+**A cycle's track closes.** `track(steps, {closed})` adds a leg from the last mark back to
+the first; drawing a loop open leaves the one gap a boat never sails.
 
 **Turns have a radius.** A boat leaving a triangle's apex is still on the crossing
 heading — that is what the apex means — so it cannot be on the next leg's heading the
@@ -177,14 +187,27 @@ begins and vice versa; the radius shrinks on a short leg rather than the arc ove
 the mark it is turning around. Arrows are placed on the **straight** portion, since an
 arrow on a curve points wrong.
 
-**A gate splits AT the gate**, not halfway to it: the junction is the mean of the
-alternatives' bases going in and of their apexes coming out, so the trunk runs to the gate
-as one line and the sides part where the choice is actually made. Splitting halfway along
-the leg instead threw two long diagonals across open water that crossed each other and
-everything else, which was most of why the first version could not be read. Both sides of
-a gate are the same tangent path as anything else — out of an apex on the crossing
-heading, onto the trunk heading at the junction, and the mirror coming back — so there is
-one cornering mechanism in the file rather than two.
+**A gate's alternatives are seated in OPPOSITE orders along their lines.** A proper gate
+has its two lines mirrored, so seating them the same way puts each rounding's two triangles
+at opposite ends and their midpoint collapses onto the centre between the lines — every
+rounding of that gate then splits from the same half-pixel and the paths draw on top of
+each other. Reversing one line pulls them apart: measured on the real gated course, two
+roundings that split 0.5px apart now split 21px apart.
+
+**A gate splits AT the gate but joins well down the leg**, and the asymmetry is the point.
+The split junction is the mean of the alternatives' bases, so the trunk runs to the gate as
+one line and the sides part where the choice is actually made — splitting halfway along the
+leg instead threw two long diagonals across open water that crossed everything else. The
+**join** sits `MERGE_FRACTION` (0.85) of the way along the *next* leg, measured to the next
+crossing or to the midpoint of the next gate. Converging the instant the gate is cleared
+drew boats rejoining at the mark they had just left, which is not what happens: having
+taken different sides they sail their own line and only come together near the mark ahead.
+A choice is made at the gate and paid for over the leg that follows, and drawing it
+symmetrically hid that.
+
+Both sides of a gate are the same tangent path as anything else — out of an apex on the
+crossing heading, onto the trunk heading at the junction, and the mirror coming back — so
+there is one cornering mechanism in the file rather than two.
 
 **Course lengths are computed by the server** and returned on both GET and PUT, so the
 midpoint-to-midpoint rule has one implementation rather than two that drift. A new step
@@ -235,8 +258,26 @@ the direction, the letter only says which step.
 enough to see whole has labels too small to read; rather than choose, the drawing does
 both. Hover sets an SVG `transform` attribute directly rather than re-rendering (hover
 fires constantly) and scales about the label's own anchor — for a triangle that is its
-**base**, so a grown triangle stays on its line instead of lifting off it. The hovered
-group is re-appended so it is not hidden behind whatever was drawn after it.
+**base**, so a grown triangle stays on its line instead of lifting off it.
+
+**A hover lights the whole STEP, not the one shape under the pointer.** Every course mark
+carries `data-group="step-N"`, keyed by the step a leg *leads to* — so the leg's trunk,
+both branches where it is a gate, and every triangle those branches reach light together.
+They all carry the same letter, and lighting one and not the others invites the reader to
+wonder which of them the letter belonged to. The whole group is re-appended so it clears
+everything drawn after it, with the hovered shape moved last so it is topmost of its own
+group as well.
+
+**The line selector in a course step is alphabetical.** The lists in the pane keep file
+order — the order somebody authored them in, which is worth preserving — but a dropdown is
+for *finding* a line, and a list you have to read all of is not one you can find anything
+in.
+
+**Hide unused** (courses tab only) draws just the lines the selected course uses and the
+points that are their ends. A club's water carries every line it ever races, and reading
+one course off a chart with all of them on it is the problem this solves. With no course
+selected it shows everything rather than nothing — a filter that emptied the chart would
+read as a bug.
 
 **Explanation lives in hover popups, not in the pane.** A paragraph telling you how the
 pane works is read once and then permanently in the way of the list it sits above. The
@@ -440,8 +481,9 @@ point, and the point on an infinite end is already a free handle that changes no
 *geometry*, and still not in the *rounding*: a boat is served its own course before the
 start, caches it, and detects and times its own crossings from raw GNSS exactly as before.
 
-Not implemented. `RaceFormat.DISTANCE_FACTOR` exists and nothing computes an offset,
-because how a TCF becomes a length delta is still open — see the questions below.
+Not implemented, and now further off: with no races, a boat declares its own handicap when
+it joins and the server would hand back that boat's sub-line. That removes the need for an
+entrant list entirely — but how a TCF becomes a length delta is still open.
 
 ### One file per club and series
 
@@ -455,42 +497,61 @@ series `2026-summer`. A file that names them anyway is checked against the path 
 complained about, never silently believed. Clubs are keyed by **domain**, following
 sail-jinx and sailing-pf, so records about the same club line up across all three.
 
-### Races are their own files
+### There are no races
 
-`clubs/<club>/races/<raceId>.yaml` — one night: a course chosen from the programme, the
-format, that format's parameters, and the entry list. Separate from the programme because
-the programme holds what is reusable all season, and filing them together would mean
-opening the file with the surveyed coordinates in it every time somebody enters a boat.
-A file directly under a club is a programme; one under `races/` is a race.
+**This system publishes courses and collects what boats did on them.** Places, OCS,
+corrected times, penalties, drop races and series scoring belong to the club's software,
+which already has rules for all of it. Owning none of that is what lets this be right
+about the one thing it is uniquely able to be right about — detecting and timing a
+crossing — which is also the only thing here a protest committee could not reconstruct
+from somebody's watch.
 
-**The race schema is TBD** and is a placeholder that loads rather than a settled shape.
-`parameters` is a free map on purpose, so a format's settings can be written down and
-round-tripped before anybody has decided what they are called.
+It is the same boundary the brief drew (*"the server is explicitly outside the rounding
+path"*) extended one step: **outside the scoring path too**, and the boundary sail-jinx v2
+drew for itself.
 
-### YAML is camelCase, and the enum parsers know it
+**The consequence is a commitment, not a gap: every start is self-timed.** A boat's clock
+starts when it crosses, because there is nothing here to fire a gun. A club running a
+fixed-gun race scores from its own gun and this record's crossing times.
 
-The house style is camelCase (sail-jinx and sailing-pf both), and enum constants are
-`SCREAMING_SNAKE`. Every `@JsonCreator` here therefore matches **on the letters alone**,
-as `JinxConfig.PenaltyScaling` does — so `format: rollingStart` finds `ROLLING_START`.
-Without it the natural thing to write fails to parse, which is how it was caught.
+**Three ways to join** (`JoinMode`), declared when joining rather than when submitting —
+it changes how a boat sails, and a boat deciding afterwards decides with the answer in
+front of it:
 
-### What the sketch in brief §6 got wrong
+| | |
+|---|---|
+| `RACE` | goes to the club, which scores it |
+| `ANONYMOUS` | practice: kept for the boat, published to nobody |
+| `RECORD` | goes to the club **and** stands against every other attempt at the same geometry |
 
-Recorded so it does not come back:
+Practice is **stored and not published**, rather than withheld: a boat that never uploads
+cannot compare its own laps, recover a track from a lost phone, or change its mind.
 
-- **`type: finite | half_infinite`** contradicted the model. The end type belongs to each
-  *end*, and a line-level `type` forced two incompatible schemas — `end_a`/`end_b` for one
-  kind, `fixed_end`+`bearing_deg` for the other.
-- **`cross: S`** collided with itself: `S` meant "southbound" while `S` was also the
-  sequence letter for the start, one line apart in the same file.
-- **Compass senses** are ambiguous for a line near-parallel to the heading, and silently
-  wrong when the line is edited. `forward`/`reverse` moves with the line.
-- **`marks:`** re-imported the word the whole design exists to remove.
-- **`TBD`** in a float field is a parse error, not a placeholder. Unsupplied positions are
-  `null`, and are reported as problems.
-- **snake_case** is not the house style; sail-jinx and sailing-pf are camelCase throughout.
+### The record is the interface
 
----
+`CourseRecord` is the only artefact that leaves this system, so it has to carry everything
+a scorer or a protest could need. Anything a scorer needs and cannot find here pulls race
+concepts straight back into the codebase.
+
+**A record names a course *revision*, not just a course.** Courses are edited live, so a
+boat practising on Tuesday and one racing on Thursday can sail different geometry under
+one id. `CourseSnapshot.hash()` is twelve hex characters over the **geometry and the
+order** — resolved positions, infinite flags, crossing senses, entry marks, whether the
+course closes — and deliberately *not* over names or notes: renaming a mark changes
+nothing about where a boat had to sail, and bumping the revision for it would split one
+course into two that cannot be compared. The hash is built from a canonical string rather
+than serialised JSON, so adding a field cannot silently change every revision.
+
+**Designs are archived on JOIN, not on edit.** `POST /api/join/{club}/{series}/{course}`
+resolves the course, archives the snapshot under its revision, and hands it back. Nothing
+is kept for a design nobody took, which is most of what an editing session produces — and
+a design somebody *did* sail survives being edited afterwards, or its records become
+uninterpretable. `GET /api/courses/{revision}` reads one back.
+
+Records are filed `records/{club}/{course}/{date}/{boatId}-{HHmmss}.json`. The start time
+is in the *name* so a boat may sail the same course twice in a day, and so a resubmission
+of the same run — the ordinary case, when the full track arrives later over wifi —
+supersedes rather than accumulates.
 
 ## Conventions
 

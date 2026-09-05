@@ -25,7 +25,8 @@ import org.mortbay.sailing.unmarkable.model.Course;
 import org.mortbay.sailing.unmarkable.model.Line;
 import org.mortbay.sailing.unmarkable.model.NamedPoint;
 import org.mortbay.sailing.unmarkable.model.Programme;
-import org.mortbay.sailing.unmarkable.model.RaceRecord;
+import org.mortbay.sailing.unmarkable.model.CourseRecord;
+import org.mortbay.sailing.unmarkable.model.CourseSnapshot;
 import org.mortbay.sailing.unmarkable.store.JsonStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,19 +40,26 @@ import org.slf4j.LoggerFactory;
  *   GET  /api/programmes                                 every club/series, with problems
  *   GET  /api/programmes/{club}/{series}                 points, lines, courses, defaults
  *   GET  /api/programmes/{club}/{series}/courses/{id}    one course, with leg lengths
- *   GET  /api/races/{club}/{raceId}                       the race: course, format, entrants
- *   GET  /api/races/{club}/{series}/{raceId}             every record posted for a race
- *   POST /api/records                                    a boat posts its race record
  *   PUT  /api/programmes/{club}/{series}                 the editor saves points and lines
+ *
+ *   POST /api/join/{club}/{series}/{course}              a boat takes a course to sail
+ *   GET  /api/courses/{revision}                         the geometry somebody sailed
+ *   POST /api/records                                    a boat posts what it did
+ *   GET  /api/records/{club}/{course}/{date}             a day's runs at a course
+ *   GET  /api/best/{club}/{course}                       record attempts, quickest first
  * </pre>
  *
  * <h2>The shape of this API is the architecture</h2>
- * Note what is absent. There is no endpoint that decides a crossing, none that a boat must
- * call before it can score a mark, and none that returns a boat its own elapsed time —
- * the boat already knows, because it computed it. The GETs exist so a boat can fetch a
- * course <em>before the start</em> and cache it; the single POST exists so it can hand
- * back what it did afterwards. Between those two moments the server can be switched off
- * without a boat on the water noticing.
+ * Note what is absent. There is <b>no race</b>, no entrant list, no start sheet, no
+ * scoring. This system publishes courses and collects what boats did on them; places,
+ * OCS, corrected times and series scoring belong to the club's own software, which
+ * already has rules for all of it.
+ *
+ * <p>There is also no endpoint that decides a crossing, none that a boat must call before
+ * it can score a mark, and none that returns a boat its own elapsed time — the boat knows,
+ * because it computed it. A boat joins a course before the start and caches it; it posts
+ * what it did afterwards. Between those two moments the server can be switched off without
+ * a boat on the water noticing.
  *
  * <p>Everything readable is readable by anybody. A club publishes its results, and results
  * only people with accounts can read are results nobody reads — the same judgement
@@ -138,20 +146,30 @@ public class ApiServlet extends HttpServlet
                 send(resp, courseDetail(programme.get(), course));
                 return;
             }
-            if (path.length == 3 && path[0].equals("races"))
+            if (path.length == 2 && path[0].equals("courses"))
             {
-                var race = programmes.race(path[1], path[2]).orElse(null);
-                if (race == null)
+                // The geometry somebody sailed, by revision. A record names one of these,
+                // and the course it came from may have been edited a dozen times since.
+                CourseSnapshot archived = store.course(path[1]).orElse(null);
+                if (archived == null)
                 {
-                    resp.sendError(404, "No such race");
+                    resp.sendError(404, "No such course revision");
                     return;
                 }
-                send(resp, race);
+                send(resp, archived);
                 return;
             }
-            if (path.length == 4 && path[0].equals("races"))
+            if (path.length == 4 && path[0].equals("records"))
             {
-                send(resp, store.race(path[1], path[2], path[3]));
+                List<CourseRecord> day = store.day(path[1], path[2], java.time.LocalDate.parse(path[3]));
+                // Practice is kept for the boat and published to nobody, so it does not
+                // appear in what a club reads.
+                send(resp, day.stream().filter(r -> r.join().published()).toList());
+                return;
+            }
+            if (path.length == 3 && path[0].equals("best"))
+            {
+                send(resp, store.best(path[1], path[2], req.getParameter("revision")));
                 return;
             }
             resp.sendError(404);
@@ -215,15 +233,20 @@ public class ApiServlet extends HttpServlet
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
         String[] path = split(req.getPathInfo());
+        if (path.length == 4 && path[0].equals("join"))
+        {
+            join(resp, path[1], path[2], path[3]);
+            return;
+        }
         if (path.length != 1 || !path[0].equals("records"))
         {
             resp.sendError(404);
             return;
         }
-        RaceRecord record;
+        CourseRecord record;
         try
         {
-            record = MAPPER.readValue(req.getInputStream(), RaceRecord.class);
+            record = MAPPER.readValue(req.getInputStream(), CourseRecord.class);
         }
         catch (Exception e)
         {
@@ -245,11 +268,13 @@ public class ApiServlet extends HttpServlet
             resp.sendError(400, e.getMessage());
             return;
         }
-        LOG.info("Record from {} ({}) for {}/{}/{} — {} crossing(s), {} fix(es)",
-            record.boatName(), record.sailNumber(), record.club(), record.series(),
-            record.raceId(), record.crossings().size(), record.fixes().size());
+        LOG.info("Record from {} ({}) on {}/{} rev {} [{}] — {} crossing(s), {} fix(es)",
+            record.boatName(), record.sailNumber(), record.club(), record.course(),
+            record.courseRevision(), record.join(), record.crossings().size(), record.fixes().size());
         send(resp, Map.of(
             "stored", true,
+            "published", record.join().published(),
+            "ranked", record.ranked(),
             "auditable", record.auditable(),
             "crossings", record.crossings().size()));
     }
@@ -263,17 +288,46 @@ public class ApiServlet extends HttpServlet
      * who it belongs to, and refusing a record it cannot place is better than inventing a
      * location for it.
      */
-    private List<String> complaints(RaceRecord record)
+    /**
+     * A boat takes a course to sail.
+     *
+     * <p>This is the one write a boat makes before the start, and it exists so that the
+     * geometry it sailed can still be read afterwards: the snapshot is ARCHIVED under its
+     * revision here, not when the course is edited. Nothing is kept for a design nobody
+     * took, which is most of what an editing session produces.
+     *
+     * <p>Nothing about the boat is recorded by joining. Who sailed, and why, arrives with
+     * the record afterwards — a boat that joins and never sails leaves no trace beyond a
+     * design that was worth keeping anyway.
+     */
+    private void join(HttpServletResponse resp, String club, String series, String courseId)
+        throws IOException
+    {
+        Programme programme = programmes.programme(club, series).orElse(null);
+        Course course = programme == null ? null : programme.courses().get(courseId);
+        if (course == null)
+        {
+            resp.sendError(404, "No such course");
+            return;
+        }
+        CourseSnapshot snapshot = CourseSnapshot.of(programme, course);
+        store.archive(snapshot);
+        send(resp, snapshot);
+    }
+
+    private List<String> complaints(CourseRecord record)
     {
         List<String> complaints = new ArrayList<>();
         if (record.club() == null || record.club().isBlank())
             complaints.add("no club");
-        if (record.series() == null || record.series().isBlank())
-            complaints.add("no series");
-        if (record.raceId() == null || record.raceId().isBlank())
-            complaints.add("no raceId");
+        if (record.course() == null || record.course().isBlank())
+            complaints.add("no course");
         if (record.boatId() == null || record.boatId().isBlank())
             complaints.add("no boatId");
+        // Which GEOMETRY was sailed, not merely which course. Without it a record cannot
+        // be compared with another, and cannot be read once the course has been edited.
+        if (record.courseRevision() == null || record.courseRevision().isBlank())
+            complaints.add("no courseRevision — join the course to get one");
         return complaints;
     }
 

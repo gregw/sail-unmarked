@@ -19,6 +19,7 @@ import org.junit.jupiter.api.io.TempDir;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 
 public class ApiIntegrationTest
@@ -81,34 +82,101 @@ public class ApiIntegrationTest
     }
 
     @Test
+    public void joiningACourseArchivesTheGeometryItServes() throws Exception
+    {
+        // The snapshot is archived when a boat TAKES a course, not when one is edited:
+        // nothing is kept for a design nobody sailed, which is most of what an editing
+        // session produces.
+        HttpResponse<String> joined = client.send(
+            HttpRequest.newBuilder(URI.create(base + "/api/join/test.example/fixture/up-and-back"))
+                .POST(HttpRequest.BodyPublishers.noBody()).build(),
+            HttpResponse.BodyHandlers.ofString());
+        assertThat(joined.body(), joined.statusCode(), is(200));
+
+        JsonNode snapshot = MAPPER.readTree(joined.body());
+        String revision = snapshot.get("revision").asText();
+        assertThat("it names the geometry", revision.length(), is(12));
+        assertThat(snapshot.get("steps").size(), greaterThan(0));
+        assertThat("with every end resolved to a position",
+            snapshot.get("steps").get(0).get("crossings").get(0).get("port").get("latitude").isNumber(), is(true));
+
+        // ...and it can be read back by that revision long after the course has moved on.
+        assertThat(get("/api/courses/" + revision).get("course").asText(), is("up-and-back"));
+    }
+
+    @Test
+    public void theRevisionFollowsTheGeometryAndNotTheName() throws Exception
+    {
+        String first = MAPPER.readTree(join("up-and-back")).get("revision").asText();
+        String again = MAPPER.readTree(join("up-and-back")).get("revision").asText();
+        assertThat("an unchanged course keeps its revision", again, is(first));
+
+        String other = MAPPER.readTree(join("overridden")).get("revision").asText();
+        assertThat("a different course is a different revision", other, is(not(first)));
+    }
+
+    private String join(String course) throws Exception
+    {
+        return client.send(
+            HttpRequest.newBuilder(URI.create(base + "/api/join/test.example/fixture/" + course))
+                .POST(HttpRequest.BodyPublishers.noBody()).build(),
+            HttpResponse.BodyHandlers.ofString()).body();
+    }
+
+    @Test
     public void aRecordCanBePostedAndReadBack() throws Exception
     {
+        String revision = MAPPER.readTree(join("up-and-back")).get("revision").asText();
         String body = """
-            {"raceId":"race-1","club":"test.example","series":"fixture",
-             "course":"up-and-back","boatId":"boat-1","boatName":"Currawong",
+            {"club":"test.example","series":"fixture","course":"up-and-back",
+             "courseRevision":"%s","join":"race","boatId":"boat-1","boatName":"Currawong",
              "startTime":"2026-01-01T07:00:00Z","finishTime":"2026-01-01T08:00:00Z",
              "crossings":[{"step":0,"line":"leeward","cross":"forward","counted":true}]}
-            """;
+            """.formatted(revision);
         HttpResponse<String> posted = client.send(
             HttpRequest.newBuilder(URI.create(base + "/api/records"))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body)).build(),
             HttpResponse.BodyHandlers.ofString());
         assertThat(posted.body(), posted.statusCode(), is(200));
-        assertThat(MAPPER.readTree(posted.body()).get("stored").asBoolean(), is(true));
+        assertThat(MAPPER.readTree(posted.body()).get("published").asBoolean(), is(true));
 
-        JsonNode race = get("/api/races/test.example/fixture/race-1");
-        assertThat(race.size(), is(1));
-        assertThat(race.get(0).get("boatName").asText(), is("Currawong"));
+        JsonNode day = get("/api/records/test.example/up-and-back/2026-01-01");
+        assertThat(day.size(), is(1));
+        assertThat(day.get(0).get("boatName").asText(), is("Currawong"));
     }
 
     @Test
-    public void aRecordWithNowhereToBeFiledIsRefused() throws Exception
+    public void practiceIsKeptForTheBoatAndPublishedToNobody() throws Exception
     {
+        String revision = MAPPER.readTree(join("up-and-back")).get("revision").asText();
+        String body = """
+            {"club":"test.example","course":"up-and-back","courseRevision":"%s",
+             "join":"anonymous","boatId":"quiet","startTime":"2026-02-02T07:00:00Z",
+             "finishTime":"2026-02-02T08:00:00Z"}
+            """.formatted(revision);
         HttpResponse<String> posted = client.send(
             HttpRequest.newBuilder(URI.create(base + "/api/records"))
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString("{\"raceId\":\"race-1\"}")).build(),
+                .POST(HttpRequest.BodyPublishers.ofString(body)).build(),
+            HttpResponse.BodyHandlers.ofString());
+        assertThat(posted.statusCode(), is(200));
+        assertThat("it was stored", MAPPER.readTree(posted.body()).get("stored").asBoolean(), is(true));
+        assertThat("and not published", MAPPER.readTree(posted.body()).get("published").asBoolean(), is(false));
+        assertThat("so the club does not see it",
+            get("/api/records/test.example/up-and-back/2026-02-02").size(), is(0));
+    }
+
+    @Test
+    public void aRecordWithoutAGeometryIsRefused() throws Exception
+    {
+        // Without the revision a record cannot be compared with another, and cannot be
+        // read at all once the course has been edited.
+        HttpResponse<String> posted = client.send(
+            HttpRequest.newBuilder(URI.create(base + "/api/records"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(
+                    "{\"club\":\"test.example\",\"course\":\"up-and-back\",\"boatId\":\"b\"}")).build(),
             HttpResponse.BodyHandlers.ofString());
         assertThat(posted.statusCode(), is(400));
     }
