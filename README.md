@@ -61,8 +61,14 @@ guessed, and the server reports each unsurveyed point as a problem rather than p
 
 Early. The **crossing detector** — sense, extent, fix quality control, and the N-and-N
 latch — is built and has an executable specification that runs in the build. The **server**
-loads and validates courses, serves them, and stores race records. The three on-water
-screens are **not built yet**.
+loads and validates courses, serves them, and stores race records. The **course editor**
+authors them against a chart and publishes what a fleet is handed.
+
+There is now a **prototype client** at `/client.html`: a simulated boat on one side of the
+page and the boat's own screens on the other, with nothing passing between them but a GPS
+fix. Steer it at a line and the Mark screen takes over on its own as it closes. It is a
+prototype — not on a phone, not offline, and it posts no records yet. **Live place** is not
+built at all.
 
 See [`wiki/unmarkable-racing-brief.html`](wiki/unmarkable-racing-brief.html) for the design
 brief, and [`CLAUDE.md`](CLAUDE.md) for the working notes and the course model.

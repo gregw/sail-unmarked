@@ -63,7 +63,7 @@ public record Programme(
         lines = keyById(lines, Line::id, (l, id) ->
             new Line(id, l.name(), l.port(), l.starboard(), l.notes()));
         courses = keyById(courses, Course::id, (c, id) ->
-            new Course(id, c.name(), c.closed(), c.sequence(), c.notes()));
+            new Course(id, c.name(), c.notes(), c.isPublic(), c.variants()));
     }
 
     /**
@@ -98,14 +98,22 @@ public record Programme(
             problems.add("datum is '" + datum + "'; only WGS84 is supported");
         if (club == null || club.isBlank())
             problems.add("no club domain");
+        else
+            add(problems, Ids.problem("club", club, Ids.DOMAIN));
+        add(problems, Ids.problem("series", series, Ids.PLAIN));
 
         points.forEach((id, point) ->
         {
+            // Reported, never rejected: a file with a bad id must still load and work, or
+            // one typo takes a club's racing down. The editor corrects ids as they are
+            // typed; this is for what somebody wrote by hand.
+            add(problems, Ids.problem("point", id, Ids.SCOPED));
             if (!point.surveyed())
                 problems.add("point '" + id + "' has no position yet");
         });
         lines.forEach((id, line) ->
         {
+            add(problems, Ids.problem("line", id, Ids.SCOPED));
             for (Map.Entry<String, LineEnd> e :
                 Map.of("port", line.port(), "starboard", line.starboard()).entrySet())
             {
@@ -120,8 +128,19 @@ public record Programme(
                         + " end names unknown point '" + end.at() + "'");
             }
         });
-        courses.forEach((id, course) -> problems.addAll(course.problems(lines, points)));
+        courses.forEach((id, course) ->
+        {
+            add(problems, Ids.problem("course", id, Ids.PLAIN));
+            problems.addAll(course.problems(lines, points));
+        });
         return problems;
+    }
+
+    /** Add a complaint if there is one. {@link Ids#problem} returns null when all is well. */
+    private static void add(List<String> problems, String problem)
+    {
+        if (problem != null)
+            problems.add(problem);
     }
 
     /**

@@ -2,23 +2,11 @@
  * Web Mercator projection, tile layers and a pannable/zoomable view, for drawing
  * course geometry over a chart.
  *
- * Lifted from the Geo panel of nemesis-delta, which solves this without a mapping
- * library: world coordinates in [0,1] so that OSM-scheme tiles align with plotted
- * positions, tiles emitted as plain SVG <image> elements, and the whole map rendered
- * as one SVG string per frame. There is no Leaflet here and there should not be — the
- * entire requirement is "put a chart behind some lines I am drawing myself", and a
- * mapping library would bring a second geometry model to disagree with the one in
- * crossing.js.
- *
- * WHAT IS NEW HERE is the inverse: {@link MapView#toPosition}. nemesis-delta only ever
- * projects forward, because it only displays. An editor has to turn a pixel the user
- * clicked back into a position, and that is the whole difference between a viewer and
- * an editor.
- *
  * NETWORK BOUNDARY. Tiles are fetched from the internet. That is fine here, because
- * the course editor is a shore-side activity at a desk. It must never leak into the
- * Mark screen, which is offline-first and non-negotiable: on the water, lines are drawn
- * on empty water or on pre-cached tiles, never a live fetch.
+ * the course editor is a shoreside activity at a desk.
+ * If used in an on-boat screen, they must always be optional and the UI functional
+ * even if the tiles cannot be fetched. Alternately, a good caching mechanism could
+ * be implemented.
  */
 
 import { RESOLUTION_M, resolve } from './crossing.js';
@@ -86,6 +74,59 @@ export function bearingDeg(from, to) {
 }
 
 /** Degrees and decimal minutes, which is what a chart and a plotter show. */
+/**
+ * The centre of a set of positions — the middle of what they span, not their average.
+ *
+ * A course is rotated about the middle of its extent, because that is the point a person
+ * sees when they look at it. The mean would be pulled towards wherever the marks happen to
+ * be dense, so a course with three marks at one end would pivot about a spot nobody could
+ * have predicted from the picture.
+ */
+export function centre(positions) {
+  const placed = positions.filter((p) => p && p.latitude != null && p.longitude != null);
+  if (!placed.length) return null;
+  const lats = placed.map((p) => p.latitude);
+  const lons = placed.map((p) => p.longitude);
+  return {
+    latitude: (Math.min(...lats) + Math.max(...lats)) / 2,
+    longitude: (Math.min(...lons) + Math.max(...lons)) / 2,
+  };
+}
+
+/**
+ * Turn a position about a centre, keeping the shape.
+ *
+ * Rotating latitude and longitude directly would SQUASH the course: a degree of longitude
+ * is shorter than a degree of latitude by cos(latitude), so a course turned 90° would come
+ * out narrower than it went in. So the rotation happens in a local metric frame — longitude
+ * scaled by cos of the centre's latitude — and is scaled back afterwards.
+ *
+ * Degrees are compass-wise: positive turns the course clockwise, the way a wind shift is
+ * spoken about. That is the opposite sense to mathematical convention, which is why the
+ * sine terms below look inverted.
+ */
+export function rotateAbout(position, about, degrees) {
+  if (!position || position.latitude == null || !about) return position;
+  const rad = (degrees * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const k = Math.cos((about.latitude * Math.PI) / 180) || 1e-9;
+  // Into the metric frame: x east, y north, both in degrees-of-latitude units.
+  const x = (position.longitude - about.longitude) * k;
+  const y = position.latitude - about.latitude;
+  return {
+    ...position,
+    latitude: about.latitude + (y * cos - x * sin),
+    longitude: about.longitude + (x * cos + y * sin) / k,
+  };
+}
+
+/** Shift a position by a delta in degrees. Translation needs no frame; rotation does. */
+export function translateBy(position, dLat, dLon) {
+  if (!position || position.latitude == null) return position;
+  return { ...position, latitude: position.latitude + dLat, longitude: position.longitude + dLon };
+}
+
 export function formatPosition(position) {
   const part = (value, positive, negative) => {
     const hemisphere = value >= 0 ? positive : negative;

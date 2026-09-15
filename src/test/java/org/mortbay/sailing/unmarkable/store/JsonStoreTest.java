@@ -152,7 +152,8 @@ public class JsonStoreTest
         JsonStore store = new JsonStore(root);
         store.start();
         CourseSnapshot snapshot = new CourseSnapshot("a3f19c", "test.example", "fixture",
-            "up-and-back", "Up and back", false, List.of(), 2.16, null, Instant.now());
+            "up-and-back", "main", "up-and-back/2026-01-01T07:00:00", "Up and back", false,
+            List.of(), 2.16, null, Instant.now());
         store.archive(snapshot);
         Path file = root.resolve("store/courses/a3f19c.json");
         long written = Files.getLastModifiedTime(file).toMillis();

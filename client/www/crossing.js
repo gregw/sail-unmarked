@@ -111,19 +111,52 @@ export function alongM(prepared, t) {
 }
 
 /**
- * Which side of the line a fix is on: +1, -1, or 0 for "not yet either".
+ * How close to the line a fix may fall and still not be called, in metres.
  *
- * Zero is the accuracy band, and it is load-bearing. A boat is resolved to a side only
- * once it is clear of the line by more than the fix uncertainty; close in it is on
- * neither side, which is what stops a boat sitting on the line from emitting a burst
- * of phantom crossings. `bandM` null means use the fix's own stated accuracy, which is
- * more honest and makes the effective line width vary with the sky — an open question.
+ * Half the system's resolution, and tied to it rather than chosen: every distance here is
+ * rounded to the nearest metre, so a fix resolved to within half a metre of the line is as
+ * close to it as this system can say anything about. Beyond that it is on a side, and saying
+ * otherwise would be claiming a precision that was thrown away two steps earlier.
  */
-export function side(prepared, point, accuracyM, bandM) {
-  const band = bandM == null ? (accuracyM ?? 0) : bandM;
+export const SIDE_BAND_M = RESOLUTION_M / 2;
+
+/**
+ * Which side of the line a fix is on: +1, -1, or 0 for "too close to say".
+ *
+ * <b>A geometric question, and a narrow one.</b> Zero here means the fix is inside the one
+ * metre this system resolves to — not that the receiver was uncertain, which is a different
+ * question with a different answer and is {@link confirmedSide} below.
+ *
+ * Those two used to share a band, and sharing it made the plot unreadable: with the band set
+ * to the fix's own accuracy, a boat crossing at nine knots under a two-metre sky spends a
+ * second inside it, and the picture of the crossing — the one thing that makes a result
+ * explicable — came out as a run of grey dots through the very moment being explained.
+ */
+export function side(prepared, point, bandM = SIDE_BAND_M) {
   const distance = signedDistanceM(prepared, point);
-  if (Math.abs(distance) <= band) return 0;
+  if (Math.abs(distance) <= (bandM ?? SIDE_BAND_M)) return 0;
   return distance > 0 ? 1 : -1;
+}
+
+/**
+ * Which side a fix CONFIRMS, which is not the same as which side it is on.
+ *
+ * A fix two metres from the line, from a receiver claiming two metres of accuracy, is on a
+ * side — it is well outside the metre this system resolves to — but it is not EVIDENCE of
+ * being on that side, because the error alone could account for it. Confirmation is what the
+ * N-and-N latch counts, so this is the band that keeps a boat sitting on a line from
+ * assembling a run out of noise and emitting a crossing it never made.
+ *
+ * `bandM` null means use the fix's own stated accuracy, which is the more honest setting and
+ * makes the effective width vary with the sky — an open question, and the reason this is a
+ * setting at all.
+ *
+ * <p>Separating the two changes nothing about what latches. It changes only what the screen
+ * is willing to call, which was being held to the stricter of two standards for no reason
+ * beyond their having been written as one function.
+ */
+export function confirmedSide(prepared, point, accuracyM, bandM) {
+  return side(prepared, point, bandM == null ? (accuracyM ?? 0) : bandM);
 }
 
 /**
@@ -188,20 +221,131 @@ export function qualityCheck(fix, lastGood, qc) {
   if (fix.accuracyM != null && fix.accuracyM > qc.maxAccuracyM)
     return { verdict: 'REJECTED_METADATA', reason: `stated accuracy ${fix.accuracyM} m` };
 
-  if (lastGood) {
-    const seconds = (fix.time - lastGood.time) / 1000;
-    if (seconds > 0) {
-      const offset = toLocal(lastGood, fix);
-      const metres = Math.hypot(offset.x, offset.y);
-      const knots = (metres / seconds / M_PER_NM) * 3600;
-      if (knots > qc.maxSpeedKn)
-        return {
-          verdict: 'REJECTED_KINEMATIC',
-          reason: `implied ground speed ${knots.toFixed(0)} kn`,
-        };
-    }
+  if (!plausible(lastGood, fix, qc)) {
+    const knots = impliedKnots(lastGood, fix);
+    return {
+      verdict: 'REJECTED_KINEMATIC',
+      reason: `implied ground speed ${knots.toFixed(0)} kn`,
+    };
   }
   return { verdict: 'ACCEPTED', reason: null };
+}
+
+/** How many standard deviations of fix-to-fix scatter the kinematic gate allows for. */
+export const NOISE_SIGMAS = 3;
+
+/**
+ * The furthest apart two fixes may be before the motion between them is unbelievable.
+ *
+ * <b>A speed limit alone is the wrong test over a short interval.</b> Implied speed is
+ * distance over time, and as the interval shrinks the distance is dominated by the noise on
+ * the two fixes rather than by anything the boat did: two fixes each honest to three metres
+ * can easily be twelve metres apart, and at 5 Hz that is an implied hundred and twenty
+ * knots. Judged on speed alone, a boat ambling along at nine knots under a clear sky has
+ * fixes thrown away for going too fast — which is what the gate exists to prevent, applied
+ * to exactly the wrong thing.
+ *
+ * So the budget is what the boat could have travelled PLUS what the receiver could have
+ * made up, and the second term is why raising the fix rate no longer makes the gate
+ * hysterical. It uses the accuracy the receiver itself states, so a good sky narrows the
+ * gate automatically and a bad one widens it — which is the same reasoning the accuracy band
+ * rests on, and the reason `accuracyBandM: null` is the more honest setting there too.
+ */
+export function kinematicBudgetM(from, to, qc) {
+  const seconds = (to.time - from.time) / 1000;
+  const travel = ((qc.maxSpeedKn * M_PER_NM) / 3600) * Math.max(0, seconds);
+  // Added in quadrature: the two fixes' errors are independent, so their difference has the
+  // root-sum-square of their standard deviations, not the sum.
+  const sigma = Math.hypot(from.accuracyM ?? 0, to.accuracyM ?? 0);
+  return travel + NOISE_SIGMAS * sigma;
+}
+
+/** True when the motion between two fixes is something a boat and its receiver could do. */
+export function plausible(from, to, qc) {
+  if (!from || !to) return true;
+  const seconds = (to.time - from.time) / 1000;
+  if (!(seconds > 0)) return true;
+  const offset = toLocal(from, to);
+  return Math.hypot(offset.x, offset.y) <= kinematicBudgetM(from, to, qc);
+}
+
+/**
+ * The ground speed one fix implies from another, in knots, or null when it cannot be said.
+ *
+ * Pulled out of {@link qualityCheck} because the relocation watch below has to ask exactly
+ * the same question of two fixes that were both rejected — and a second implementation of
+ * "is this plausible boat motion" that disagreed with the first by a knot would make the
+ * two halves of quality control contradict each other.
+ */
+export function impliedKnots(from, to) {
+  if (!from || !to) return null;
+  const seconds = (to.time - from.time) / 1000;
+  if (!(seconds > 0)) return null;
+  const offset = toLocal(from, to);
+  return (Math.hypot(offset.x, offset.y) / seconds / M_PER_NM) * 3600;
+}
+
+/**
+ * Tells a FLYER from a RELOCATION — a jump the boat really did make.
+ *
+ * The kinematic gate is right to refuse a fix that implies sixty knots, and on its own it
+ * has no way out of that judgement. Because `lastGood` only advances when something is
+ * accepted, every fix after a jump is measured against a position the boat has left, and
+ * the gate re-refuses each one until enough time has passed that the SAME displacement
+ * finally implies a believable speed. A 400 m jump at a 40 kn ceiling takes twenty seconds
+ * to forgive, and for all twenty the boat is navigating on a position it is not at.
+ *
+ * That is not a hypothetical. It happens whenever a receiver re-acquires after a dropout —
+ * below decks, under a bridge, a phone that was asleep in a pocket, an app the operating
+ * system suspended and resumed — and it happens every time somebody picks the boat up and
+ * puts it somewhere else, which is the whole gesture the simulator exists to offer.
+ *
+ * <h2>The discriminator</h2>
+ * <b>A flyer disagrees with its neighbours; a relocation agrees with itself.</b> A single
+ * bad fix is out on its own and the next fix comes back — that is precisely the shape the
+ * gate exists to catch, and it must go on catching it. But when fix after rejected fix
+ * lands in the same new place, each one plausible boat motion from the LAST REJECTED one,
+ * the only honest reading left is that the boat is there and it is our idea of where it was
+ * that is wrong. So the run is confirmed exactly the way a crossing is: N consecutive fixes
+ * that agree, at which point the boat's position is declared moved.
+ *
+ * <h2>What a relocation costs, and why that is the right price</h2>
+ * A relocation is NOT a crossing and must never become one. The segment from where we
+ * thought the boat was to where it turns out to be can sweep across any number of lines,
+ * and testing it would manufacture crossings out of a dropout. So the caller re-arms its
+ * detectors: whatever happened during the blackout was not seen, and the trail is thrown
+ * away because it describes somewhere else. Losing a crossing that happened while the
+ * receiver was down is the honest outcome — inventing one is not — and it is logged either
+ * way, which is what lets somebody reconstruct it afterwards.
+ */
+export class RelocationWatch {
+  constructor(qc, options = {}) {
+    this.qc = { maxSpeedKn: 40, ...(qc ?? {}) };
+    this.confirmFixes = options.confirmFixes ?? 3;
+    this.candidate = null;
+    this.count = 0;
+  }
+
+  /**
+   * Offer a fix the kinematic gate has just refused. True when the run is long enough to
+   * believe, which is the caller's signal to move the boat and start again.
+   */
+  offer(fix) {
+    // Agreement is measured against the last REJECTED fix, not against `lastGood`: the
+    // question is whether these refusals are telling one consistent story about a new
+    // place, and lastGood is the old place they are all disagreeing with. Judged by exactly
+    // the same rule the gate used to refuse them, so the two halves of quality control
+    // cannot hold different opinions about what a boat can do.
+    this.count = this.candidate && plausible(this.candidate, fix, this.qc) ? this.count + 1 : 1;
+    this.candidate = fix;
+    return this.count >= this.confirmFixes;
+  }
+
+  /** Forget the run. Called on every accepted fix — a good fix ends any doubt. */
+  reset() {
+    this.candidate = null;
+    this.count = 0;
+  }
 }
 
 /**
@@ -260,7 +404,9 @@ export class CrossingDetector {
    * and compared against another is quietly wrong by however far apart the origins are.
    */
   accept(point, fix) {
-    const here = side(this.line, point, fix.accuracyM, this.accuracyBandM);
+    // CONFIRMED side, not merely which side: the latch counts evidence, and a fix inside the
+    // receiver's own stated error is not evidence of anything.
+    const here = confirmedSide(this.line, point, fix.accuracyM, this.accuracyBandM);
 
     // A segment cuts the line, and the run behind it is long enough to be believed.
     if (this.pending == null && this.lastPoint) {
@@ -342,6 +488,12 @@ export class CrossingDetector {
       confirmBefore: crossing.confirmBefore,
       confirmAfter: this.afterCount,
       counted: true,
+      // WHERE the interpolated cut fell, in the same local frame, alongside WHEN it was.
+      // The Mark screen rings this point, and it has to be the interpolated one: drawing
+      // the ring on a fix would misplace it exactly the way taking the time from a fix
+      // mistimes it, and by the same distance.
+      point: crossing.point,
+      alongM: alongM(this.line, crossing.t),
     };
   }
 

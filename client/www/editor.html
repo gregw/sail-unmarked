@@ -35,24 +35,51 @@
 
   main { flex: 1 1 auto; display: flex; min-height: 0; }
   .chartcol { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
-  #map { flex: 1 1 auto; min-height: 0; background: var(--sea); cursor: grab; display: block; }
+  /* The open hand said "everything here is draggable", which is not true — most of the
+     chart is just chart. An arrow until the pointer is over something that actually moves,
+     then the hand, and a closed hand while it is moving. */
+  #map { flex: 1 1 auto; min-height: 0; background: var(--sea); cursor: default; display: block; }
+  #map.dragging, #map.dragging * { cursor: grabbing !important; }
+  /* Armed for a chart click, the whole chart IS the target. */
+  #map.picking { cursor: crosshair; }
 
-  /* A column of three regions. Only the two that hold variable content scroll, and each
-     only when it actually overflows — the old fixed max-height put a bar on a nine-row
-     list that had room to spare. */
+  /* ONE scrolling surface, top to bottom. The rows and the form used to be two flex
+     children that each scrolled, which split a 495px pane into two short windows with a
+     bar on each — so reaching a field could mean scrolling the wrong one, and the bars
+     said the two halves were separate things when they are one drill-down: the level, and
+     the fields of the level. The pane scrolls; nothing inside it does, except a list slot,
+     which is a fixed-height box on purpose (see below). */
   aside {
     width: 495px; flex: 0 0 495px; border-left: 1px solid var(--panel2);
-    background: var(--panel); display: flex; flex-direction: column; overflow: hidden;
+    background: var(--panel); overflow-y: auto;
   }
-  .paneTop { flex: 0 0 auto; padding: 10px 14px 0; }
+  .paneTop { padding: 10px 14px 0; }
+  #rowSeries, #rows { display: block; }
   /* Three surfaces, getting lighter as they get more interactive: the pane, the list of
      things on it, and the fields that edit one. Before this the list and the pane were
      the same shade and the boundary had to be inferred from the row hover. */
-  #listWrap {
-    flex: 0 1 auto; overflow-y: auto; min-height: 0; margin: 0 14px;
+  /* A level's list sits directly under that level's own row, not in one slot at the
+     bottom of them all — otherwise the series list opens below the tab strip it is meant
+     to be choosing for, and the variant list opens below the course it belongs to. */
+  /* FIXED height, and draggable. A list that grew and shrank as things were selected
+     moved everything below it on every click, so the thing you were about to press was
+     never where you last saw it. `resize: vertical` puts a grip in the bottom-right
+     corner; the height is remembered in state and re-applied, because the rows are
+     re-rendered and would otherwise forget it. Vertical only — the pane's width is fixed,
+     so a horizontal drag would have nothing to give. */
+  .listSlot {
+    height: 150px; overflow: auto; resize: vertical;
+    margin: 2px 0 8px 14px;
     background: #1a2c3e; border: 1px solid #223a51; border-radius: 5px; padding: 4px;
   }
-  #formWrap { flex: 1 1 auto; overflow-y: auto; min-height: 0; padding: 4px 14px 14px; border-top: 1px solid var(--panel2); margin-top: 8px; }
+
+  /* The course's own fields, under its list rather than at the bottom of the pane: the
+     variant list belongs below them, and both belong to the level whose chevron is open. */
+  #courseForm, #seriesForm { margin: 0 0 8px 14px; }
+  #courseForm:empty, #seriesForm:empty { margin: 0; }
+  /* A rule, not a region: it separates the level from the level's fields, and nothing
+     more. It needs no height floor now that it does not compete with the rows for one. */
+  #formWrap { padding: 4px 14px 14px; border-top: 1px solid var(--panel2); margin-top: 8px; }
 
   .paneHead { display: flex; align-items: center; gap: 8px; margin: 10px 0 6px; }
   .paneHead h2 { font-size: 15px; }
@@ -83,6 +110,17 @@
   .pair { display: flex; gap: 8px; }
   .pair > div { flex: 1 1 0; min-width: 0; }
 
+  /* An id and its long name are the same thing said twice — the key, and the label — so
+     they go side by side. Stacked they cost two label rows and two field rows near the top
+     of every form, which is four rows of the one thing a 495px pane is short of. 40:60
+     because an id is kebab-case and short by rule and a long name is prose. */
+  .idname { display: flex; gap: 8px; }
+  .idname > div { flex: 1 1 60%; min-width: 0; }
+  .idname > div:first-child { flex: 0 0 40%; }
+  /* Explicit, because outside #form the label only stacked above its field by accident —
+     a full-width input pushed it up. At 40% of the pane that is too near the edge to trust. */
+  .idname .label { display: block; margin-bottom: 2px; }
+
   /* A line end: which point it is, whether it runs on, and a way to say so by pointing. */
   .endblock { border: 1px solid var(--panel2); border-radius: 4px; padding: 7px 8px; margin-bottom: 8px; }
   .endblock .label { margin-bottom: 3px; }
@@ -100,13 +138,24 @@
   /* One row per crossing: its letter, the line, the sense, and a way to remove it.
      A gate's alternatives are indented under the step they belong to, because a gate is
      a choice at one step and never a step of its own. */
-  .stepblock { border: 1px solid var(--panel2); border-radius: 4px; padding: 4px 5px; margin-bottom: 4px; }
-  .steprow { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; }
+  .stepblock { border: 1px solid var(--panel2); border-radius: 4px; padding: 1px 4px; margin-bottom: 2px; }
+  .steprow { display: flex; align-items: center; gap: 4px; margin-bottom: 1px; }
   .steprow:last-child { margin-bottom: 0; }
   .steprow.alt { padding-left: 12px; }
   .steprow .grow { flex: 1 1 auto; }
-  .steprow select { flex: 1 1 auto; margin: 0; font-size: 11px; padding: 2px 4px; }
-  .steprow button { flex: 0 0 auto; padding: 2px 6px; font-size: 11px; }
+  .steprow select { flex: 1 1 auto; margin: 0; font-size: 11px; padding: 0 4px; height: 19px; }
+  .steprow button { flex: 0 0 auto; padding: 0 5px; font-size: 11px; height: 19px; line-height: 17px; }
+
+  /* The sequence is the longest thing in the pane and the one most often already known —
+     you are moving a mark, not re-reading the course. So it folds, and folded it still
+     answers the two questions worth asking from outside it: how many crossings, how far. */
+  .seqhead {
+    display: flex; align-items: center; gap: 6px; width: 100%; margin: 10px 0 4px;
+    background: none; border: 0; padding: 0; color: inherit; cursor: pointer; text-align: left;
+  }
+  .seqhead .chev { flex: 0 0 auto; font-size: 18px; line-height: 1; color: var(--muted); }
+  .seqhead:hover .chev { color: var(--line); }
+  .seqhead .sp { flex: 1 1 auto; }
   .seq {
     flex: 0 0 20px; text-align: center; font-family: var(--mono); font-size: 11px;
     color: var(--line);
@@ -128,6 +177,72 @@
     box-shadow: 0 6px 20px rgba(0,0,0,0.45);
   }
   #infopop b { color: var(--line); }
+
+  /* A variant's state, as a word. Derived on the server from a hash comparison and never
+     stored, so none of these can go stale. */
+  .state {
+    font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.08em;
+    text-transform: uppercase; padding: 1px 6px; border-radius: 3px;
+    background: #24405a; color: var(--muted); white-space: nowrap;
+  }
+  .state.dirty { background: #4a3620; color: #f0b46a; }
+  .state.current { background: #1e3d2e; color: var(--ok); }
+  .state.incomplete { background: #4a2523; color: var(--warn); }
+  .state.template { background: #2c2a44; color: #9b93d8; }
+  /* Distinct from every state chip, because it is not a state — it says who can SEE the
+     course, which is orthogonal to whether its design is current, dirty or incomplete. */
+  .state.open { background: #1c4a4a; color: #6fd4d4; }
+  .state.trail { margin-left: auto; }
+
+  /* A variant sits under its course, so the indent is the containment. A course with one
+     plain variant shows as a single row instead — the ordinary club course should not
+     need the word explained to edit it. */
+  .vblock { border-top: 1px solid var(--panel2); margin-top: 10px; padding-top: 10px; }
+  .endrow .grow { flex: 1 1 auto; }
+
+  /* A level of the hierarchy, collapsed to one line. The chevron reopens the list; an [x]
+     here would sit one row from the delete ✕, which is an expensive mis-click. The state
+     chip stays on the collapsed row, so a dirty course is still visible from the top. */
+  .crumb {
+    display: flex; align-items: center; gap: 6px; margin: 6px 0;
+    padding: 3px 4px 3px 2px; border-radius: 4px;
+  }
+  .crumb .pick { flex: 1 1 auto; display: flex; align-items: center; gap: 6px;
+    min-width: 0; cursor: pointer; background: none; border: none; padding: 2px 4px;
+    text-align: left; color: var(--ink); font-family: var(--mono); font-size: 12px; }
+  .crumb .pick .chev { font-size: 18px; line-height: 1; }
+  .crumb .pick:hover { background: var(--panel2); border-radius: 3px; }
+  .crumb .pick .chev { color: var(--muted); flex: 0 0 auto; }
+  .crumb .pick:hover .chev { color: var(--line); }
+  .crumb .pick .none { color: var(--muted); font-style: italic; }
+  .crumb .label { flex: 0 0 auto; }
+  .cmd {
+    flex: 0 0 auto; padding: 1px 9px; font-size: 18px; line-height: 1.25;
+    font-family: var(--mono);
+  }
+  .cmds { display: flex; gap: 3px; flex: 0 0 auto; }
+  .lifecycle { display: flex; align-items: center; gap: 6px; margin: 2px 0 6px 4px; }
+  .lifecycle button { padding: 3px 9px; font-size: 12px; }
+  #rowMsg { font-size: 11px; margin: 0 0 6px 4px; min-height: 13px; }
+
+  /* The consent dialog. Modal rather than undoable, because the answer changes what the
+     edit MEANS and cannot be inferred from the result afterwards. */
+  #askback {
+    position: fixed; inset: 0; z-index: 80; display: none;
+    align-items: center; justify-content: center; background: rgba(4,10,16,0.6);
+  }
+  #askbox {
+    width: 420px; max-width: calc(100vw - 40px);
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 16px 18px; box-shadow: 0 14px 44px rgba(0,0,0,0.55);
+  }
+  #askbox h3 { font-size: 15px; margin-bottom: 6px; }
+  #askBody { font-size: 13px; line-height: 1.5; color: var(--muted); margin-bottom: 14px; }
+  #askBody b { color: var(--ink); }
+  /* A question can carry a long list — every template in the library — so the answers
+     scroll while the question stays put. */
+  #askChoices { display: flex; flex-direction: column; gap: 6px; max-height: 46vh; overflow-y: auto; }
+  #askChoices button { text-align: left; }
 </style>
 </head>
 <body>
@@ -136,7 +251,6 @@
   <div class="chartcol">
     <div class="chartbar">
       <h1>Course editor</h1>
-      <select id="programme" title="club and series"></select>
       <select id="basemap" title="chart background"></select>
       <button id="undo">Nothing to undo</button>
       <span id="save" class="mono" style="font-size:11px"></span>
@@ -147,25 +261,32 @@
     <svg id="map" viewBox="0 0 700 500"></svg>
   </div>
   <aside>
+    <!-- One row per level of the hierarchy, each collapsing to a breadcrumb once chosen,
+         and each carrying its OWN commands. Nothing that acts on a level lives below the
+         form, so the command area is never split by a scrolling sequence editor. The tab
+         strip is static because it never changes; the rows around it are rendered. -->
     <div class="paneTop">
+      <div id="rowSeries"></div>
       <div class="seg">
-        <button data-tab="points">Points</button>
-        <button data-tab="lines">Lines</button>
-        <button data-tab="courses" class="on">Courses</button>
+        <button id="tab_points" data-tab="points">Points</button>
+        <button id="tab_lines" data-tab="lines">Lines</button>
+        <button id="tab_courses" data-tab="courses" class="on">Courses</button>
       </div>
-      <div class="paneHead">
-        <h2 id="paneTitle">Courses</h2>
-        <span class="info" id="paneInfo">?</span>
-        <span class="sp"></span>
-        <button id="add">Add</button>
-      </div>
+      <div id="rows"></div>
     </div>
-    <div id="listWrap"><div id="pointList"></div></div>
     <div id="formWrap"><div id="form"></div></div>
   </aside>
 </main>
 
 <div id="infopop"></div>
+
+<div id="askback">
+  <div id="askbox">
+    <h3 id="askTitle"></h3>
+    <div id="askBody"></div>
+    <div id="askChoices"></div>
+  </div>
+</div>
 
 <script type="module" src="editor.js"></script>
 </body>

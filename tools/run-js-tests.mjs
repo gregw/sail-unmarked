@@ -15,7 +15,14 @@ import { dirname, join } from 'node:path';
 const here = dirname(fileURLToPath(import.meta.url));
 const www = join(here, '..', 'client', 'www');
 
-const SPECS = ['crossing-test.js', 'geo-test.js', 'coursedraw-test.js'];
+const SPECS = [
+  'crossing-test.js',
+  'geo-test.js',
+  'coursedraw-test.js',
+  'boatsim-test.js',
+  'raceclient-test.js',
+  'markscreen-test.js',
+];
 
 let total = 0;
 let failed = 0;

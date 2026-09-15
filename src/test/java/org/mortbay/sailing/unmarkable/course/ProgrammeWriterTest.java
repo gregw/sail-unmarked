@@ -9,12 +9,16 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mortbay.sailing.unmarkable.model.Course;
 import org.mortbay.sailing.unmarkable.model.CourseStep;
+import org.mortbay.sailing.unmarkable.model.CourseVariant;
 import org.mortbay.sailing.unmarkable.model.Direction;
+import org.mortbay.sailing.unmarkable.model.Ids;
+import org.mortbay.sailing.unmarkable.model.Programme;
 import org.mortbay.sailing.unmarkable.model.Line;
 import org.mortbay.sailing.unmarkable.model.LineEnd;
 import org.mortbay.sailing.unmarkable.model.NamedPoint;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
@@ -407,16 +411,27 @@ public class ProgrammeWriterTest
     private static Map<String, Course> courses()
     {
         Map<String, Course> courses = new LinkedHashMap<>();
-        courses.put("two-lap", new Course("two-lap", "Two-lap windward/leeward", false,
-            java.util.List.of(
+        courses.put("two-lap", flat("two-lap", "Two-lap windward/leeward", false,
+            "The base case.",
                 new CourseStep("leeward", Direction.FORWARD, null, null, false, null),
                 new CourseStep(null, null, java.util.List.of(
                     new CourseStep("gate-left", Direction.FORWARD, null, null, false, null),
                     new CourseStep("gate-right", Direction.FORWARD, null, null, false, null)),
                     null, false, "Either side."),
-                new CourseStep("leeward", Direction.REVERSE, null, null, false, "Finish. Northbound.")),
-            "The base case."));
+                new CourseStep("leeward", Direction.REVERSE, null, null, false, "Finish. Northbound.")));
         return courses;
+    }
+
+    /**
+     * A course with a single unnamed variant, which is how nearly every club course is
+     * written: a bare sequence, no variants: level, exactly as before variants existed.
+     */
+    private static Course flat(String id, String name, boolean closed, String notes,
+        CourseStep... sequence)
+    {
+        return new Course(id, name, notes, false, Map.of(CourseVariant.MAIN,
+            new CourseVariant(CourseVariant.MAIN, null, false, closed, null, null,
+                java.util.List.of(sequence), null)));
     }
 
     @Test
@@ -454,8 +469,8 @@ public class ProgrammeWriterTest
     {
         assertThat(ProgrammeWriter.emitCourses(courses()), not(containsString("closed:")));
         Map<String, Course> loop = new LinkedHashMap<>();
-        loop.put("c", new Course("c", null, true,
-            java.util.List.of(new CourseStep("a", Direction.FORWARD, null, null, false, null)), null));
+        loop.put("c", flat("c", null, true, null,
+            new CourseStep("a", Direction.FORWARD, null, null, false, null)));
         assertThat(ProgrammeWriter.emitCourses(loop), containsString("    closed: true\n"));
     }
 
@@ -484,5 +499,204 @@ public class ProgrammeWriterTest
         String once = Files.readString(file);
         ProgrammeWriter.write(file, points(), lines(), courses(), java.util.List.of());
         assertThat(Files.readString(file), is(once));
+    }
+
+    /* ------------------------------------------------------- variants and ad-hoc */
+
+    /** A course with two divisional variants, the second holding ad-hoc geometry. */
+    private static Map<String, Course> divisions()
+    {
+        CourseVariant div1 = new CourseVariant("div1", "Division 1", false, false,
+            null, null,
+            java.util.List.of(
+                new CourseStep("leeward", Direction.FORWARD, null, null, false, null),
+                new CourseStep("windward", Direction.REVERSE, null, null, false, null)),
+            null);
+        CourseVariant div2 = new CourseVariant("div2", null, false, false,
+            Map.of("short-top", new NamedPoint("short-top", null, -33.8, 151.27, null)),
+            Map.of("shortened", new Line("shortened", null,
+                new LineEnd("short-top", null, null, false, null),
+                new LineEnd("leeward-e", null, null, true, null), null)),
+            java.util.List.of(
+                new CourseStep("leeward", Direction.FORWARD, null, null, false, null),
+                new CourseStep("shortened", Direction.REVERSE, null, null, false, null)),
+            null);
+        CourseVariant template = new CourseVariant("wl", "Windward/leeward", true, false,
+            null, null,
+            java.util.List.of(
+                new CourseStep("leeward", Direction.FORWARD, null, null, false, null),
+                new CourseStep("windward", Direction.REVERSE, null, null, false, null)),
+            null);
+        Map<String, CourseVariant> variants = new LinkedHashMap<>();
+        variants.put("div1", div1);
+        variants.put("div2", div2);
+        variants.put("wl", template);
+        Map<String, Course> courses = new LinkedHashMap<>();
+        courses.put("saturday", new Course("saturday", "Saturday Pointscore", null, false, variants));
+        return courses;
+    }
+
+    @Test
+    public void oneVariantIsWrittenFlatAndSeveralAreNested()
+    {
+        // The level appears in a file only once it is being used for something: the
+        // ordinary club course has one design and should not carry an empty layer of
+        // nesting to serve the rare one.
+        assertThat(ProgrammeWriter.emitCourses(courses()), not(containsString("variants:")));
+
+        String out = ProgrammeWriter.emitCourses(divisions());
+        assertThat(out, containsString("    variants:\n"));
+        assertThat(out, containsString("      div1:\n"));
+        assertThat(out, containsString("        name: Division 1\n"));
+        assertThat(out, containsString("        sequence:\n"));
+        assertThat(out, containsString("          - {line: leeward, cross: forward}\n"));
+    }
+
+    @Test
+    public void aTemplateSaysSoAndNothingElseDoes()
+    {
+        // One flag carries the whole restriction: no snapshot, so no publication, so no
+        // boat can ever join it.
+        String out = ProgrammeWriter.emitCourses(divisions());
+        assertThat(out, containsString("        template: true\n"));
+        assertThat("and only the template says it", out.split("template: true", -1).length, is(2));
+    }
+
+    @Test
+    public void adHocGeometryIsWrittenInsideTheVariantThatOwnsIt()
+    {
+        String out = ProgrammeWriter.emitCourses(divisions());
+        assertThat(out, containsString("        points:\n          short-top:\n"));
+        assertThat(out, containsString("        lines:\n          shortened:\n"));
+        assertThat("at the variant's indent, not the file's",
+            out, containsString("            starboard: {at: leeward-e, infinite: true}\n"));
+    }
+
+    @Test
+    public void variantsSurviveTheRoundTrip() throws Exception
+    {
+        // The emitter and the reader have to agree, and only a round trip proves it: an
+        // indent wrong by two spaces produces valid YAML that means something else.
+        String yaml = ProgrammeWriter.emitCourses(divisions());
+        Map<String, Course> back = new com.fasterxml.jackson.databind.json.JsonMapper.Builder(
+            new com.fasterxml.jackson.databind.json.JsonMapper(
+                new com.fasterxml.jackson.dataformat.yaml.YAMLFactory()))
+            .build()
+            .readValue(yaml, Programme.class).courses();
+
+        CourseVariant div2 = back.get("saturday").variant("div2");
+        assertThat(back.get("saturday").variants().keySet(), contains("div1", "div2", "wl"));
+        assertThat(back.get("saturday").variant("wl").template(), is(true));
+        assertThat(div2.template(), is(false));
+        assertThat("the ad-hoc point came back with it",
+            div2.points().get("short-top").latitude(), is(-33.8));
+        assertThat("and so did the ad-hoc line",
+            div2.lines().get("shortened").starboard().infinite(), is(true));
+        assertThat("which resolves on top of the club's",
+            div2.resolveLines(Map.of()).keySet(), contains("shortened"));
+    }
+
+    @Test
+    public void aCourseWithNoVariantsStaysThatWayAcrossAWrite() throws Exception
+    {
+        // A course has no design before its first variant and may have none after its last
+        // is deleted. Both are ordinary states — the second is somebody starting over — so
+        // neither may quietly acquire a `main` on the way through the file. It did: a bare
+        // `variants:` reads back as null, which is the FLAT shape, which manufactures one.
+        Map<String, Course> empty = new LinkedHashMap<>();
+        empty.put("new-course", new Course("new-course", "Not designed yet", null, false, Map.of()));
+
+        String yaml = ProgrammeWriter.emitCourses(empty);
+        assertThat("said explicitly, not as a key with nothing under it",
+            yaml, containsString("    variants: {}\n"));
+
+        Map<String, Course> back = new com.fasterxml.jackson.databind.json.JsonMapper.Builder(
+            new com.fasterxml.jackson.databind.json.JsonMapper(
+                new com.fasterxml.jackson.dataformat.yaml.YAMLFactory()))
+            .build()
+            .readValue(yaml, Programme.class).courses();
+
+        assertThat(back.get("new-course").variants().keySet(), is(java.util.Set.of()));
+        assertThat("and it says so, since a course with no design cannot be joined",
+            back.get("new-course").problems(Map.of(), Map.of()),
+            contains("course 'new-course' has no variants"));
+    }
+
+    @Test
+    public void aFlatCourseIsStillRecognisedByItsSequence() throws Exception
+    {
+        // The other half of the same rule: the flat shape is recognised by HAVING a design,
+        // not by lacking a `variants:` key, or the fix above would take `main` off every
+        // club course written the ordinary way.
+        String yaml = ProgrammeWriter.emitCourses(courses());
+        assertThat(yaml, not(containsString("variants:")));
+
+        Map<String, Course> back = new com.fasterxml.jackson.databind.json.JsonMapper.Builder(
+            new com.fasterxml.jackson.databind.json.JsonMapper(
+                new com.fasterxml.jackson.dataformat.yaml.YAMLFactory()))
+            .build()
+            .readValue(yaml, Programme.class).courses();
+
+        assertThat(back.get("two-lap").variants().keySet(), contains(CourseVariant.MAIN));
+        assertThat(back.get("two-lap").flat(), is(true));
+    }
+
+    @Test
+    public void publicIsWrittenOnlyWhenTrueAndSurvivesTheRoundTrip() throws Exception
+    {
+        Map<String, Course> courses = new LinkedHashMap<>();
+        courses.put("shown", new Course("shown", null, null, true, Map.of()));
+        courses.put("hidden", new Course("hidden", null, null, false, Map.of()));
+
+        String yaml = ProgrammeWriter.emitCourses(courses);
+        assertThat(yaml, containsString("    public: true\n"));
+        // False is the default and the safe one; a file full of `public: false` says
+        // nothing a reader needs, and every other flag here follows the same rule.
+        assertThat(yaml, not(containsString("public: false")));
+
+        Map<String, Course> back = new com.fasterxml.jackson.databind.json.JsonMapper.Builder(
+            new com.fasterxml.jackson.databind.json.JsonMapper(
+                new com.fasterxml.jackson.dataformat.yaml.YAMLFactory()))
+            .build()
+            .readValue(yaml, Programme.class).courses();
+        assertThat(back.get("shown").isPublic(), is(true));
+        assertThat(back.get("hidden").isPublic(), is(false));
+    }
+
+    /* ------------------------------------------------------------------- ids */
+
+    @Test
+    public void aLegalIdIsWrittenBareSoRealFilesDoNotChange()
+    {
+        // Every id the editor can produce emits exactly as before, which is what keeps the
+        // stability tests above honest.
+        assertThat(ProgrammeWriter.key("manly-to-shark"), is("manly-to-shark"));
+        assertThat(ProgrammeWriter.key("manly-to-shark/windward"), is("manly-to-shark/windward"));
+        // A space needs no quoting in a YAML plain key, so it does not get any — the point
+        // is not to quote ugly ids, it is to keep the file parseable.
+        assertThat(ProgrammeWriter.key("div 1"), is("div 1"));
+        // A colon is what actually breaks the key it is written as.
+        assertThat(ProgrammeWriter.key("div:1"), is("\"div:1\""));
+        assertThat(ProgrammeWriter.key("#div"), is("\"#div\""));
+    }
+
+    @Test
+    public void anIllegalIdSurvivesTheRoundTripInsteadOfBreakingTheFile() throws Exception
+    {
+        // The contract, stated as a property: whatever an id is, writing it and reading it
+        // back gives the same id — or the file is broken, silently, on the next autosave.
+        for (String id : new String[] {"div 1", "div:1", "#div", "Div-1", "a/b", "- x", "?x"})
+        {
+            Map<String, NamedPoint> points = new LinkedHashMap<>();
+            points.put(id, new NamedPoint(id, null, -33.8, 151.27, null));
+            String yaml = ProgrammeWriter.emit(points);
+            Programme back = new com.fasterxml.jackson.databind.json.JsonMapper.Builder(
+                new com.fasterxml.jackson.databind.json.JsonMapper(
+                    new com.fasterxml.jackson.dataformat.yaml.YAMLFactory())).build()
+                .readValue(yaml, Programme.class);
+            assertThat("'" + id + "' round-trips: " + yaml, back.points().keySet(), contains(id));
+        }
+        assertThat("and a bad one is reported rather than rejected",
+            Ids.problem("point", "div 1", Ids.SCOPED), containsString("may not contain spaces"));
     }
 }

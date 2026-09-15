@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Course Lifecycle</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600&family=Barlow+Condensed:wght@500;600;700&family=Share+Tech+Mono&display=swap');
+
+        :root {
+            --mono: 'Share Tech Mono', monospace;
+            --disp: 'Barlow Condensed', sans-serif;
+            --body: 'Barlow', sans-serif;
+            --ink: #1c2b39;
+            --ink2: #45586a;
+            --faint: #6c7f92;
+            --rule: #d7e0e8;
+            --accent: #1e5caa;
+            --accent2: #0f8a8a;
+            --paper: #f5f7fa;
+            --code: #0f1b27;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: var(--paper);
+            color: var(--ink);
+            font-family: var(--body);
+            line-height: 1.6;
+        }
+
+        .wrap { max-width: 780px; margin: 0 auto; padding: 46px 22px 90px; }
+
+        h1 {
+            font-family: var(--disp);
+            font-size: 40px;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+            line-height: 1.02;
+        }
+
+        .kicker {
+            font-family: var(--mono);
+            font-size: 11px;
+            letter-spacing: 0.22em;
+            color: var(--accent);
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+
+        .lede { font-size: 18px; color: var(--ink2); margin-top: 14px; font-weight: 300; }
+
+        .tag {
+            font-family: var(--disp);
+            font-size: 17px;
+            font-weight: 500;
+            color: var(--accent2);
+            letter-spacing: 0.02em;
+            margin-top: 6px;
+        }
+
+        h2 {
+            font-family: var(--disp);
+            font-size: 26px;
+            font-weight: 700;
+            margin: 46px 0 6px;
+            padding-top: 20px;
+            border-top: 2px solid var(--ink);
+            letter-spacing: 0.01em;
+        }
+
+        h2 .n {
+            color: var(--accent);
+            font-family: var(--mono);
+            font-size: 15px;
+            margin-right: 10px;
+            vertical-align: 2px;
+        }
+
+        h3 {
+            font-family: var(--disp);
+            font-size: 19px;
+            font-weight: 600;
+            margin: 26px 0 4px;
+            letter-spacing: 0.01em;
+        }
+
+        p { margin: 10px 0; }
+        ul, ol { margin: 10px 0 10px 22px; }
+        li { margin: 6px 0; }
+        strong { font-weight: 600; }
+        em { font-style: italic; color: var(--ink2); }
+
+        .callout {
+            background: #eaf1f8;
+            border-left: 3px solid var(--accent);
+            padding: 14px 18px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .callout.warnbox { background: #fff4ec; border-left-color: #d98a45; }
+        .callout.two { background: #eef3ee; border-left-color: #3f8f6a; }
+
+        .callout .h {
+            font-family: var(--mono);
+            font-size: 11px;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: var(--accent);
+            margin-bottom: 6px;
+        }
+
+        .callout.warnbox .h { color: #b8702c; }
+        .callout.two .h { color: #2f7d58; }
+        .callout p { margin: 6px 0; font-size: 15px; }
+
+        code, .mono {
+            font-family: var(--mono);
+            font-size: 13px;
+        }
+
+        code {
+            background: #e7edf3;
+            padding: 1px 5px;
+            border-radius: 4px;
+            color: #244;
+        }
+
+        pre {
+            background: var(--code);
+            color: #cfe3f2;
+            font-family: var(--mono);
+            font-size: 12.5px;
+            line-height: 1.65;
+            padding: 16px 18px;
+            border-radius: 10px;
+            overflow-x: auto;
+            margin: 16px 0;
+        }
+
+        pre .c { color: #6f8ba3; }
+        pre .k { color: #7fd0f0; }
+        pre .v { color: #e0b06a; }
+
+        table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 14px; }
+
+        th, td {
+            text-align: left;
+            padding: 8px 10px;
+            border-bottom: 1px solid var(--rule);
+            vertical-align: top;
+        }
+
+        th {
+            font-family: var(--mono);
+            font-size: 10.5px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--faint);
+            font-weight: 400;
+        }
+
+        td .mono { font-size: 12px; }
+
+        figure { margin: 22px 0; }
+
+        figcaption {
+            font-family: var(--mono);
+            font-size: 10.5px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--faint);
+            margin-top: 8px;
+            text-align: center;
+        }
+
+        .defs { margin: 18px 0; }
+
+        .def {
+            border-left: 3px solid var(--rule);
+            padding: 2px 0 2px 16px;
+            margin: 14px 0;
+        }
+
+        .def .t {
+            font-family: var(--disp);
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+        }
+
+        .def .t .q {
+            font-family: var(--mono);
+            font-size: 11px;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--accent);
+            margin-left: 10px;
+            vertical-align: 3px;
+            font-weight: 400;
+        }
+
+        .def p { margin: 4px 0; }
+
+        .state {
+            display: inline-block;
+            font-family: var(--mono);
+            font-size: 11px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            padding: 2px 8px;
+            border-radius: 4px;
+            background: #e7edf3;
+            color: #3a5169;
+            white-space: nowrap;
+        }
+
+        .state.dirty { background: #fdeee0; color: #a8631f; }
+        .state.current { background: #e6f2ec; color: #2f7d58; }
+        .state.bad { background: #fde8e6; color: #a83a30; }
+
+        .foot {
+            margin-top: 54px;
+            padding-top: 18px;
+            border-top: 1px solid var(--rule);
+            font-size: 13px;
+            color: var(--faint);
+        }
+    </style>
+</head>
+<body>
+<div class="wrap">
+
+    <div class="kicker">Design note &middot; settled model</div>
+    <h1>The course lifecycle</h1>
+    <p class="tag">Course, variant, snapshot &mdash; and how you know what you are editing.</p>
+    <p class="lede">A club edits its courses on the morning of a race, while boats are already looking at them. This note
+        fixes the three things a course can be, the two kinds of geometry it can be made of, and the rule that tells an
+        editor whether the change in front of them lands on one course or on twenty. It is the model only. Where the data
+        lives, and how a boat registers for a start, come after.</p>
+
+    <div class="callout">
+        <div class="h">Status</div>
+        <p>The vocabulary and the rules below are settled and are what the editor is being built to. Registration, start
+            broadcast, divisions on the boat side and the storage layout are explicitly <em>not</em> settled and are not
+            described here.</p>
+        <p>The crossing model &mdash; lines, ends, sense and extent &mdash; is in
+            <a href="unmarkable-racing-brief.html">the project brief</a> and is unaffected by any of this.</p>
+    </div>
+
+    <h2><span class="n">01</span>The problem this solves</h2>
+
+    <p>Two facts about this system pull against each other.</p>
+
+    <p>The first is that <strong>courses are edited live</strong>. The wind backs twenty degrees at nine in the morning
+        and somebody drags the windward line before the fleet leaves the dock. That is a feature, and the brief calls it
+        out as one.</p>
+
+    <p>The second is that <strong>a record names geometry, not a name</strong>. What a boat sailed is identified by a
+        content hash over resolved positions and crossing order, because a course called <em>manly&#8209;to&#8209;shark</em>
+        on Tuesday and the same name on Thursday can be two different pieces of water. Comparing times across an edit
+        would be comparing different races.</p>
+
+    <p>Put together, they mean that editing is a publishing act with consequences, and the editor needs to say what the
+        consequences are <em>before</em> the change lands. Three questions have to have answers:</p>
+
+    <ul>
+        <li>When I move this line, whose racing did I just change?</li>
+        <li>Which of my courses are no longer what I last published?</li>
+        <li>How do I keep a well&#8209;known course for Div&nbsp;1 and a shortened one for Div&nbsp;2 without maintaining
+            two unrelated copies of the same idea?</li>
+    </ul>
+
+    <p>Every rule below exists to answer one of those.</p>
+
+    <h2><span class="n">02</span>The three nouns</h2>
+
+    <div class="defs">
+        <div class="def">
+            <div class="t">Course <span class="q">what a club publishes</span></div>
+            <p>The unit a club advertises and a boat joins. <em>Saturday Pointscore</em>, or
+                <em>Manly&nbsp;to&nbsp;Shark</em>. A course has a name, notes, and <strong>one or more variants</strong>.
+                It has no geometry of its own.</p>
+        </div>
+
+        <div class="def">
+            <div class="t">Variant <span class="q">what an editor edits</span></div>
+            <p>An editable course design belonging to <strong>exactly one</strong> course. <em>Div&nbsp;1</em>,
+                <em>Div&nbsp;2</em>, <em>short course</em> &mdash; or simply <em>the</em> variant, where a course has only
+                one and nobody ever thinks about the word.</p>
+            <p>A variant is a sequence of steps over the club's points and lines. It is mutable, always, right up to the
+                warning gun. Nothing a boat has sailed depends on it staying still.</p>
+        </div>
+
+        <div class="def">
+            <div class="t">Snapshot <span class="q">what a boat sails</span></div>
+            <p>An immutable, <strong>fully inlined</strong> capture of one variant at one moment. Every point and line is
+                resolved to coordinates at the instant of capture; nothing in a snapshot resolves anything by name
+                afterwards.</p>
+            <p>A snapshot is identified by its <strong>revision</strong> &mdash; the twelve&#8209;hex&#8209;character
+                content hash the records already use &mdash; and named by the tool as
+                <code>course/variant/datetime</code>. It is therefore <em>a named, dated pointer to a revision</em>.</p>
+        </div>
+    </div>
+
+    <figure>
+        <svg viewBox="0 0 700 260" width="100%" role="img" aria-label="A course holds variants; each variant holds a
+             timeline of snapshots, of which one is published.">
+            <defs>
+                <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                    <path d="M0,0 L10,5 L0,10 z" fill="#6c7f92"/>
+                </marker>
+            </defs>
+            <style>
+                .bx { fill: #ffffff; stroke: #b9c7d4; }
+                .bx.c { fill: #eaf1f8; stroke: #1e5caa; }
+                .bx.v { fill: #ffffff; stroke: #45586a; }
+                .bx.s { fill: #f0f3f6; stroke: #b9c7d4; }
+                .bx.p { fill: #e6f2ec; stroke: #3f8f6a; }
+                .bx.t { fill: #fff4ec; stroke: #d98a45; }
+                .tx { font-family: 'Barlow', sans-serif; font-size: 12px; fill: #1c2b39; }
+                .tm { font-family: 'Share Tech Mono', monospace; font-size: 9.5px; fill: #45586a; }
+                .cap { font-family: 'Share Tech Mono', monospace; font-size: 9px; fill: #6c7f92;
+                       letter-spacing: 0.1em; text-transform: uppercase; }
+                .cn { stroke: #6c7f92; fill: none; }
+            </style>
+
+            <rect class="bx c" x="14" y="98" width="126" height="52" rx="7"/>
+            <text class="tx" x="77" y="120" text-anchor="middle" font-weight="600">Saturday Pointscore</text>
+            <text class="cap" x="77" y="136" text-anchor="middle">course</text>
+
+            <path class="cn" d="M140,112 H176" marker-end="url(#ar)"/>
+            <path class="cn" d="M140,124 H160 V184 H176" marker-end="url(#ar)"/>
+            <path class="cn" d="M140,136 H152 V44 H176" marker-end="url(#ar)"/>
+
+            <rect class="bx t" x="180" y="24" width="104" height="40" rx="6"/>
+            <text class="tx" x="232" y="41" text-anchor="middle">W/L template</text>
+            <text class="cap" x="232" y="55" text-anchor="middle">no snapshots</text>
+
+            <rect class="bx v" x="180" y="92" width="104" height="40" rx="6"/>
+            <text class="tx" x="232" y="109" text-anchor="middle">Div 1</text>
+            <text class="cap" x="232" y="123" text-anchor="middle">variant</text>
+
+            <rect class="bx v" x="180" y="164" width="104" height="40" rx="6"/>
+            <text class="tx" x="232" y="181" text-anchor="middle">Div 2</text>
+            <text class="cap" x="232" y="195" text-anchor="middle">variant</text>
+
+            <path class="cn" d="M284,112 H320" marker-end="url(#ar)"/>
+            <path class="cn" d="M284,184 H320" marker-end="url(#ar)"/>
+
+            <rect class="bx s" x="324" y="92" width="100" height="40" rx="6"/>
+            <text class="tm" x="374" y="109" text-anchor="middle">2027-05-02</text>
+            <text class="tm" x="374" y="122" text-anchor="middle">a41c0e9d33b8</text>
+
+            <path class="cn" d="M424,112 H452" marker-end="url(#ar)"/>
+
+            <rect class="bx p" x="456" y="92" width="100" height="40" rx="6"/>
+            <text class="tm" x="506" y="109" text-anchor="middle">2027-06-06</text>
+            <text class="tm" x="506" y="122" text-anchor="middle">7f20b1c4de55</text>
+            <text class="cap" x="506" y="150" text-anchor="middle" fill="#2f7d58">published</text>
+
+            <rect class="bx p" x="324" y="164" width="100" height="40" rx="6"/>
+            <text class="tm" x="374" y="181" text-anchor="middle">2027-06-06</text>
+            <text class="tm" x="374" y="194" text-anchor="middle">c9034ab7e610</text>
+            <text class="cap" x="374" y="222" text-anchor="middle" fill="#2f7d58">published</text>
+
+            <text class="cap" x="374" y="76" text-anchor="middle">snapshots, oldest first</text>
+
+            <rect class="bx" x="596" y="92" width="90" height="40" rx="6" stroke-dasharray="3 3"/>
+            <text class="tx" x="641" y="109" text-anchor="middle">Div 1 today</text>
+            <text class="cap" x="641" y="123" text-anchor="middle" fill="#a8631f">dirty</text>
+            <path class="cn" d="M284,102 C 300,60 560,52 620,88" marker-end="url(#ar)" stroke-dasharray="4 3"/>
+        </svg>
+        <figcaption>One course, three variants, a timeline of snapshots each &mdash; and a resolved variant that no
+            longer matches what it last published</figcaption>
+    </figure>
+
+    <h3>Why a variant belongs to exactly one course</h3>
+
+    <p>Because that is what makes the dangerous question answerable. <em>Whose racing did I just change?</em> has an
+        answer only if the edge from geometry to racing runs one way through a structure with no shortcuts. A variant
+        shared between two courses would be a course by another name, and the shared thing would need its own name, its
+        own publication and its own dirty state &mdash; which is to say it would need to be a course.</p>
+
+    <p>Shape that is genuinely common between two courses is shared at the level below, as a <em>named line</em>, which
+        is exactly what named lines are for.</p>
+
+    <h2><span class="n">03</span>Named and ad&#8209;hoc geometry</h2>
+
+    <p>A point or a line is either <strong>named</strong> or <strong>ad&#8209;hoc</strong>.</p>
+
+    <table>
+        <tr>
+            <th>&nbsp;</th>
+            <th>Named</th>
+            <th>Ad-hoc</th>
+        </tr>
+        <tr>
+            <td><strong>Has an id</strong></td>
+            <td>Yes &mdash; <span class="mono">sow-and-pigs</span></td>
+            <td>No. It exists only inside the variant that uses it</td>
+        </tr>
+        <tr>
+            <td><strong>Lives in</strong></td>
+            <td>The club's points and lines list</td>
+            <td>The step that references it</td>
+        </tr>
+        <tr>
+            <td><strong>Edited from</strong></td>
+            <td>The Points or Lines tab, and from a course with consent</td>
+            <td>The Courses tab, freely</td>
+        </tr>
+        <tr>
+            <td><strong>Moving it</strong></td>
+            <td>May affect other variants and other courses</td>
+            <td>Affects exactly one variant, by construction</td>
+        </tr>
+    </table>
+
+    <div class="callout">
+        <div class="h">Naming is identity, not sharing</div>
+        <p>A named point is not named <em>because</em> it is shared. It is named because it is a thing people refer to
+            &mdash; Sow&nbsp;and&nbsp;Pigs is Sow&nbsp;and&nbsp;Pigs whether one course uses it or nine. Sharing is a
+            consequence of several courses choosing to refer to the same thing, and it is measured by counting
+            references, never declared by a flag.</p>
+        <p>This is why the earlier <em>shared</em> / <em>local</em> naming was dropped. It stated as policy something
+            that is really an observation, and it would have gone stale the moment a second course adopted a "local"
+            mark.</p>
+    </div>
+
+    <h3>A line's two ends are independent</h3>
+
+    <p>Moving one end of a line does not detach the other. One end may be a surveyed feature the whole club knows and
+        the other a handle dropped this morning for this course; forcing them to share a fate would either promote the
+        handle to a name nobody wants or detach the feature everybody relies on. The unit of the named/ad&#8209;hoc
+        decision is the <strong>point</strong>, and the line follows whatever its ends happen to be.</p>
+
+    <h2><span class="n">04</span>The tab is the scope of the edit</h2>
+
+    <p>This is the rule that answers <em>am I editing one course or many?</em> &mdash; and it is answered before the edit
+        begins, by where you are standing, rather than by a modal question after the fact.</p>
+
+    <table>
+        <tr>
+            <th>Tab</th>
+            <th>You are editing</th>
+            <th>Blast radius</th>
+        </tr>
+        <tr>
+            <td><strong>Points</strong>, <strong>Lines</strong></td>
+            <td>The club's named geometry</td>
+            <td>Everything that refers to it. The edit reports what it dirtied</td>
+        </tr>
+        <tr>
+            <td><strong>Courses</strong></td>
+            <td>One variant of one course</td>
+            <td>That variant &mdash; unless you consent to more</td>
+        </tr>
+    </table>
+
+    <div class="callout two">
+        <div class="h">The invariant</div>
+        <p>From the Courses tab you can never change the geometry of a course you are not in, and you can never do it by
+            accident. Widening the scope beyond the current variant always takes an explicit answer to an explicit
+            question.</p>
+    </div>
+
+    <h3>Editing geometry from within a course</h3>
+
+    <p>Drag a point while a variant is open and the editor looks at what else uses it. There are four cases and they are
+        the whole of the interaction:</p>
+
+    <table>
+        <tr>
+            <th>What else uses it</th>
+            <th>What happens</th>
+        </tr>
+        <tr>
+            <td>Nothing &mdash; it is ad&#8209;hoc</td>
+            <td>It moves. No question, no notice.</td>
+        </tr>
+        <tr>
+            <td>Only this variant</td>
+            <td>It moves. Named, but nobody else is holding it.</td>
+        </tr>
+        <tr>
+            <td>Sibling variants of this course</td>
+            <td>Ask, offering three: <strong>move it for all of them</strong>; <strong>make it ad&#8209;hoc</strong> here
+                and move the copy; or <strong>promote a new named point</strong>, shared by these variants, and move
+                that.</td>
+        </tr>
+        <tr>
+            <td>Another course</td>
+            <td>Ask, offering <strong>make it ad&#8209;hoc</strong> here, or &mdash; where this course has more than one
+                variant &mdash; <strong>promote a new named point</strong> shared by all of them. Moving it for the other
+                course is never on offer; that is the invariant.</td>
+        </tr>
+    </table>
+
+    <p><strong>Promote</strong> is what replaces a scoping mechanism for now. A point wanted by Div&nbsp;1 and
+        Div&nbsp;2 but not by the rest of the club is a real thing that deserves a name, and the tool supplies one
+        &mdash; <span class="mono">manly-to-shark/windward</span> &mdash; from the course it was promoted in. It is
+        offered only where it would differ from the other two: with a single variant it is exactly "make it ad&#8209;hoc",
+        and where only siblings are involved it is exactly "move it for all".</p>
+
+    <div class="callout">
+        <div class="h">Detaching a point does not detach the line</div>
+        <p>Making a point ad&#8209;hoc copies every line that named it, with <em>only that end</em> repointed at the
+            copy. The other end still names the club's point, because a line's two ends are independent and one of them
+            may be the surveyed feature that made the line worth having.</p>
+    </div>
+
+    <div class="callout warnbox">
+        <div class="h">The tool names things, not the user</div>
+        <p>Scoped names are generated. Asking people to follow a naming convention produces a namespace held together by
+            discipline, which is to say for about a season. If a full scoping mechanism is ever needed, generated names
+            in this shape are what it will be built from.</p>
+    </div>
+
+    <h3>Editing named geometry from its own tab</h3>
+
+    <p>Here the whole club is in scope, deliberately &mdash; this is where you correct a survey or move a mark that has
+        genuinely moved. The edit proceeds, and then <strong>reports</strong>: <em>this dirties Div&nbsp;1 and
+            Div&nbsp;2 of Saturday Pointscore, and the Twilight short course.</em></p>
+
+    <p>Nothing is blocked and nothing is cascaded. The consequences are made visible and then tracked, which is what
+        section&nbsp;6 is about.</p>
+
+    <h2><span class="n">05</span>Snapshots inline everything, immediately</h2>
+
+    <p>When a snapshot is taken, every named reference in it is resolved to coordinates and written in. The snapshot
+        keeps no names.</p>
+
+    <p>Lazy inlining &mdash; keeping the names and resolving them later, so that a change to a named point could be seen
+        to affect published courses &mdash; is attractive and was seriously considered. It is rejected, for two reasons
+        that reinforce each other:</p>
+
+    <ul>
+        <li><strong>The revision is a hash over resolved coordinates.</strong> A snapshot that resolves names later has
+            a hash that can silently stop describing its own contents. The one identifier that records depend on would
+            become unreliable, which defeats its only purpose.</li>
+        <li><strong>The living variant already answers the impact question.</strong> A snapshot is taken <em>from</em> a
+            variant, and that variant stays behind, still holding its named references. So "which published courses use
+            Sow&nbsp;and&nbsp;Pigs?" is answered by looking at variants, where the answer is current, rather than at
+            snapshots, where it would be a question about the past.</li>
+    </ul>
+
+    <div class="callout two">
+        <div class="h">The resolution</div>
+        <p>Snapshots are always inlined on creation. The ad&#8209;hoc variant they were created from remains, so we
+            still know which courses a change to a named point affects.</p>
+        <p>Immutability and impact tracking turn out not to be in tension; they are just jobs for two different
+            objects.</p>
+    </div>
+
+    <p>It follows that <strong>editing named geometry never modifies a snapshot</strong>, and therefore never modifies
+        anything a boat has already been handed. A published course changes only when somebody publishes a new snapshot.
+        That is the safety property the whole model is arranged around.</p>
+
+    <h2><span class="n">06</span>State is derived, never stored</h2>
+
+    <p>Resolve a variant, hash it, and compare that with the revision of its latest snapshot. Everything an editor needs
+        to know follows from that one comparison:</p>
+
+    <table>
+        <tr>
+            <th>State</th>
+            <th>Means</th>
+            <th>What to do</th>
+        </tr>
+        <tr>
+            <td><span class="state">unpublished</span></td>
+            <td>No snapshot has ever been taken</td>
+            <td>Nothing, until it is wanted</td>
+        </tr>
+        <tr>
+            <td><span class="state current">current</span></td>
+            <td>The hash matches the latest snapshot</td>
+            <td>Nothing. What is published is what is designed</td>
+        </tr>
+        <tr>
+            <td><span class="state dirty">dirty</span></td>
+            <td>The hash differs &mdash; edited since the last snapshot, here or through a named point</td>
+            <td>Review the difference, then snapshot and publish</td>
+        </tr>
+        <tr>
+            <td><span class="state bad">incomplete</span></td>
+            <td>It will not resolve &mdash; a point with no coordinates, a step with no line</td>
+            <td>Fix it. It cannot be snapshotted</td>
+        </tr>
+    </table>
+
+    <p>No dirty flag is written anywhere, and none can go stale, be missed by an edit path, or survive an undo it should
+        not have. It is a fact about the data, computed when asked.</p>
+
+    <p><strong>Dirty is visible at both levels.</strong> The course list marks a course dirty if any of its variants is;
+        selecting the course shows which. That is the race&#8209;morning workflow: scan for orange, open it, see that
+        moving the windward line dirtied Div&nbsp;1 and Div&nbsp;2 but not the Twilight course, check both, publish
+        both.</p>
+
+    <div class="callout">
+        <div class="h">Review means a diff</div>
+        <p>"Dirty" on its own only says something changed. What an editor needs before publishing is <em>what</em>
+            changed: this line moved 340&nbsp;m, this step was added, the course is 0.4&nbsp;nm shorter. The comparison
+            between the last snapshot and the current resolved variant is the natural place to get it, since both sides
+            are fully resolved geometry.</p>
+    </div>
+
+    <h2><span class="n">07</span>Snapshot and publish are two steps</h2>
+
+    <p>Taking a snapshot captures a design. <strong>Publishing chooses which snapshot boats get.</strong> Keeping them
+        apart lets a course be prepared on Thursday and released on Saturday, and lets a bad release be undone by
+        pointing back at the previous snapshot rather than by re&#8209;editing anything.</p>
+
+    <p>Publishing a variant replaces that variant's previous publication. It is a pointer move, not an append &mdash;
+        a course has one live design per variant, and offering a fleet a choice of vintages would be a way to start a
+        race with two different courses on the water.</p>
+
+    <div class="callout two">
+        <div class="h">A boat is handed what was published</div>
+        <p>Joining serves the <em>published</em> snapshot, never the live variant. A course with nothing published
+            cannot be joined at all. So a mark dragged on race morning changes nothing for anybody on the water until
+            somebody publishes again &mdash; which is the safety property the whole model exists for, stated as an
+            endpoint.</p>
+    </div>
+
+    <h3>Two scopes, one operation</h3>
+
+    <ul>
+        <li><strong>One variant.</strong> Div&nbsp;2's course is shortened; nothing else changes. Publish Div&nbsp;2.</li>
+        <li><strong>Several variants, atomically.</strong> A line common to Div&nbsp;1, Div&nbsp;2 and Div&nbsp;3 is
+            moved on race morning. All three must change together or the divisions are racing to inconsistent
+            instructions. Publish all three, or none.</li>
+    </ul>
+
+    <p>These are the same operation at different scope: move a set of publication pointers, all or nothing. The
+        atomicity is the constraint with teeth &mdash; it means the pointers being moved have to be committed together,
+        which will shape where publications are stored. Since a shared line can dirty variants across
+        <em>different courses</em>, that scope is probably club&#8209;wide rather than per&#8209;course.</p>
+
+    <h2><span class="n">08</span>Templates</h2>
+
+    <p>A club has shapes it uses repeatedly &mdash; a windward/leeward, a triangle&#8209;sausage&#8209;sausage &mdash;
+        which are the starting point for a day's racing rather than a course anybody sails. Two windward/leeward fleets
+        on the same day need two independently positioned courses, so a single perpetually&#8209;edited design cannot
+        serve.</p>
+
+    <p><strong>A template is a variant marked as such.</strong> It is edited like any other variant. The one thing it
+        cannot do is be snapshotted &mdash; and from that, everything else follows:</p>
+
+    <pre><span class="c"># a template can never be snapshotted</span>
+<span class="c">#   ⇒ it can never be published</span>
+<span class="c">#   ⇒ no boat can ever join it</span>
+<span class="c">#   ⇒ it is permanently </span><span class="v">unpublished</span><span class="c">, never </span><span class="v">dirty</span></pre>
+
+    <p>No separate rule keeps templates out of the join path, and none keeps them out of the race&#8209;morning dirty
+        list. One restriction produces all of it.</p>
+
+    <h3>Cloning</h3>
+
+    <p>To race a template you clone it. The clone is an ordinary variant, with the template flag cleared &mdash;
+        otherwise the copy could not be snapshotted either.</p>
+
+    <ul>
+        <li><strong>A variant may be cloned into any course</strong>, existing or new. That is what makes two
+            windward/leeward fleets work: clone the template into <em>Saturday&nbsp;A</em> and again into
+            <em>Saturday&nbsp;B</em>, position each for its own fleet, publish each separately. It does not weaken "a
+            variant belongs to one course" &mdash; cloning creates a new variant that belongs to the target.</li>
+        <li><strong>A whole course may be cloned</strong>, which is just cloning all of its variants. This matters
+            because a good template usually carries divisional structure already &mdash; Div&nbsp;1 sails three laps,
+            Div&nbsp;2 sails two &mdash; and cloning variant by variant would lose the grouping the template existed to
+            capture.</li>
+        <li><strong>A clone shares named geometry, and copies ad&#8209;hoc geometry.</strong> A template built on
+            named lines produces clones that all move when a named line moves &mdash; usually what is wanted at a club
+            with surveyed marks, and the reason the next point matters.</li>
+    </ul>
+
+    <div class="callout warnbox">
+        <div class="h">Translate and rotate are a bulk detach</div>
+        <p>Sliding or turning a freshly cloned course to suit today's wind converts every named line it inherited into
+            ad&#8209;hoc geometry, in one gesture. That is correct &mdash; you are moving this course, not the club's
+            marks &mdash; but it is the one action that quietly makes most of a course ad&#8209;hoc, so it should say
+            <em>this will detach 6 shared lines</em> before it does it.</p>
+    </div>
+
+    <h3>The warning on editing a template</h3>
+
+    <p>Worth showing once, and worth being reassurance rather than caution, because people assume the opposite of what
+        is true: <strong>editing a template does not affect courses already cloned from it.</strong> Those clones are
+        independent. The edit changes only what future clones start from.</p>
+
+    <h2><span class="n">09</span>Deletion</h2>
+
+    <p>Snapshots outlive everything that produced them.</p>
+
+    <ul>
+        <li>Deleting a <strong>variant</strong> or a <strong>course</strong> does not delete its snapshots. They stay
+            exactly as they were, retrievable by revision. They simply leave the dirty conversation, because nothing
+            living is being compared against them any more.</li>
+        <li>A snapshot that has been <strong>replaced</strong> by a newer publication is likewise kept.</li>
+        <li>Snapshots go only when explicitly deleted.</li>
+    </ul>
+
+    <p>The reason is the record. A record names a revision, and a record whose geometry cannot be retrieved is a time
+        with no course attached &mdash; unscoreable, unprotestable, and not comparable with anything. A course being
+        retired is not a reason to make last season's results meaningless.</p>
+
+    <h2><span class="n">10</span>A worked sequence</h2>
+
+    <pre><span class="c"># design</span>
+create course        <span class="v">Saturday Pointscore</span>
+create variant       <span class="v">Div 1</span>              <span class="c">— unpublished</span>
+edit                 place lines, order steps
+snapshot                                    <span class="c">— Saturday Pointscore/Div 1/2027-06-06T08:14</span>
+publish              Div 1                  <span class="c">— boats can now join</span>
+
+<span class="c"># the second division is a variation on the first, not a new idea</span>
+clone variant        <span class="v">Div 1</span> → <span class="v">Div 2</span>
+edit                 drop a lap
+snapshot
+publish              Div 2
+
+<span class="c"># race morning: the wind backs</span>
+Lines tab            drag <span class="v">windward</span> 340 m
+                     <span class="c">→ dirties Div 1, Div 2 of Saturday Pointscore</span>
+                     <span class="c">→ dirties Twilight/short course</span>
+review               diff each against its last snapshot
+snapshot             Div 1, Div 2
+publish              Div 1 + Div 2 <span class="k">atomically</span>
+                     <span class="c">Twilight is left dirty on purpose — it races Wednesday</span></pre>
+
+    <h2><span class="n">11</span>What this note does not settle</h2>
+
+    <ul>
+        <li><strong>Storage.</strong> Where courses, variants, snapshots and publications live on disk, and in what
+            format. The atomic multi&#8209;variant publish is the constraint that will decide most of it.</li>
+        <li><strong>Registration and start.</strong> How a boat registers, how a division is determined or asked for,
+            how a start timer reaches a registered fleet, and how a live edit is broadcast to boats that already hold a
+            snapshot.</li>
+        <li><strong>Force&#8209;registration</strong> and the club's view of who is out there.</li>
+        <li><strong>Scoped names as a mechanism.</strong> Generated names such as
+            <span class="mono">manly-to-shark/windward</span> are a convention today, not a namespace. Deliberately on
+            the back burner.</li>
+        <li><strong>Write protection.</strong> A named point that published courses depend on can still be dragged by
+            anybody with the page open. Which is a specific instance of the general gap: there is no authentication on
+            any write.</li>
+    </ul>
+
+    <div class="foot">
+        <p>Companion to <a href="unmarkable-racing-brief.html">the project brief</a>. The brief describes what a virtual
+            mark is; this describes how a set of them gets published and kept honest. Where the two disagree about the
+            lifecycle, this is later.</p>
+    </div>
+
+</div>
+</body>
+</html>

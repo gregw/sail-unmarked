@@ -20,88 +20,102 @@ name: Windward/leeward (shape demonstration)
 datum: WGS84
 
 points:
-  leeward-p:
-    name: Leeward line
-    latitude: -33.821748
-    longitude: 151.270412
-  leeward-s:
-    name: Leeward line
-    latitude: -33.822925
-    longitude: 151.272039
-  windward-p:
-    name: Windward line
-    latitude: -33.817131
-    longitude: 151.275413
-  windward-s:
-    name: Windward line
-    latitude: -33.818101
-    longitude: 151.276870
-  gate-l-p:
-    name: gate-l-port
-    latitude: -33.821542
-    longitude: 151.271051
-  gate-l-s:
-    name: gate-l-starboard
-    latitude: -33.820940
-    longitude: 151.271757
-  gate-r-p:
-    name: gate-r-port
-    latitude: -33.821802
-    longitude: 151.272963
-  gate-r-s:
-    name: gate-r-starboard
-    latitude: -33.822431
-    longitude: 151.272303
 
 lines:
   leeward:
     name: Leeward line
-    port:      {at: leeward-p}
-    starboard: {at: leeward-s}
+    port:      {latitude: -33.823123, longitude: 151.272613}
+    starboard: {latitude: -33.823105, longitude: 151.274699}
     notes: >
       Start, mark 2 and finish. One line, three crossings.
   windward:
     name: Windward line
-    port:      {at: windward-p}
-    starboard: {at: windward-s}
+    port:      {latitude: -33.817158, longitude: 151.272728}
+    starboard: {latitude: -33.817140, longitude: 151.274632}
   gate-left:
     name: Windward gate, left
-    port:      {at: gate-l-p}
-    starboard: {at: gate-l-s}
+    port:      {latitude: -33.822602, longitude: 151.272865, infinite: true}
+    starboard: {latitude: -33.821793, longitude: 151.272855}
   gate-right:
     name: Windward gate, right
-    port:      {at: gate-r-p}
-    starboard: {at: gate-r-s}
+    port:      {latitude: -33.821766, longitude: 151.274488}
+    starboard: {latitude: -33.822593, longitude: 151.274509, infinite: true}
 
 courses:
-  two-lap-wl:
-    name: Two-lap windward/leeward
+  windward-leeward:
+    name: "Windward leeward course "
     notes: >
       The base case. wiki/course-2lap-wl.svg draws it.
-    sequence:
-      - {line: leeward, cross: forward}
-      - {line: windward, cross: forward}
-      - {line: leeward, cross: reverse}
-      - {line: windward, cross: forward}
-      - {line: leeward, cross: reverse}
-  two-lap-wl-gate:
-    name: Two-lap windward/leeward, windward gate
+    variants:
+      two-laps:
+        name: Two laps
+        template: true
+        sequence:
+          - {line: leeward, cross: forward}
+          - {line: windward, cross: forward}
+          - {line: leeward, cross: reverse}
+          - {line: windward, cross: forward}
+          - {line: leeward, cross: reverse}
+      one-lap:
+        name: One lap
+        template: true
+        sequence:
+          - {line: leeward, cross: forward}
+          - {line: windward, cross: forward}
+          - {line: leeward, cross: reverse}
+      three-laps:
+        name: Three laps
+        template: true
+        sequence:
+          - {line: leeward, cross: forward}
+          - {line: windward, cross: forward}
+          - {line: leeward, cross: reverse}
+          - {line: windward, cross: forward}
+          - {line: leeward, cross: reverse}
+          - {line: windward, cross: forward}
+          - {line: leeward, cross: forward}
+  downwind-gate:
+    name: Downwind gate
     notes: >
       As above, but the windward mark is a gate and the boat picks a side. The leg into a
       gate is measured to the midpoint between its alternatives, so the course length does
       not depend on which side a given boat took — a length that varied per boat would make
       the live-place axis mean different things for different boats.
-    sequence:
-      - {line: leeward, cross: forward}
-      - {line: windward, cross: forward}
-      - gate:
-          - {line: gate-left, cross: forward}
-          - {line: gate-right, cross: forward}
-        notes: >
-          Either side.
-      - {line: windward, cross: forward}
-      - gate:
-          - {line: gate-left, cross: forward}
-          - {line: gate-right, cross: forward}
-      - {line: windward, cross: forward}
-      - {line: leeward, cross: reverse}
+    variants:
+      3-laps:
+        name: 3 Laps
+        template: true
+        sequence:
+          - {line: leeward, cross: forward}
+          - {line: windward, cross: forward}
+          - gate:
+                - {line: gate-left, cross: forward}
+                - {line: gate-right, cross: forward}
+            notes: >
+              Either side.
+          - {line: windward, cross: forward}
+          - gate:
+                - {line: gate-left, cross: forward}
+                - {line: gate-right, cross: forward}
+          - {line: windward, cross: forward}
+          - {line: leeward, cross: reverse}
+      2-laps:
+        name: 2 Laps
+        template: true
+        sequence:
+          - {line: leeward, cross: forward}
+          - {line: windward, cross: forward}
+          - gate:
+                - {line: gate-left, cross: forward}
+                - {line: gate-right, cross: forward}
+            notes: >
+              Either side.
+          - {line: windward, cross: forward}
+          - {line: leeward, cross: reverse}
+      1-lap:
+        name: 1 Lap
+        template: true
+        sequence:
+          - {line: leeward, cross: forward}
+          - {line: windward, cross: forward}
+          - {line: leeward, cross: reverse}

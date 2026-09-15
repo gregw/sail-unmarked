@@ -10,6 +10,8 @@ import java.util.Map;
 
 import org.mortbay.sailing.unmarkable.model.Course;
 import org.mortbay.sailing.unmarkable.model.CourseStep;
+import org.mortbay.sailing.unmarkable.model.CourseVariant;
+import org.mortbay.sailing.unmarkable.model.Ids;
 import org.mortbay.sailing.unmarkable.model.Line;
 import org.mortbay.sailing.unmarkable.model.LineEnd;
 import org.mortbay.sailing.unmarkable.model.NamedPoint;
@@ -221,15 +223,28 @@ public final class ProgrammeWriter
      */
     static String emitLines(Map<String, Line> lines)
     {
-        StringBuilder out = new StringBuilder("lines:\n");
+        return emitLines(lines, 0);
+    }
+
+    /**
+     * The same block at an indent, for the ad-hoc lines that live inside a variant.
+     *
+     * <p>Ad-hoc geometry is written exactly like named geometry, one level in. It is the
+     * same thing — a line with two ends — and the only difference is where it lives, which
+     * is what makes it ad-hoc.
+     */
+    static String emitLines(Map<String, Line> lines, int indent)
+    {
+        String pad = " ".repeat(indent);
+        StringBuilder out = new StringBuilder(pad).append("lines:\n");
         lines.forEach((id, line) ->
         {
-            out.append("  ").append(id).append(":\n");
+            out.append(pad).append("  ").append(key(id)).append(":\n");
             if (line.name() != null && !line.name().equals(id))
-                out.append("    name: ").append(scalar(line.name())).append('\n');
-            out.append("    port:      ").append(end(line.port())).append('\n');
-            out.append("    starboard: ").append(end(line.starboard())).append('\n');
-            notes(out, line.notes(), 4);
+                out.append(pad).append("    name: ").append(scalar(line.name())).append('\n');
+            out.append(pad).append("    port:      ").append(end(line.port())).append('\n');
+            out.append(pad).append("    starboard: ").append(end(line.starboard())).append('\n');
+            notes(out, line.notes(), indent + 4);
         });
         return out.toString();
     }
@@ -250,45 +265,94 @@ public final class ProgrammeWriter
         StringBuilder out = new StringBuilder("courses:\n");
         courses.forEach((id, course) ->
         {
-            out.append("  ").append(id).append(":\n");
+            out.append("  ").append(key(id)).append(":\n");
             if (course.name() != null && !course.name().equals(id))
                 out.append("    name: ").append(scalar(course.name())).append('\n');
-            // Only when true: a loop is the exception, and `closed: false` on every other
-            // course is noise.
-            if (course.closed())
-                out.append("    closed: true\n");
+            // Written only when TRUE, like every other flag here: false is the default and
+            // the safe one, and a file full of `public: false` says nothing a reader needs.
+            if (course.isPublic())
+                out.append("    public: true\n");
             notes(out, course.notes(), 4);
-            out.append("    sequence:\n");
-            for (CourseStep step : course.sequence())
+
+            // A course with one plain variant is written FLAT, exactly as courses were
+            // written before variants existed — and reads back the same way. The level
+            // appears in the file only once it is being used for something, so the ordinary
+            // club course is not taxed with an empty layer of nesting to serve the rare one.
+            if (course.flat())
             {
-                if (step.isGate())
-                {
-                    out.append("      - gate:\n");
-                    for (CourseStep alternative : step.gate())
-                        out.append("          - ").append(stepInline(alternative)).append('\n');
-                    if (step.lengthNm() != null)
-                        out.append("        lengthNm: ").append(trim(step.lengthNm())).append('\n');
-                    if (step.entry())
-                        out.append("        entry: true\n");
-                    notes(out, step.notes(), 8);
-                }
-                else if (step.notes() != null && !step.notes().isBlank())
-                {
-                    out.append("      - line: ").append(step.line()).append('\n');
-                    out.append("        cross: ").append(sense(step)).append('\n');
-                    if (step.lengthNm() != null)
-                        out.append("        lengthNm: ").append(trim(step.lengthNm())).append('\n');
-                    if (step.entry())
-                        out.append("        entry: true\n");
-                    notes(out, step.notes(), 8);
-                }
-                else
-                {
-                    out.append("      - ").append(stepInline(step)).append('\n');
-                }
+                emitVariant(out, course.variants().get(CourseVariant.MAIN), 4);
+                return;
             }
+            // `{}`, not a bare key: a `variants:` with nothing under it reads back as NULL,
+            // which is the flat shape, which would put a phantom `main` on a course whose
+            // last variant was just deleted. An empty course must say so explicitly.
+            if (course.variants().isEmpty())
+            {
+                out.append("    variants: {}\n");
+                return;
+            }
+            out.append("    variants:\n");
+            course.variants().forEach((variantId, variant) ->
+            {
+                out.append("      ").append(key(variantId)).append(":\n");
+                if (variant.name() != null && !variant.name().equals(variantId))
+                    out.append("        name: ").append(scalar(variant.name())).append('\n');
+                // A template is editable and can never be snapshotted, so it can never be
+                // published and no boat can ever join it. One flag, and the rest follows.
+                if (variant.template())
+                    out.append("        template: true\n");
+                notes(out, variant.notes(), 8);
+                emitVariant(out, variant, 8);
+            });
         });
         return out.toString();
+    }
+
+    /** Everything a variant holds: whether it closes, its ad-hoc geometry, its sequence. */
+    private static void emitVariant(StringBuilder out, CourseVariant variant, int indent)
+    {
+        String pad = " ".repeat(indent);
+        // Only when true: a loop is the exception, and `closed: false` on every other course
+        // is noise.
+        if (variant.closed())
+            out.append(pad).append("closed: true\n");
+        // Ad-hoc geometry, which exists only inside this variant. Written before the
+        // sequence, because the sequence refers to it.
+        if (!variant.points().isEmpty())
+            out.append(emit(variant.points(), indent));
+        if (!variant.lines().isEmpty())
+            out.append(emitLines(variant.lines(), indent));
+        out.append(pad).append("sequence:\n");
+        String item = pad + "  - ";
+        String field = pad + "    ";
+        for (CourseStep step : variant.sequence())
+        {
+            if (step.isGate())
+            {
+                out.append(item).append("gate:\n");
+                for (CourseStep alternative : step.gate())
+                    out.append(field).append("    - ").append(stepInline(alternative)).append('\n');
+                if (step.lengthNm() != null)
+                    out.append(field).append("lengthNm: ").append(trim(step.lengthNm())).append('\n');
+                if (step.entry())
+                    out.append(field).append("entry: true\n");
+                notes(out, step.notes(), indent + 4);
+            }
+            else if (step.notes() != null && !step.notes().isBlank())
+            {
+                out.append(item).append("line: ").append(step.line()).append('\n');
+                out.append(field).append("cross: ").append(sense(step)).append('\n');
+                if (step.lengthNm() != null)
+                    out.append(field).append("lengthNm: ").append(trim(step.lengthNm())).append('\n');
+                if (step.entry())
+                    out.append(field).append("entry: true\n");
+                notes(out, step.notes(), indent + 4);
+            }
+            else
+            {
+                out.append(item).append(stepInline(step)).append('\n');
+            }
+        }
     }
 
     private static String stepInline(CourseStep step)
@@ -337,15 +401,22 @@ public final class ProgrammeWriter
     /** The {@code points:} block, in the house style. Always ends with a newline. */
     static String emit(Map<String, NamedPoint> points)
     {
-        StringBuilder out = new StringBuilder("points:\n");
+        return emit(points, 0);
+    }
+
+    /** The same block at an indent, for the ad-hoc points that live inside a variant. */
+    static String emit(Map<String, NamedPoint> points, int indent)
+    {
+        String pad = " ".repeat(indent);
+        StringBuilder out = new StringBuilder(pad).append("points:\n");
         points.forEach((id, point) ->
         {
-            out.append("  ").append(id).append(":\n");
+            out.append(pad).append("  ").append(key(id)).append(":\n");
             if (point.name() != null && !point.name().equals(id))
-                out.append("    name: ").append(scalar(point.name())).append('\n');
-            out.append("    latitude: ").append(number(point.latitude())).append('\n');
-            out.append("    longitude: ").append(number(point.longitude())).append('\n');
-            notes(out, point.notes(), 4);
+                out.append(pad).append("    name: ").append(scalar(point.name())).append('\n');
+            out.append(pad).append("    latitude: ").append(number(point.latitude())).append('\n');
+            out.append(pad).append("    longitude: ").append(number(point.longitude())).append('\n');
+            notes(out, point.notes(), indent + 4);
         });
         return out.toString();
     }
@@ -410,6 +481,105 @@ public final class ProgrammeWriter
     static String number(Double value)
     {
         return value == null ? "null" : String.format(Locale.ROOT, "%.6f", value);
+    }
+
+    /**
+     * A new, empty programme file.
+     *
+     * <p>Three things it must have. The three top-level blocks, because {@link #splice}
+     * replaces a block and cannot create one — a file without {@code courses:} could never
+     * be given a course. The banner comments, because <b>these files are documentation</b>
+     * and a club's first file starting with the explanation of what a port end is, is the
+     * whole reason they are spliced as text rather than serialised. And the path's own
+     * identity written into the header, so somebody reading the file knows why it is
+     * called what it is.
+     *
+     * <p>Arguments, in order: name, club, series.
+     */
+    static String skeleton(String name, String club, String series)
+    {
+        return ("""
+            # %s
+            #
+            # One file per club and series, and THE PATH IS THE IDENTITY: this file is filed
+            # under clubs/%s/ and named %s, so its club is "%s" and its series is "%s".
+            # Nothing here is resolved from any other file, so it can be read, diffed and
+            # handed to another club whole.
+
+            name: %s
+            datum: WGS84
+
+            # Detection tuning for this series. Every number is a default set against data
+            # that does not exist yet — they are configuration so they can be tuned against
+            # real logged tracks from these waters rather than argued about.
+            defaults:
+              confirmFixes: 3          # N in the 3-and-3 rule
+              accuracyBandM: null      # fixed half-width, or null to use each fix's accuracy
+              qc:
+                minSatellites: 4       # receiver-metadata pre-filter: necessary, not sufficient
+                maxAccuracyM: 25
+                maxSpeedKn: 40         # the kinematic gate — the primary defence against flyers
+
+            # ---------------------------------------------------------------------------------
+            # Points. Surveyed once and referred to by id, so a correction is one edit and two
+            # lines that meet at a mark stay together.
+            # ---------------------------------------------------------------------------------
+            points:
+
+            # ---------------------------------------------------------------------------------
+            # Lines. Two ends, named port and starboard: a FORWARD crossing leaves the port end
+            # to port and the starboard end to starboard, and a REVERSE crossing does the
+            # opposite. The names are relative to a forward crossing, so a line crossed both
+            # ways is forward once and reverse once.
+            #
+            # An end with `infinite: true` is a BEARING, NOT A PLACE: the line runs out through
+            # that point and keeps going, so the point says which way the line goes and not
+            # where it stops. That is why only a finite end can be missed.
+            # ---------------------------------------------------------------------------------
+            lines:
+
+            # ---------------------------------------------------------------------------------
+            # Courses. A sequence of steps; THE FIRST STEP IS THE START AND THE LAST IS THE
+            # FINISH, so there are no roles to write down and nothing that can disagree with the
+            # order. The letters on a course diagram (S, 1, 2, … F) are derived from position.
+            #
+            # A course with several designs writes them under `variants:`; one with a single
+            # design writes its `sequence:` directly.
+            # ---------------------------------------------------------------------------------
+            courses:
+            """).formatted(name, club, series, club, series, name);
+    }
+
+    /**
+     * Rewrite a copied file's {@code name:} so a clone is not called what its source was.
+     *
+     * <p>A targeted substitution rather than a round trip, for the reason everything here
+     * is: a clone exists to inherit the source's comments and folded notes, and a
+     * serialise-and-emit would throw away the thing being cloned for.
+     */
+    static String rename(String yaml, String name)
+    {
+        if (name == null || name.isBlank())
+            return yaml;
+        String line = "name: " + scalar(name);
+        return yaml.matches("(?s).*(?m)^name:.*")
+            ? yaml.replaceFirst("(?m)^name:.*$", java.util.regex.Matcher.quoteReplacement(line))
+            : line + "\n" + yaml;
+    }
+
+    /**
+     * An id, as the YAML mapping key it is written as.
+     *
+     * <p>A legal id is emitted bare, which is every id the editor can produce — so this
+     * changes not one byte of a file in normal use. An id somebody hand-edited into
+     * something illegal is <b>quoted</b> instead, because the alternative is worse than a
+     * bad id: an id carrying a colon or a leading indicator character does not round-trip
+     * as a bad key, it silently breaks the file on the next autosave. Reported by
+     * {@link org.mortbay.sailing.unmarkable.model.Ids}, survived here.
+     */
+    static String key(String id)
+    {
+        return Ids.scoped(id) ? id : scalar(id == null ? "" : id);
     }
 
     /** Quote only when the value would otherwise not survive the YAML round trip. */

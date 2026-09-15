@@ -13,6 +13,7 @@ import {
   BASEMAPS,
   MapView,
   bearingDeg,
+  centre,
   distanceM,
   formatPosition,
   invMercLat,
@@ -20,7 +21,9 @@ import {
   mercX,
   mercY,
   niceStep,
+  rotateAbout,
   snap,
+  translateBy,
   wheelZoomStep,
   ZOOM_EVENT_LIMIT,
 } from './geo.js';
@@ -247,3 +250,71 @@ export function runFraming(check) {
   tiny.fit([a, { ...a, latitude: a.latitude + 0.000001 }], 0.2);
   check('a near-zero line is still clamped to a sane zoom', tiny.zoom <= tiny.maxZoom);
 }
+
+/**
+ * Turning a course about a point.
+ *
+ * The trap this pins: rotating latitude and longitude directly squashes the shape, because
+ * a degree of longitude is shorter than a degree of latitude everywhere but the equator.
+ */
+export function runTransform(check) {
+  const about = { latitude: -33.8, longitude: 151.27 };
+  const k = Math.cos((about.latitude * Math.PI) / 180);
+
+  check('the centre is the middle of the extent, not the mean', (() => {
+    const c = centre([
+      { latitude: -33.9, longitude: 151.2 },
+      { latitude: -33.7, longitude: 151.4 },
+      { latitude: -33.7, longitude: 151.4 },
+    ]);
+    return Math.abs(c.latitude - -33.8) < 1e-12 && Math.abs(c.longitude - 151.3) < 1e-12;
+  })());
+
+  check('a full turn is the identity', (() => {
+    const p = { latitude: -33.7, longitude: 151.4 };
+    const back = rotateAbout(p, about, 360);
+    return Math.abs(back.latitude - p.latitude) < 1e-9
+      && Math.abs(back.longitude - p.longitude) < 1e-9;
+  })());
+
+  check('the centre itself does not move',
+    Math.abs(rotateAbout(about, about, 37).latitude - about.latitude) < 1e-12);
+
+  // Due north of the centre, turned 90° CLOCKWISE, must end up due east of it.
+  const north = { latitude: about.latitude + 0.05, longitude: about.longitude };
+  const east = rotateAbout(north, about, 90);
+  check('90 degrees clockwise takes north to east',
+    Math.abs(east.latitude - about.latitude) < 1e-9 && east.longitude > about.longitude);
+
+  // And at the SAME distance — which is the whole point of the metric frame.
+  check('...without squashing the shape',
+    Math.abs(distanceM(about, north) - distanceM(about, east)) <= 1);
+
+  check('a degree of longitude is the shorter one, so the frame scales it',
+    Math.abs((east.longitude - about.longitude) * k - 0.05) < 1e-9);
+
+  check('turning back undoes it', (() => {
+    const p = { latitude: -33.71, longitude: 151.33 };
+    const there = rotateAbout(p, about, 47);
+    const back = rotateAbout(there, about, -47);
+    return Math.abs(back.latitude - p.latitude) < 1e-9
+      && Math.abs(back.longitude - p.longitude) < 1e-9;
+  })());
+
+  check('a rotation keeps every distance between marks', (() => {
+    const a = { latitude: -33.75, longitude: 151.25 };
+    const b = { latitude: -33.85, longitude: 151.31 };
+    const before = distanceM(a, b);
+    const after = distanceM(rotateAbout(a, about, 123), rotateAbout(b, about, 123));
+    return Math.abs(before - after) <= 2;
+  })());
+
+  check('translation moves both ends by the same amount', (() => {
+    const a = translateBy({ latitude: -33.75, longitude: 151.25 }, 0.01, -0.02);
+    return Math.abs(a.latitude - -33.74) < 1e-12 && Math.abs(a.longitude - 151.23) < 1e-12;
+  })());
+
+  check('an unplaced position survives untouched',
+    rotateAbout({ latitude: null, longitude: null }, about, 90).latitude === null);
+}
+

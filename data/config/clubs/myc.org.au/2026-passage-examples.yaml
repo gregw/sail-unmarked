@@ -11,7 +11,7 @@
 # pretend it knows where Sow and Pigs is.
 # ---------------------------------------------------------------------------------
 
-name: Manly Cove circuit (example)
+name: Example passage courses
 datum: WGS84
 
 notes: >
@@ -44,106 +44,21 @@ points:
     longitude: 151.270799
     notes: >
       Shared fixed end of both Sow and Pigs lines.
-  sowpigs-east:
-    name: East of Sow and Pigs
-    latitude: -33.837451
-    longitude: 151.273570
-    notes: >
-      Sets the 090 bearing of sowpigs-east, and nothing else — the line runs through this
-      point and on forever, so sliding it along 090 leaves the line unchanged. Place it
-      where the fleet actually crosses: it is half of the midpoint that the legs either side
-      are measured to.
-  sowpigs-south:
-    name: South of Sow and Pigs
-    latitude: -33.838520
-    longitude: 151.270777
-    notes: >
-      Sets the 180 bearing of sowpigs-south. Same handle role as above.
   shark-island:
     name: Shark Island
     latitude: -33.858848
     longitude: 151.258084
-  shark-south:
-    name: South of Shark Island
-    latitude: -33.862127
-    longitude: 151.259995
-    notes: >
-      Sets the 180 bearing of shark-south. Shore-limited in practice.
-  manly-cove-w:
-    name: Manly Cove line, west end
-    latitude: -33.800629
-    longitude: 151.276867
-    notes: >
-      On shore. A finite end on the beach cannot be crossed near, so it cannot be argued
-      about.
-  manly-cove-e:
-    name: Manly Cove line, east end
-    latitude: -33.803009
-    longitude: 151.285449
-    notes: >
-      On shore.
-  obelisk-s:
-    name: Obelisk Bay line, starboard end
-    latitude: -33.831737
-    longitude: 151.263984
-  obelisk-p:
-    name: Obelisk Bay line, port end
-    latitude: -33.832815
-    longitude: 151.262993
-    notes: >
-      100 m from obelisk-n, parallel to the coast.
-  shark-west:
-    name: shark west passing
-    latitude: -33.858660
-    longitude: 151.253058
-  vaucluse-entry-p:
-    name: vaucluse-entry-port
-    latitude: -33.841448
-    longitude: 151.277510
-  vaucluse-entry-s:
-    name: vaucluse-entry-starboard
-    latitude: -33.841367
-    longitude: 151.273942
-  vaucluse-exit-p:
-    name: vaucluse-exit-port
-    latitude: -33.846011
-    longitude: 151.271325
-  vaucluse-exit-s:
-    name: vaucluse-exit-starboard
-    latitude: -33.844107
-    longitude: 151.269175
-  hunter-entry-p:
-    name: hunter-entry-port
-    latitude: -33.823078
-    longitude: 151.254793
-  hunter-entry-s:
-    name: hunter-entry-starboard
-    latitude: -33.822745
-    longitude: 151.257063
-  hunters-exit-p:
-    name: hunters-exit-port
-    latitude: -33.819889
-    longitude: 151.261319
-  hunters-exit-s:
-    name: hunters-exit-starboard
-    latitude: -33.821712
-    longitude: 151.261502
-  bombora-p:
-    name: bombora-port
+  bombora:
     latitude: -33.814463
     longitude: 151.273347
-  bombora-s:
-    name: bombora-starboard
-    latitude: -33.816170
-    longitude: 151.276536
-  middle-head-p:
-    name: middle-head-port
-    latitude: -33.825674
-    longitude: 151.266870
-  middle-head-s:
-    name: middle-head-starboard
-    latitude: -33.822170
-    longitude: 151.271936
+  middle-head:
+    name: middle head
+    latitude: -33.824928
+    longitude: 151.267575
+  steel-point:
+    name: Steel Point
+    latitude: -33.851518
+    longitude: 151.264877
 
 # ---------------------------------------------------------------------------------
 # Lines. Two ends, named port and starboard: a FORWARD crossing leaves the port end to
@@ -163,8 +78,8 @@ points:
 lines:
   manly-cove:
     name: Manly Cove start/finish line
-    port:      {at: manly-cove-e}
-    starboard: {at: manly-cove-w}
+    port:      {latitude: -33.803171, longitude: 151.280950}
+    starboard: {latitude: -33.802722, longitude: 151.277508}
     notes: >
       Runs 090/270 between two shore points, spanning the cove. Crossed southbound to start
       and northbound to finish. Both ends on shore, so there is no near-end crossing to
@@ -172,56 +87,56 @@ lines:
   sowpigs-east:
     name: Sow and Pigs, east
     port:      {at: sow-and-pigs}
-    starboard: {at: sowpigs-east, infinite: true}
+    starboard: {latitude: -33.837028, longitude: 151.273559, infinite: true}
     notes: >
       Half-infinite, running 090 from the reef. Required crossing southbound.
   shark-south:
     name: Shark Island, south
     port:      {at: shark-island}
-    starboard: {at: shark-south, infinite: true}
+    starboard: {latitude: -33.862127, longitude: 151.259995, infinite: true}
     notes: >
       Half-infinite, running 180 from the island; shore-limited in practice, which is why it
       can be infinite without being crossable at the far end. Crossed westbound.
   obelisk:
     name: Obelisk Bay line
-    port:      {at: obelisk-s}
-    starboard: {at: obelisk-p}
+    port:      {latitude: -33.835528, longitude: 151.260729}
+    starboard: {latitude: -33.829644, longitude: 151.263984}
     notes: >
       Finite, 100 m, parallel to the coast. Crossed northbound.
   sowpigs-south:
     name: Sow and Pigs, south
     port:      {at: sow-and-pigs}
-    starboard: {at: sowpigs-south, infinite: true}
+    starboard: {latitude: -33.838520, longitude: 151.270777, infinite: true}
     notes: >
       Half-infinite, running 180 from the same reef as sowpigs-east. The two lines share
       their finite end, which is why sow-and-pigs is a named point.
   shark-west:
     name: Shark west
-    port:      {at: shark-west, infinite: true}
+    port:      {latitude: -33.858660, longitude: 151.253058, infinite: true}
     starboard: {at: shark-island}
-  vaucluse-entry:
-    port:      {at: vaucluse-entry-p}
-    starboard: {at: vaucluse-entry-s}
-  vaucluse-exit:
-    name: Vaucluse Start / Finish line
-    port:      {at: vaucluse-exit-p}
-    starboard: {at: vaucluse-exit-s}
-  hunter-entry:
-    name: Hunters Bay entry
-    port:      {at: hunter-entry-p}
-    starboard: {at: hunter-entry-s}
-  hunters-exit:
-    name: Hunters Bay Start/Finish line
-    port:      {at: hunters-exit-p}
-    starboard: {at: hunters-exit-s}
+  vaucluse:
+    port:      {latitude: -33.847790, longitude: 151.269460}
+    starboard: {latitude: -33.841125, longitude: 151.277783}
+  grotto:
+    name: Grotto
+    port:      {latitude: -33.817652, longitude: 151.262347}
+    starboard: {latitude: -33.824596, longitude: 151.265287}
   bombora:
     name: Bombora passing
-    port:      {at: bombora-p}
-    starboard: {at: bombora-s, infinite: true}
+    port:      {at: bombora}
+    starboard: {latitude: -33.816933, longitude: 151.278725, infinite: true}
   middle-head:
     name: Middle Head passing
-    port:      {at: middle-head-p}
-    starboard: {at: middle-head-s, infinite: true}
+    port:      {at: middle-head}
+    starboard: {latitude: -33.824713, longitude: 151.273536, infinite: true}
+  steel-point:
+    name: Steel Point
+    port:      {at: steel-point}
+    starboard: {latitude: -33.849479, longitude: 151.260162, infinite: true}
+  hunters:
+    name: Hunters Bay
+    port:      {latitude: -33.826060, longitude: 151.257093}
+    starboard: {latitude: -33.818730, longitude: 151.253400}
 
 # ---------------------------------------------------------------------------------
 # Courses. A sequence of steps; THE FIRST STEP IS THE START AND THE LAST IS THE
@@ -239,43 +154,53 @@ courses:
     notes: >
       Crossing senses are inferred from the course order and are UNVERIFIED. Once the points
       are surveyed, check each one against the geometry before racing it.
-    sequence:
-      - line: manly-cove
-        cross: forward
-        notes: >
-          Start. Southbound out of the cove.
-      - line: sowpigs-east
-        cross: reverse
-        notes: >
-          Southbound.
-      - line: sowpigs-south
-        cross: reverse
-        notes: >
-          Eastbound.
-      - line: obelisk
-        cross: reverse
-        notes: >
-          Northbound.
-      - line: shark-south
-        cross: reverse
-        notes: >
-          Westbound.
-      - {line: shark-west, cross: forward}
-      - line: manly-cove
-        cross: reverse
-        notes: >
-          Finish. Northbound into the cove.
+    variants:
+      div-1:
+        name: Div 1
+        sequence:
+          - line: manly-cove
+            cross: forward
+            notes: >
+              Start. Southbound out of the cove.
+          - line: sowpigs-east
+            cross: reverse
+            notes: >
+              Southbound.
+          - line: sowpigs-south
+            cross: reverse
+            notes: >
+              Eastbound.
+          - line: obelisk
+            cross: reverse
+            notes: >
+              Northbound.
+          - {line: sowpigs-east, cross: reverse}
+          - line: shark-south
+            cross: reverse
+            notes: >
+              Westbound.
+          - {line: shark-west, cross: forward}
+          - line: manly-cove
+            cross: reverse
+            notes: >
+              Finish. Northbound into the cove.
   harbour-cycle:
     name: Sydney Harbour Cycle
-    closed: true
-    sequence:
-      - {line: manly-cove, cross: forward, entry: true}
-      - {line: vaucluse-entry, cross: forward}
-      - {line: vaucluse-exit, cross: forward, entry: true}
-      - {line: shark-south, cross: reverse}
-      - {line: shark-west, cross: forward, entry: true}
-      - {line: middle-head, cross: forward}
-      - {line: hunter-entry, cross: forward}
-      - {line: hunters-exit, cross: forward, entry: true}
-      - {line: bombora, cross: forward}
-      - {line: manly-cove, cross: reverse}
+    public: true
+    variants:
+      all-boats-circuit:
+        name: All boats circuit
+        closed: true
+        sequence:
+          - {line: manly-cove, cross: forward, entry: true}
+          - {line: middle-head, cross: reverse}
+          - {line: obelisk, cross: reverse}
+          - {line: steel-point, cross: forward}
+          - {line: shark-south, cross: reverse}
+          - {line: shark-west, cross: forward, entry: true}
+          - {line: steel-point, cross: reverse}
+          - {line: vaucluse, cross: forward, entry: true}
+          - {line: middle-head, cross: forward}
+          - {line: hunters, cross: reverse}
+          - {line: grotto, cross: forward, entry: true}
+          - {line: bombora, cross: forward}

@@ -16,6 +16,7 @@ import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.server.Slf4jRequestLogWriter;
 import org.mortbay.sailing.unmarkable.config.UnmarkableConfig;
 import org.mortbay.sailing.unmarkable.course.ProgrammeLibrary;
+import org.mortbay.sailing.unmarkable.store.CourseLedger;
 import org.mortbay.sailing.unmarkable.store.JsonStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -95,6 +96,8 @@ public class UnmarkableServer
 
         JsonStore store = new JsonStore(dataRoot);
         store.start();
+        CourseLedger ledger = new CourseLedger(dataRoot);
+        ledger.start();
 
         String version = version();
 
@@ -117,7 +120,7 @@ public class UnmarkableServer
 
         ServletContextHandler context = new ServletContextHandler("/");
         context.addServlet(new ServletHolder(
-            new ApiServlet(config, programmes, store, version)), "/api/*");
+            new ApiServlet(config, programmes, store, ledger, version)), "/api/*");
         context.addServlet(new ServletHolder(new StaticResourceServlet()), "/*");
         server.setHandler(context);
         server.start();

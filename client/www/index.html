@@ -12,20 +12,44 @@
 <h1>Sail racing around virtual marks</h1>
 
 <div class="panel">
-  <p class="muted">
-    <strong>Scaffold.</strong> This page proves the server serves the client and that the
-    programme endpoints answer. The Mark, Course and Live Place screens described in
-    <span class="mono">wiki/unmarkable-racing-brief.html</span> &sect;3 are not built yet.
-  </p>
-  <p class="muted" style="margin-top:8px">
-    The crossing detector, which is the part that decides a race, <em>is</em> built and
-    specified &mdash; <a href="crossing-test.html">run its spec</a>, or the
-    <a href="geo-test.html">geo spec</a> behind the chart.
+  <p style="margin-top:2px">
+    <a href="editor.html"><strong>Course editor</strong></a> &mdash; author points, lines
+    and courses against a chart, snapshot them, and publish what a fleet is handed.
   </p>
   <p style="margin-top:8px">
-    <a href="editor.html"><strong>Course editor</strong></a> &mdash; place points on a
-    chart and export them as YAML.
+    <a href="client.html"><strong>Prototype client</strong></a> &mdash; a simulated boat on
+    one side, the boat's own screens on the other. Steer it at a line by clicking the chart
+    and watch the Mark screen take over by itself as it closes. Nothing passes between the
+    two panels but a GPS fix, which is the whole point of it.
   </p>
+  <p class="muted" style="margin-top:10px">
+    <strong>Still a scaffold.</strong> The Course and Live Place screens described in
+    <span class="mono">wiki/unmarkable-racing-brief.html</span> &sect;3 are not built, and
+    nothing here posts a record yet. The crossing detector, which is the part that decides
+    a race, <em>is</em> built and specified.
+  </p>
+  <p class="muted" style="margin-top:6px">
+    Run the specs in a browser:
+    <a href="crossing-test.html">crossing</a> &middot;
+    <a href="raceclient-test.html">race client</a> &middot;
+    <a href="markscreen-test.html">mark screen</a> &middot;
+    <a href="boatsim-test.html">boat simulator</a> &middot;
+    <a href="coursedraw-test.html">course drawing</a> &middot;
+    <a href="geo-test.html">geo</a>
+  </p>
+</div>
+
+<h2>Courses</h2>
+<div id="public" class="panel"><span class="muted">Loading&hellip;</span></div>
+
+<h2>What changed, and when</h2>
+<div class="panel">
+  <p class="muted" style="font-size:12px; margin-bottom:8px">
+    Every moment a course became joinable or stopped being joinable. Open to everybody on
+    purpose: what a fleet was handed and when is exactly what a competitor may need to check
+    afterwards, and a record only the club can read is not an audit trail.
+  </p>
+  <div id="log"><span class="muted">Loading&hellip;</span></div>
 </div>
 
 <h2>Programmes</h2>
@@ -54,6 +78,69 @@ try {
   el('server').innerHTML = `<span class="warn">${e.message}</span>`;
 }
 
+/* The server already says what is wrong with a file, one sentence per problem. The page
+   used to print the COUNT beside a guess at the cause ("positions not yet supplied"),
+   which was wrong as soon as anything else went wrong — and read as an accusation against
+   whichever course happened to be last in the list above it. */
+const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;' };
+const esc = (v) => String(v ?? '').replace(/[&<>]/g, (c) => ESC[c]);
+const when = (iso) => String(iso ?? '').replace('T', ' ').slice(0, 16);
+
+/* WHAT THE PUBLIC SEES, and the only thing on this page that is an offer rather than a
+   status report. Two gates, both required and both meant: the course carries `public`, and
+   the variant has a live publication. A public course with nothing published shows with
+   nothing under it — it is a course nobody can join yet, and saying so is better than
+   hiding it, because the club that ticked the box is the one reading this page. */
+try {
+  const courses = await json('/api/public');
+  el('public').innerHTML = courses.length === 0
+    ? '<span class="muted">No public courses. Tick <strong>public</strong> on a course in '
+      + 'the <a href="editor.html">editor</a> to list it here.</span>'
+    : courses.map((c) => `
+        <div style="margin-bottom:14px">
+          <div><strong>${esc(c.name || c.course)}</strong>
+            <span class="mono muted" style="font-size:11px">${esc(c.club)} / ${esc(c.series)} / ${esc(c.course)}</span></div>
+          ${c.notes ? `<div class="muted" style="font-size:12px">${esc(c.notes)}</div>` : ''}
+          ${c.published.length === 0
+            ? '<div class="muted mono" style="font-size:11px">nothing published &mdash; not joinable yet</div>'
+            : `<ul class="mono" style="font-size:12px">${c.published.map((p) => `
+                <li>${esc(p.variant)}${p.name && p.name !== p.variant ? ` &middot; ${esc(p.name)}` : ''}
+                  &mdash; <span class="muted">${esc(p.revision)}</span>
+                  ${p.lengthNm == null ? '' : ` &middot; ${p.lengthNm.toFixed(2)} nm`}
+                  ${p.steps == null ? '' : ` &middot; ${p.steps} marks`}
+                  ${p.closed ? ' &middot; cycle' : ''}
+                  ${p.publishedFrom ? ` &middot; <span class="muted">since ${esc(when(p.publishedFrom))}</span>` : ''}
+                </li>`).join('')}</ul>`}
+        </div>`).join('');
+} catch (e) {
+  el('public').innerHTML = `<span class="warn">${esc(e.message)}</span>`;
+}
+
+/* The audit trail. Newest first, because the question is almost always "what changed?"
+   rather than "how did we get here?". */
+const SAID = {
+  published: ['ok', 'published'],
+  opened: ['ok', 'made public'],
+  withdrawn: ['warn', 'withdrawn'],
+  closed: ['warn', 'made private'],
+};
+try {
+  const events = await json('/api/log');
+  el('log').innerHTML = events.length === 0
+    ? '<span class="muted">Nothing has been published to a public course yet.</span>'
+    : `<table class="mono" style="font-size:12px; border-collapse:collapse">${events.map((e) => {
+        const [cls, said] = SAID[e.what] ?? ['muted', e.what];
+        return `<tr>
+          <td class="muted" style="padding:2px 10px 2px 0; white-space:nowrap">${esc(when(e.at))}</td>
+          <td class="${cls}" style="padding:2px 10px 2px 0; white-space:nowrap">${esc(said)}</td>
+          <td style="padding:2px 10px 2px 0">${esc(e.club)} / ${esc(e.series)} / ${esc(e.course)} / ${esc(e.variant)}</td>
+          <td class="muted" style="padding:2px 0">${esc(e.revision ?? '')}</td>
+        </tr>`;
+      }).join('')}</table>`;
+} catch (e) {
+  el('log').innerHTML = `<span class="warn">${esc(e.message)}</span>`;
+}
+
 try {
   const programmes = await json('/api/programmes');
   el('programmes').innerHTML = programmes.length === 0
@@ -64,7 +151,8 @@ try {
           <div>${p.name}</div>
           <ul class="muted">${[...p.courses].map((c) => `<li>&middot; ${c}</li>`).join('')}</ul>
           ${p.problems.length
-            ? `<div class="warn mono" style="font-size:11px">${p.problems.length} problem(s) &mdash; positions not yet supplied</div>`
+            ? `<ul class="warn mono" style="font-size:11px">${p.problems
+                .map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`
             : ''}
         </div>`).join('');
 } catch (e) {

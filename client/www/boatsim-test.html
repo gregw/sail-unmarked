@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Boat simulator spec</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<p class="kicker">Executable specification</p>
+<h1>Boat simulator</h1>
+<p class="muted">The test rig's own spec. An instrument that is quietly wrong is worse than no instrument, because every result taken with it is wrong in a way nobody is looking for.</p>
+<p class="muted">
+  The same assertions <span class="mono">tools/run-js-tests.mjs</span> runs in the
+  Maven build, imported from <span class="mono">boatsim-test.js</span> rather than copied,
+  so the page and the build cannot disagree.
+</p>
+
+<div id="summary" class="panel mono">Running&hellip;</div>
+<div id="results" class="panel"></div>
+
+<script type="module">
+import { run } from './boatsim-test.js';
+
+const results = [];
+run((description, ok) => results.push({ description, ok }));
+
+const failed = results.filter((r) => !r.ok);
+document.getElementById('summary').innerHTML = failed.length === 0
+  ? `<span class="ok">${results.length} passed</span>`
+  : `<span class="warn">${failed.length} of ${results.length} FAILED</span>`;
+
+document.getElementById('results').innerHTML =
+  `<ul>${results.map((r) =>
+    `<li class="${r.ok ? 'muted' : 'warn'}">${r.ok ? '&check;' : '&cross;'} ${r.description}</li>`
+  ).join('')}</ul>`;
+</script>
+
+</body>
+</html>

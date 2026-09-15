@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.mortbay.sailing.unmarkable.model.Course;
+import org.mortbay.sailing.unmarkable.model.Ids;
 import org.mortbay.sailing.unmarkable.model.Line;
 import org.mortbay.sailing.unmarkable.model.NamedPoint;
 import org.mortbay.sailing.unmarkable.model.Programme;
@@ -136,13 +137,17 @@ public class ProgrammeLibrary
     }
 
     /**
-     * Replace one programme's points on disk, then reload.
+     * Replace one programme's blocks on disk, then reload.
      *
-     * <p>The file is found by looking the programme up rather than by building a path
-     * from the club and series, and that is the access control: the club and series come
-     * off a URL, so a constructed path would be a request to write wherever the caller
-     * liked. A programme that is not already loaded cannot be written, which means this
-     * can neither create a file nor escape the config tree.
+     * <p>The file is found by <b>looking the programme up</b> rather than by building a
+     * path from the club and series, and that is deliberate: the club and series come off
+     * a URL, so a constructed path would be a request to write wherever the caller liked.
+     * A programme that is not already loaded cannot be written by this method.
+     *
+     * <p>That used to be the whole of the access control here. {@link #create} now does
+     * build a path, because creating a file cannot do otherwise — so the guard has moved
+     * rather than gone: see {@link #resolve}, which validates the ids through
+     * {@link Ids} and then checks the resolved path is inside the config tree anyway.
      *
      * <p>Reloading afterwards is not a nicety. The library is the read model for every
      * GET, so skipping it would leave the server serving the previous points until the
@@ -159,6 +164,143 @@ public class ProgrammeLibrary
         LOG.info("Wrote {} point(s), {} line(s) and {} course(s) to {}",
             points == null ? "no" : points.size(), lines == null ? "no" : lines.size(),
             courses == null ? "no" : courses.size(), file);
+        load();
+    }
+
+    /* ------------------------------------------------------ the series itself */
+
+    /**
+     * Where a programme file goes, having checked that it may go there.
+     *
+     * <p>This is the one place a user-supplied string becomes a new path, so it is the one
+     * place an id is <b>refused</b> rather than reported. Two guards, because the second
+     * does not depend on the first being perfect:
+     *
+     * <ol>
+     *   <li>{@link Ids} admits no {@code /}, no {@code ..}, no leading {@code .} and no
+     *       separator of any kind in a series, and only dots between tokens in a club —
+     *       which is exactly the set that could climb out of the tree.</li>
+     *   <li>The resolved path is normalised and checked to still be under
+     *       {@code clubs/}. Cheap, and it catches whatever the first guard did not.</li>
+     * </ol>
+     *
+     * @throws IllegalArgumentException with a sentence for the caller to show, which the
+     *         servlet turns into a 400
+     */
+    Path resolve(String club, String series)
+    {
+        String bad = Ids.problem("club", club, Ids.DOMAIN);
+        if (bad == null)
+            bad = Ids.problem("series", series, Ids.PLAIN);
+        if (bad != null)
+            throw new IllegalArgumentException(bad);
+
+        Path root = clubsDir.toAbsolutePath().normalize();
+        Path file = root.resolve(club).resolve(series + ".yaml").normalize();
+        if (!file.startsWith(root))
+            throw new IllegalArgumentException("'" + club + "/" + series + "' is outside the config tree");
+        return file;
+    }
+
+    /**
+     * Create a programme, empty or as a copy of another.
+     *
+     * <p><b>A clone is a byte copy.</b> That is the whole point of it: a club starting next
+     * summer from last summer's file wants its banner comments, its folded notes and its
+     * explanation of what a port end is, and reading the source into a {@link Programme}
+     * and writing it out again would throw away every one of them — comments are not data.
+     * Only the {@code name:} line is rewritten, textually, so the copy is not called what
+     * its source was.
+     */
+    public Programme create(String club, String series, String name, String cloneFrom)
+        throws IOException
+    {
+        Path file = resolve(club, series);
+        if (Files.exists(file))
+            throw new IOException("'" + key(club, series) + "' already exists");
+
+        String content;
+        if (cloneFrom == null || cloneFrom.isBlank())
+        {
+            content = ProgrammeWriter.skeleton(
+                (name == null || name.isBlank()) ? series : name, club, series);
+        }
+        else
+        {
+            // The SOURCE is looked up, not path-built — a clone may only copy a programme
+            // the server already has, which is the guard `save` relies on too.
+            Path source = files.get(cloneFrom);
+            if (source == null)
+                throw new IOException("No such programme to clone: " + cloneFrom);
+            content = ProgrammeWriter.rename(Files.readString(source, java.nio.charset.StandardCharsets.UTF_8), name);
+        }
+
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, content, java.nio.charset.StandardCharsets.UTF_8);
+        LOG.info("Created programme {} ({})", key(club, series),
+            cloneFrom == null ? "empty" : "cloned from " + cloneFrom);
+        load();
+        return programmes.get(key(club, series));
+    }
+
+    /**
+     * Rename a series, which is renaming its file.
+     *
+     * <p>Only the series: a <b>club is a domain and does not change</b>, and if one really
+     * did it would be a migration across every record path and the ledger's own filename,
+     * not a button in an editor.
+     *
+     * <p>The caller must migrate the ledger, whose publication keys embed the series. This
+     * method returns only when the file has moved, so the ledger write can follow it.
+     */
+    public void rename(String club, String series, String newSeries) throws IOException
+    {
+        Path file = files.get(key(club, series));
+        if (file == null)
+            throw new IOException("No such programme: " + key(club, series));
+        if (newSeries.equals(series))
+            return;
+        Path target = resolve(club, newSeries);
+        if (Files.exists(target))
+            throw new IOException("'" + key(club, newSeries) + "' already exists");
+        Files.move(file, target);
+        LOG.info("Renamed programme {} to {}", key(club, series), key(club, newSeries));
+        load();
+    }
+
+    /**
+     * Change a programme's display name, which is one line of its file.
+     *
+     * <p>A targeted substitution, for the reason every write here is one: the file is
+     * documentation, and reading it into a {@link Programme} to change a name would throw
+     * away every comment in it.
+     */
+    public void setName(String club, String series, String name) throws IOException
+    {
+        Path file = files.get(key(club, series));
+        if (file == null)
+            throw new IOException("No such programme: " + key(club, series));
+        String yaml = Files.readString(file, java.nio.charset.StandardCharsets.UTF_8);
+        Files.writeString(file, ProgrammeWriter.rename(yaml, name),
+            java.nio.charset.StandardCharsets.UTF_8);
+        load();
+    }
+
+    /**
+     * Delete a programme file.
+     *
+     * <p>Its <b>snapshots are not deleted</b>, here or anywhere: a record names a revision,
+     * and a record whose geometry cannot be retrieved is a time with no course attached.
+     * Retiring a series is not a reason to make last season's results unreadable. The
+     * ledger's entries simply stop being compared against anything.
+     */
+    public void delete(String club, String series) throws IOException
+    {
+        Path file = files.get(key(club, series));
+        if (file == null)
+            throw new IOException("No such programme: " + key(club, series));
+        Files.delete(file);
+        LOG.info("Deleted programme {} — its snapshots are kept", key(club, series));
         load();
     }
 

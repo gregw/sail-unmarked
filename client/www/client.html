@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Prototype client &middot; Unmarkable Racing</title>
+<link rel="stylesheet" href="style.css">
+<style>
+/*
+ * Two panels, and the split between them is the point of the page.
+ *
+ * LEFT is the test rig: a chart, a boat that goes where it is told, and the knobs that
+ * decide what its receiver reports. RIGHT is the client, which is the thing that would
+ * ship. Nothing crosses between them but a fix, so the rig can be as elaborate as it
+ * likes without any of it leaking into the boat.
+ */
+body { padding: 0; height: 100vh; overflow: hidden; }
+
+.split {
+  display: grid;
+  grid-template-columns: 1fr 400px;
+  height: 100vh;
+}
+
+/* ------------------------------------------------------------------ the rig */
+
+.rig { display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--panel2); }
+
+.rigbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--panel2);
+}
+.rigbar .sp { flex: 1; }
+.rigbar h1 { font-size: 17px; }
+
+/*
+ * No system cursor: the chart draws its own, which is far more visible on dark water and can
+ * say what the click will do. The grab cursor stays for the drag, where there is no reticle
+ * because nothing is being aimed at.
+ */
+#rig { flex: 1; min-height: 0; width: 100%; display: block; background: var(--sea); cursor: none; }
+#rig.dragging { cursor: grabbing; }
+
+.knobs {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 4px 18px;
+  padding: 10px 12px; background: var(--panel); border-top: 1px solid var(--panel2);
+}
+.knob { display: flex; align-items: center; gap: 8px; }
+.knob label {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--muted); width: 74px; flex: none;
+}
+.knob input[type=range] { flex: 1; min-width: 60px; accent-color: var(--line); }
+.knob .v { font-family: var(--mono); font-size: 12px; width: 62px; text-align: right; flex: none; }
+
+/* -------------------------------------------------------------- the client */
+
+/*
+ * Deliberately narrow and its own scrolling surface: this is a phone in a bracket on a
+ * tiller, not a desktop window, and a prototype shown wider than the thing it prototypes
+ * flatters itself about how much will fit.
+ */
+.device { display: flex; flex-direction: column; min-height: 0; background: var(--sea); overflow-y: auto; }
+
+.device .bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; border-bottom: 1px solid var(--panel2); font-size: 12px;
+}
+.device .bar .sp { flex: 1; }
+.device .bar .disp { font-family: var(--disp); font-size: 16px; letter-spacing: 0.03em; }
+
+.orient { display: flex; gap: 0; padding: 6px 12px 0; }
+.orient button {
+  flex: 1; background: none; border: 1px solid var(--panel2); color: var(--muted);
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase;
+  padding: 5px 2px; cursor: pointer;
+}
+.orient button.on { color: var(--ink); border-color: var(--line); background: var(--panel2); }
+
+/*
+ * The top arrow carries the state, so its colour is not decoration: grey outline while
+ * approaching, solid green the instant a crossing latches, bold red outline on a miss.
+ */
+.leg {
+  display: flex; align-items: center; gap: 8px; margin: 8px 12px;
+  padding: 6px 10px; border: 2px solid var(--muted); border-radius: 5px; color: var(--muted);
+}
+.leg .disp { font-family: var(--disp); font-size: 17px; font-weight: 600; letter-spacing: 0.08em; }
+.leg .mono { margin-left: auto; font-size: 15px; }
+.leg.crossed { border-color: var(--ok); background: var(--ok); color: var(--sea); }
+.leg.missed { border-color: var(--warn); color: var(--warn); border-width: 3px; }
+
+.plot { display: block; width: 100%; height: auto; background: var(--sea); }
+
+.device .readout { padding: 6px 12px; gap: 12px; }
+.device .readout .value { font-size: 26px; }
+
+/*
+ * The two numbers the course screen exists to give: which way, and how far. Big enough to be
+ * glanced at from the tiller rather than read.
+ */
+.steer { display: flex; gap: 26px; padding: 8px 12px 2px; }
+.steer .label {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--muted);
+}
+.steer .value { font-family: var(--disp); font-size: 46px; font-weight: 600; line-height: 1; }
+.steer .unit { font-size: 15px; color: var(--muted); margin-left: 3px; }
+.steer.stale .value { opacity: 0.45; }
+
+/*
+ * TIME TO LINE. The largest thing on the approach screen, because it is the one number being
+ * steered to — and its COLOUR is the warning: green crosses the line, red runs out past the
+ * end of it.
+ */
+.ttl {
+  display: flex; align-items: baseline; gap: 10px;
+  margin: 6px 12px 2px; padding: 4px 12px;
+  border-left: 4px solid currentColor;
+}
+.ttl .label {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.2em;
+  text-transform: uppercase; opacity: 0.75;
+}
+.ttl .value { font-family: var(--disp); font-size: 62px; font-weight: 700; line-height: 0.95; }
+.ttl .unit { font-family: var(--mono); font-size: 16px; opacity: 0.75; }
+.ttl.ok { color: var(--ok); }
+.ttl.missing { color: var(--warn); }
+
+/*
+ * What the boat is steering at, on its own row rather than in a readout cell: a line id may
+ * be scoped (`manly-to-shark/windward`) and is far too long for a cell built for a number.
+ */
+.wpt {
+  display: flex; align-items: baseline; gap: 8px;
+  margin: 8px 12px 0; padding: 5px 10px;
+  border: 1px solid var(--panel2); border-left: 3px solid var(--line); border-radius: 4px;
+}
+.wpt .letter {
+  font-family: var(--disp); font-size: 19px; font-weight: 700; color: var(--line);
+  min-width: 16px; text-align: center;
+}
+.wpt .name { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wpt .gate {
+  margin-left: auto; font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase;
+}
+
+/*
+ * Stale readouts are dimmed rather than hidden. The numbers are the last that were true and
+ * are still worth something for position; what must not happen is their looking as current
+ * as the ones beside them.
+ */
+.readout.stale .value { opacity: 0.45; }
+/* A finished run is a result, not a reading: the clock has stopped and says so. */
+.readout.done .value { color: var(--ok); }
+.readout.done .label { color: var(--ok); opacity: 0.8; }
+
+.signal {
+  margin: 0 12px 8px; padding: 4px 8px; font-size: 12px;
+  border-left: 3px solid var(--warn); background: var(--panel);
+}
+
+.status { padding: 4px 12px 10px; font-size: 12.5px; color: var(--muted); }
+.status.crossed { color: var(--ok); }
+.status.missed { color: var(--warn); }
+
+.crossings { padding: 0 12px 12px; font-size: 11px; }
+.crossings li { padding: 1px 0; color: var(--muted); }
+
+/* ------------------------------------------------------------- the join screen */
+
+.join { padding: 14px 12px; }
+.join h2 { margin: 14px 0 6px; font-size: 15px; color: var(--ink); }
+.join h2:first-child { margin-top: 0; }
+.join label {
+  display: block; font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--muted); margin: 8px 0 3px;
+}
+.join input, .join select {
+  width: 100%; background: var(--panel2); color: var(--ink); font-family: var(--body);
+  font-size: 14px; border: 1px solid var(--panel2); border-radius: 4px; padding: 6px 8px;
+}
+.join input:focus, .join select:focus { outline: none; border-color: var(--line); }
+.join .pair { display: grid; grid-template-columns: 40% 60%; gap: 8px; }
+
+button.go {
+  width: 100%; margin-top: 14px; padding: 10px; border: none; border-radius: 5px;
+  background: var(--line); color: var(--sea); font-family: var(--disp); font-size: 17px;
+  font-weight: 600; letter-spacing: 0.06em; cursor: pointer;
+}
+button.go:disabled { background: var(--panel2); color: var(--muted); cursor: not-allowed; }
+
+button.plain {
+  background: var(--panel2); color: var(--ink); border: 1px solid var(--panel2);
+  border-radius: 4px; padding: 5px 10px; font-family: var(--body); font-size: 13px; cursor: pointer;
+}
+button.plain:hover { border-color: var(--line); }
+button.plain.on { border-color: var(--ok); color: var(--ok); }
+
+select.basemap {
+  background: var(--panel2); color: var(--ink); border: 1px solid var(--panel2);
+  border-radius: 4px; padding: 4px 6px; font-size: 12px;
+}
+
+/*
+ * The audit trail, which is the reason the receiver is allowed to lie at all: every fix,
+ * the decision made about it, and why. Newest first, because that is the one being asked
+ * about.
+ */
+.trail { font-family: var(--mono); font-size: 10.5px; max-height: 92px; overflow-y: auto; }
+.trail div { padding: 1px 0; color: var(--muted); white-space: nowrap; }
+.trail div.bad { color: var(--warn); }
+
+@media (max-width: 860px) {
+  .split { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
+  .device { border-top: 1px solid var(--panel2); }
+}
+</style>
+</head>
+<body>
+
+<div class="split">
+
+  <div class="rig">
+    <div class="rigbar">
+      <span class="kicker">Test rig</span>
+      <button class="plain" id="run">Start</button>
+      <button class="plain" id="place">Place boat</button>
+      <span class="sp"></span>
+      <span class="mono" id="truth" style="font-size:11px; color:var(--muted)"></span>
+      <select class="basemap" id="basemap"></select>
+      <a href="index.html" style="font-size:12px">&larr; home</a>
+    </div>
+
+    <svg id="rig" xmlns="http://www.w3.org/2000/svg"></svg>
+
+    <div class="knobs">
+      <div class="knob"><label for="speed">Speed</label>
+        <input type="range" id="speed" min="0" max="20" step="0.5" value="6">
+        <span class="v" id="speed_v">6.0 kn</span></div>
+      <div class="knob"><label for="hz">Fix rate</label>
+        <input type="range" id="hz" min="0.2" max="5" step="0.2" value="1">
+        <span class="v" id="hz_v">1.0 Hz</span></div>
+      <div class="knob"><label for="noise">GPS noise</label>
+        <input type="range" id="noise" min="0" max="25" step="1" value="3">
+        <span class="v" id="noise_v">3 m</span></div>
+      <div class="knob"><label for="flyer">Flyers</label>
+        <input type="range" id="flyer" min="0" max="20" step="1" value="0">
+        <span class="v" id="flyer_v">0 %</span></div>
+      <div class="knob" style="grid-column:1/-1"><label>Fixes</label>
+        <div class="trail" id="trail" style="flex:1"><span class="muted">Not started.</span></div></div>
+    </div>
+  </div>
+
+  <div class="device" id="device"></div>
+
+</div>
+
+<script type="module" src="client.js"></script>
+
+</body>
+</html>

@@ -12,7 +12,14 @@
 
 import {
   CrossingDetector,
+  NOISE_SIGMAS,
   RESOLUTION_M,
+  RelocationWatch,
+  SIDE_BAND_M,
+  confirmedSide,
+  impliedKnots,
+  kinematicBudgetM,
+  plausible,
   alongM,
   intersect,
   prepareLine,
@@ -108,11 +115,37 @@ export function run(check) {
   const p = toLocal(ORIGIN, at(1000, 37));
   check('an infinite end\'s point does not change the line', Math.abs(signedDistanceM(shortHandle, p) - signedDistanceM(longHandle, p)) < 0.5);
 
-  // --------------------------------------------------------- the accuracy band
-  check('well clear of the line resolves to a side', side(line, toLocal(ORIGIN, at(0, 40)), 5, 10) === 1);
-  check('inside the band resolves to neither side', side(line, toLocal(ORIGIN, at(0, 4)), 5, 10) === 0);
-  check('a null band falls back to the fix\'s own accuracy', side(line, toLocal(ORIGIN, at(0, 4)), 25, null) === 0);
-  check('...and that same fix resolves when the receiver claims better', side(line, toLocal(ORIGIN, at(0, 4)), 1, null) === 1);
+  // ------------------------------- which side it is ON, and which side it CONFIRMS
+  //
+  // Two questions that used to share one band, and sharing it made the plot unreadable: with
+  // the band set to the fix's own accuracy, a boat crossing at nine knots under a two-metre
+  // sky spends a second inside it and the picture of the crossing came out as a run of grey.
+  const near = (metres) => toLocal(ORIGIN, at(0, metres));
+
+  check('a fix is on a side once it is clear of the metre this system resolves to',
+    side(line, near(0.6)) === 1 && side(line, near(-0.6)) === -1);
+  check('...and is too close to call inside it, which is all zero may mean here',
+    side(line, near(0.4)) === 0 && side(line, near(-0.4)) === 0);
+  // And the consequence, which is neater than it looks: perpendicular distance is resolved to
+  // the metre BEFORE the band is applied, so at half a metre the band admits exactly one
+  // value — zero. "Too close to call" is therefore not a tunable width at all, it is "this
+  // fix rounded onto the line", which is the only thing a one-metre system can mean by it.
+  check('the band is half the system resolution, not a number of its own',
+    SIDE_BAND_M === RESOLUTION_M / 2);
+  check('...so the only fix it cannot call is one that rounds onto the line itself',
+    side(line, near(0.49)) === 0 && side(line, near(0.51)) === 1);
+  check('...and two metres out is plainly on a side, whatever the receiver claims',
+    side(line, near(2)) === 1);
+
+  // Confirmation is the stricter question, and it is the one the latch counts: a fix two
+  // metres out from a receiver claiming two metres is on a side but is not EVIDENCE of one.
+  check('a fix inside the receiver\'s own stated error confirms nothing',
+    confirmedSide(line, near(2), 5, null) === 0);
+  check('...though it is perfectly well on a side', side(line, near(2)) === 1);
+  check('...and the same fix confirms once the receiver claims better',
+    confirmedSide(line, near(2), 1, null) === 1);
+  check('a declared band overrides the fix\'s claim, in both directions',
+    confirmedSide(line, near(4), 1, 10) === 0 && confirmedSide(line, near(4), 25, 2) === 1);
 
   // ------------------------------------------------- resolution and the COG warning
   // One metre, declared once, for the whole system. A scoring edge that moves with the
@@ -215,4 +248,60 @@ export function run(check) {
   runTrack(latchedThenBack, [[0, -40], [0, -30], [0, -20], [0, 10], [0, 20], [0, 30], [0, -30], [0, -40], [0, -50]]);
   check('a crossing that has latched stands', latchedThenBack.latched !== null);
   check('...and the Mark screen still reads "crossed"', latchedThenBack.status(toLocal(ORIGIN, at(0, -50))).state === 'crossed');
+
+  /* ------------------------------------ the gate must not fire on NOISE, only on motion */
+
+  const twoFixes = (metresApart, seconds, accuracyM) => [
+    { ...at(0, 0), time: new Date(0), accuracyM, satellites: 12 },
+    { ...at(metresApart, 0), time: new Date(seconds * 1000), accuracyM, satellites: 12 },
+  ];
+
+  // At 5 Hz, two fixes each honest to three metres can easily be twelve apart on scatter
+  // alone — which is an implied 117 knots. Judged on speed alone the gate would throw away
+  // a boat ambling along under a clear sky, which is the failure it exists to prevent
+  // applied to exactly the wrong thing.
+  const [slowA, slowB] = twoFixes(12, 0.2, 3);
+  check('two fixes twelve metres apart in a fifth of a second imply an absurd speed',
+    impliedKnots(slowA, slowB) > 100);
+  check('...but that is the receiver, not the boat, so the gate lets it through',
+    plausible(slowA, slowB, QC));
+  check('...because the budget allows for what BOTH fixes could have made up',
+    Math.abs(kinematicBudgetM(slowA, slowB, QC) - (((40 * 1852) / 3600) * 0.2 + NOISE_SIGMAS * Math.hypot(3, 3))) < 1e-9);
+  check('a receiver claiming better accuracy narrows the gate, as it should',
+    kinematicBudgetM(...twoFixes(0, 0.2, 1), QC) < kinematicBudgetM(slowA, slowB, QC));
+
+  // And it still catches what it is for: a flyer is hundreds of metres, not tens.
+  const [flyA, flyB] = twoFixes(400, 0.2, 3);
+  check('a four-hundred-metre jump is still refused, noise budget and all',
+    !plausible(flyA, flyB, QC));
+  check('...and so is a sixty-knot run over a long interval', !plausible(...twoFixes(600, 10, 3), QC));
+  check('a fix with nothing to compare against is never refused on motion',
+    plausible(null, flyB, QC) && impliedKnots(null, flyB) === null);
+
+  /* --------------------------------- a flyer disagrees with itself, a relocation does not */
+
+  const relocated = (points, seconds = 1) => {
+    const watch = new RelocationWatch(QC, { confirmFixes: 3 });
+    let moved = false;
+    points.forEach(([e, n], i) => {
+      moved = watch.offer({ ...at(e, n), time: new Date(i * seconds * 1000), accuracyM: 3 }) || moved;
+    });
+    return moved;
+  };
+
+  check('one fix out on its own is a flyer and moves nothing', !relocated([[900, 900]]));
+  check('...and two are still not enough to be believed', !relocated([[900, 900], [905, 903]]));
+  check('THREE fixes agreeing about a new place is a relocation, not a flyer',
+    relocated([[900, 900], [903, 902], [906, 905]]));
+  check('...but three that disagree with EACH OTHER are three flyers',
+    !relocated([[900, 900], [-900, 400], [200, -900]]));
+  check('...and a run broken by a wild one starts counting again',
+    !relocated([[900, 900], [903, 902], [-900, 100]]));
+
+  const watch = new RelocationWatch(QC, { confirmFixes: 3 });
+  watch.offer({ ...at(900, 900), time: new Date(0), accuracyM: 3 });
+  watch.offer({ ...at(903, 902), time: new Date(1000), accuracyM: 3 });
+  watch.reset();
+  check('a good fix in the middle ends the doubt entirely',
+    !watch.offer({ ...at(906, 905), time: new Date(2000), accuracyM: 3 }));
 }
