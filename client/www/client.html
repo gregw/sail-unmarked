@@ -203,9 +203,19 @@ select.basemap {
  * of their own for the same reason — a row has to be exactly one line for the arithmetic to
  * mean anything.
  */
+.knob.fixes { align-items: flex-start; }
+.knob.fixes label { padding-top: 3px; }
+
 .trail {
   font-family: var(--mono); font-size: 10.5px; line-height: 1.5;
-  height: 7.5em; overflow-y: auto;
+  /* 7.5em is five lines at this line-height; the 6px is the box's own border and padding,
+     which `box-sizing: border-box` would otherwise take out of the five. */
+  height: calc(7.5em + 6px);
+  overflow-y: auto;
+  padding: 2px 6px;
+  background: var(--sea);
+  border: 1px solid var(--panel2);
+  border-radius: 3px;
 }
 .trail div { color: var(--muted); white-space: nowrap; }
 .trail div.bad { color: var(--warn); }
@@ -254,7 +264,7 @@ select.basemap {
       <div class="knob"><label for="flyer">Flyers</label>
         <input type="range" id="flyer" min="0" max="20" step="1" value="0">
         <span class="v" id="flyer_v">0 %</span></div>
-      <div class="knob" style="grid-column:1/-1"><label>Fixes</label>
+      <div class="knob fixes" style="grid-column:1/-1"><label>Fixes</label>
         <div class="trail" id="trail" style="flex:1"><span class="muted">Not started.</span></div></div>
     </div>
   </div>

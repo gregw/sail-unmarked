@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!--
+  THE CLIENT ON A PHONE — the same device `client.html` sits on its desk, with the phone's own
+  receiver behind it instead of a simulator.
+
+  There is no rig here and nothing to steer: the boat is wherever the phone is. So the page is
+  one panel, and the panel is the window. On anything wider than a phone it stops at a phone's
+  width and centres itself rather than stretching, because a screen laid out until it "fits" a
+  laptop fits no phone at all — and this is the layout that will be in a bracket on a tiller.
+-->
+<meta charset="utf-8">
+<!--
+  `viewport-fit=cover` so the panel reaches under a notch and a home indicator, with the safe
+  areas paid back as padding below. Zoom is NOT disabled — somebody who needs to magnify a
+  readout must be able to — but `touch-action: manipulation` on the body takes away the
+  double-tap zoom, which on a screen being tapped in a hurry is the gesture nobody meant.
+-->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e1a26">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Unmarkable Racing</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="device.css">
+<style>
+body {
+  padding: 0;
+  /* No pull-to-refresh and no rubber band: this page is dragged on (the overview pans) and a
+     downward drag that reloaded it mid-race would throw away the join and the crossings. */
+  overscroll-behavior: none;
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+}
+
+.hand {
+  display: flex; justify-content: center;
+  /* `dvh`, not `vh`: on a phone `vh` is the viewport with the browser chrome hidden, so a
+     panel sized in it is taller than the screen until the address bar scrolls away — which
+     puts the bottom of the screen out of reach for as long as somebody is not scrolling. */
+  height: 100dvh;
+}
+
+.device {
+  width: 100%;
+  /* A phone's width, and no wider. On a tablet or a laptop the panel is what it would be in a
+     bracket and the space beside it is left empty on purpose: a device stretched to fill a
+     desktop window is a device nobody is prototyping. */
+  max-width: 440px;
+  height: 100%;
+  border-left: 1px solid var(--panel2);
+  border-right: 1px solid var(--panel2);
+  /* Under a notch at the top and a home indicator at the bottom. */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (max-width: 441px) { .device { border: none; } }
+
+/* ------------------------------------------------- what the page adds to the device */
+
+/*
+ * THE RECEIVER'S OWN PANEL, on the join screen only.
+ *
+ * Before a course is taken this is the one thing worth saying, and it has to be said before
+ * the permission prompt rather than after: a prompt that appears with nothing on screen
+ * explaining why is a prompt people refuse, and a refusal is sticky. Once sailing, the device's
+ * own header, signal line and dashed readouts say everything about the receiver that matters,
+ * so this panel is not drawn there — two places saying the same thing differently is worse than
+ * one.
+ */
+.gnss {
+  margin: 10px 0 4px; padding: 8px 10px;
+  border: 1px solid var(--panel2); border-left: 3px solid var(--muted); border-radius: 4px;
+  font-size: 13px;
+}
+.gnss.live { border-left-color: var(--ok); }
+.gnss.trouble { border-left-color: var(--warn); }
+.gnss h3 {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--muted); font-weight: 400;
+}
+.gnss .said { margin-top: 3px; }
+.gnss .fix { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 3px; }
+.gnss button { margin-top: 8px; }
+
+.awake { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; }
+</style>
+</head>
+<body>
+
+<div class="hand">
+  <div class="device" id="device"></div>
+</div>
+
+<script type="module" src="boat.js"></script>
+
+</body>
+</html>
