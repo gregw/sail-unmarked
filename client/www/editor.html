@@ -49,34 +49,27 @@
      said the two halves were separate things when they are one drill-down: the level, and
      the fields of the level. The pane scrolls; nothing inside it does, except a list slot,
      which is a fixed-height box on purpose (see below). */
+  /*
+   * THE PANE IS A SCROLLING SURFACE WITH A FIXED FOOT. The three view tickboxes are settings
+   * for the chart, not part of the drill-down, and they were buried at the bottom of a
+   * scrolling variant form where reaching them meant scrolling past the whole sequence. Pinned,
+   * they are always where they were last time.
+   */
   aside {
     width: 495px; flex: 0 0 495px; border-left: 1px solid var(--panel2);
-    background: var(--panel); overflow-y: auto;
+    background: var(--panel); display: flex; flex-direction: column; overflow: hidden;
   }
+  #paneScroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  #paneBottom { flex: 0 0 auto; border-top: 1px solid var(--panel2); padding: 7px 14px; }
+  #paneBottom:empty { display: none; }
   .paneTop { padding: 10px 14px 0; }
   #rowSeries, #rows { display: block; }
   /* Three surfaces, getting lighter as they get more interactive: the pane, the list of
      things on it, and the fields that edit one. Before this the list and the pane were
      the same shade and the boundary had to be inferred from the row hover. */
-  /* A level's list sits directly under that level's own row, not in one slot at the
-     bottom of them all — otherwise the series list opens below the tab strip it is meant
-     to be choosing for, and the variant list opens below the course it belongs to. */
-  /* FIXED height, and draggable. A list that grew and shrank as things were selected
-     moved everything below it on every click, so the thing you were about to press was
-     never where you last saw it. `resize: vertical` puts a grip in the bottom-right
-     corner; the height is remembered in state and re-applied, because the rows are
-     re-rendered and would otherwise forget it. Vertical only — the pane's width is fixed,
-     so a horizontal drag would have nothing to give. */
-  .listSlot {
-    height: 150px; overflow: auto; resize: vertical;
-    margin: 2px 0 8px 14px;
-    background: #1a2c3e; border: 1px solid #223a51; border-radius: 5px; padding: 4px;
-  }
-
-  /* The course's own fields, under its list rather than at the bottom of the pane: the
-     variant list belongs below them, and both belong to the level whose chevron is open. */
-  #courseForm, #seriesForm { margin: 0 0 8px 14px; }
-  #courseForm:empty, #seriesForm:empty { margin: 0; }
+  /* A level's fields sit under that level's own selector, indented under it. */
+  #courseForm, #seriesForm, #variantForm, #snapshotForm { margin: 0 0 8px 14px; }
+  #courseForm:empty, #seriesForm:empty, #variantForm:empty, #snapshotForm:empty { margin: 0; }
   /* A rule, not a region: it separates the level from the level's fields, and nothing
      more. It needs no height floor now that it does not compete with the rows for one. */
   #formWrap { padding: 4px 14px 14px; border-top: 1px solid var(--panel2); margin-top: 8px; }
@@ -93,6 +86,13 @@
     padding: 3px 7px; border-radius: 3px; cursor: pointer; border: 1px solid transparent;
   }
   .row .trail { margin-left: auto; }
+  /*
+   * The revision, beside every snapshot's name. Set smaller and dimmer than the label because
+   * it is there to be COMPARED, not read: nobody reads twelve hex characters, they hold one up
+   * against the one the client is showing. It sits before the `published` chip, which keeps its
+   * own place at the right-hand end.
+   */
+  .row .rev { font-size: 10px; opacity: 0.75; letter-spacing: 0.04em; }
   .row:hover { background: var(--panel2); }
   .row.on { background: var(--panel2); border-color: var(--ok); }
   .small { font-size: 11px; }
@@ -200,6 +200,45 @@
   .vblock { border-top: 1px solid var(--panel2); margin-top: 10px; padding-top: 10px; }
   .endrow .grow { flex: 1 1 auto; }
 
+  /*
+   * A LEVEL IS A LABEL, A SELECTOR AND ITS COMMANDS — one line, always the same three parts
+   * in the same three places.
+   *
+   * It was a breadcrumb that opened a fixed-height list underneath it, and several of those
+   * could be open at once: a pane of stacked boxes, each with its own scrollbar and resize
+   * grip, where the thing you wanted was one of four places depending on what was open. A
+   * selector says what is chosen without being open, takes one line instead of a hundred and
+   * fifty pixels, and is the control everybody already knows.
+   *
+   * The label is a fixed width so that every selector on the pane starts at the same column;
+   * the commands are a fixed width at the right so they do not move when a name is long. What
+   * flexes is the selector, which is the part that holds the content.
+   */
+  .sel { display: flex; align-items: center; gap: 7px; margin: 5px 0; }
+  .sel > .label { flex: 0 0 58px; }
+  .sel > .info { flex: 0 0 auto; margin-left: -3px; }
+  .sel > select { flex: 1 1 auto; min-width: 0; margin-bottom: 0; }
+  .sel > select:disabled { opacity: 0.55; cursor: not-allowed; }
+  .sel .state { flex: 0 0 auto; }
+
+  /*
+   * A FORM SECTION'S HEADING, which is where the chevron went. It used to open a list; it now
+   * folds the fields of the level above it, which is the thing actually worth getting out of
+   * the way — a course's fields and a variant's sequence are long, and a selector is one line.
+   */
+  .fold {
+    display: flex; align-items: center; gap: 6px; width: 100%;
+    background: none; border: none; padding: 4px 2px; margin: 2px 0;
+    color: var(--ink); font-family: var(--mono); font-size: 12px; text-align: left;
+    cursor: pointer;
+  }
+  .fold:hover { background: var(--panel2); border-radius: 3px; }
+  .fold .chev { color: var(--muted); font-size: 18px; line-height: 1; flex: 0 0 auto; }
+  .fold:hover .chev { color: var(--line); }
+  .fold .sp { flex: 1 1 auto; }
+  .foldBody { margin: 0 0 10px 14px; }
+  .foldBody:empty { margin: 0; }
+
   /* A level of the hierarchy, collapsed to one line. The chevron reopens the list; an [x]
      here would sit one row from the delete ✕, which is an expensive mis-click. The state
      chip stays on the collapsed row, so a dirty course is still visible from the top. */
@@ -265,16 +304,24 @@
          and each carrying its OWN commands. Nothing that acts on a level lives below the
          form, so the command area is never split by a scrolling sequence editor. The tab
          strip is static because it never changes; the rows around it are rendered. -->
-    <div class="paneTop">
-      <div id="rowSeries"></div>
-      <div class="seg">
-        <button id="tab_points" data-tab="points">Points</button>
-        <button id="tab_lines" data-tab="lines">Lines</button>
-        <button id="tab_courses" data-tab="courses" class="on">Courses</button>
+    <div id="paneScroll">
+      <div class="paneTop">
+        <div id="rowSeries"></div>
+        <div class="seg">
+          <button id="tab_points" data-tab="points">Points</button>
+          <button id="tab_lines" data-tab="lines">Lines</button>
+          <button id="tab_courses" data-tab="courses" class="on">Courses</button>
+        </div>
+        <div id="rows"></div>
+        <!-- OUTSIDE #rows, because #rows is rebuilt whenever the pane changes and a message
+             written into it is wiped by the next render — which is precisely the render that
+             usually follows the thing being reported. -->
+        <div id="rowMsg"></div>
       </div>
-      <div id="rows"></div>
+      <div id="formWrap"><div id="form"></div></div>
     </div>
-    <div id="formWrap"><div id="form"></div></div>
+    <!-- Pinned: view settings for the chart, not a level of the drill-down. -->
+    <div id="paneBottom"></div>
   </aside>
 </main>
 

@@ -90,7 +90,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 
 const state = {
   view: new MapView(),
-  basemap: 'seaSimple',
+  basemap: 'chart',
   programme: null,      // { club, series, points: {...}, lines: {...}, courses: {...} }
   points: new Map(),    // id -> { id, name, latitude, longitude, notes }
   selected: null,
@@ -117,7 +117,6 @@ const state = {
   // "deepest open level" to infer it from, and the form has to follow something.
   // A dragged list keeps its height across renders. The rows are re-rendered, so the
   // inline height the browser wrote would otherwise be thrown away on the next pan.
-  listHeight: {},       // level -> px
   // Which way a line end is being edited: by naming a point, or by typing a position.
   // Held here rather than on the end itself, because it is a view state — the end's own
   // shape (`at`, or lat/long) is what gets saved.
@@ -189,9 +188,7 @@ async function loadProgramme(key) {
   state.picking = null;
   state.open = {};
   state.endMode = {};
-  state.courseFormFor = undefined;
-  state.courseFieldsFor = undefined;
-  state.seriesFormFor = undefined;
+  formsChanged();
   state.rowsHtml = undefined;
   state.rowsTop = undefined;
   select(null);
@@ -562,7 +559,7 @@ async function transformCourse(variant, course, transform, what) {
     refreshGeo();
   }
   for (const m of movables(variant)) Object.assign(m.obj, snap(transform(m.obj)));
-  state.courseFormFor = undefined;
+  formsChanged();
 }
 
 /* -------------------------------------------------- moving named geometry */
@@ -677,7 +674,7 @@ async function movePoint(pointId, to) {
       { points: state.points, lines: state.lines }, `${course.id}/`);
     Object.assign(state.points.get(id), to);
   }
-  state.courseFormFor = undefined;
+  formsChanged();
 }
 
 /**
@@ -746,7 +743,7 @@ async function moveLine(lineId, side, to) {
   } else if (answer === 'adhoc') {
     apply(variant.lines.get(detachLine(lineId, variant)));
   }
-  state.courseFormFor = undefined;
+  formsChanged();
 }
 
 /**
@@ -1473,13 +1470,13 @@ function render() {
     });
   }
   renderList();
-  // ONE level's fields, never two concatenated: the form follows whichever level you are
-  // pointing at, which is the level whose list is open, or else the deepest one chosen.
-  // The bottom of the pane is the deepest thing: a point, a line, or a variant. The series
-  // and course fields live under their own lists.
+  // The bottom form region belongs to the POINTS and LINES tabs alone now. On the Courses tab
+  // every level's fields sit inline under that level's own selector, which is the order the
+  // pane is read in — course, its fields, variant, its fields, snapshot, its details.
+  const wrap = el('formWrap');
+  if (wrap) wrap.hidden = state.tab === 'courses';
   if (state.tab === 'points') renderForm();
   else if (state.tab === 'lines') renderLineForm();
-  else renderCourseForm();
 }
 
 /** Switch the pane. The two editors share the chart and replace each other entirely. */
@@ -1487,7 +1484,7 @@ function showTab(tab) {
   state.tab = tab;
   state.picking = null;
   state.selected = tab === 'points' ? state.selected : null;
-  state.courseFormFor = undefined;
+  formsChanged();
   refreshGeo();
   // Both forms are rebuilt from scratch on a tab change, since the pane they live in is
   // the same element.
@@ -1713,56 +1710,93 @@ function warnInForm(id, message) {
 /* ------------------------------------------------------------- the rows */
 
 /**
- * One level of the hierarchy, collapsed to a line, with its own commands.
+ * ONE LEVEL OF THE DRILL-DOWN: a label, a selector showing what is chosen, and that level's
+ * commands. In that order, at the same three columns, on every level.
  *
- * The whole command area is these rows: every button that acts on a level lives on that
- * level's row, at the top, and the form below holds fields only. Before this, Add and
- * Delete for a course were at the top while Snapshot, Publish and Delete variant were at
- * the bottom, with a scrolling sequence editor between them — two conventions in one pane,
- * and half the commands below the fold.
+ * <b>This replaces a breadcrumb that opened a list.</b> Several of those could be open at
+ * once, each a fixed-height box with its own scrollbar and resize grip, so the pane became a
+ * stack of little windows and the thing you wanted was in one of four places depending on what
+ * happened to be open. A selector says what is chosen while it is shut, takes one line rather
+ * than a hundred and fifty pixels, and is a control nobody has to be taught.
+ *
+ * <b>An empty option is offered only when nothing is chosen</b>, and it carries no value, so
+ * it cannot be picked back to. Once a level has an answer the question is gone from the list,
+ * which is what keeps a selector from being a way to un-choose a course and land the pane in a
+ * state whose only content is an apology.
+ *
+ * <b>`keepEmpty` is the exception, and the SNAPSHOT level is what it is for.</b> Un-choosing a
+ * course or a variant empties the pane, which is why the question disappears once it has been
+ * answered. A snapshot is not like that: *nothing chosen* is the ordinary, useful state of
+ * that level — it means you are editing the design — so the empty option there is not a way to
+ * empty the pane but the way back to the thing underneath it. Without it, choosing a capture
+ * was a DEAD END: a `<select>` fires no `change` for the option already selected, so there was
+ * nothing in the list to pick and no way back to the variant but reloading the page.
+ *
+ * A level with nothing to offer is DISABLED and says why in the empty option, rather than
+ * being a dropdown that opens onto nothing: "no variants yet" is a different fact from "none
+ * chosen", and a reader can act on the first.
  */
-function crumb(level, label, chip, commands, empty) {
-  const open = isOpen(level);
-  // OPEN: the row names the level, not the selection — the selected item is right below it
-  // in the list, highlighted, and saying it twice made the row look like a second entry.
-  // CLOSED: the row IS the selection, with its state chip, so a dirty course stays visible
-  // from the top of the pane.
-  return `<div class="crumb" data-level="${level}">
-    <button class="pick" id="crumb_${level}">
-      <span class="chev">${open ? '&#9662;' : '&#9656;'}</span>
-      <span class="${open || !label ? 'none' : 'mono'}">${esc(open ? level : (label ?? empty ?? '—'))}</span>
-      ${open ? '' : (chip ?? '')}
-    </button>
-    <span class="cmds">${commands.map(([id, glyph, title]) =>
-      `<button class="cmd" id="cmd_${id}" title="${esc(title)}">${glyph}</button>`).join('')}</span>
+function picker(level, label, options, chosen, commands = [], empty = '\u2014', info = null,
+  keepEmpty = null) {
+  const has = options.length > 0;
+  const known = options.some((o) => o.value === chosen);
+  return `<div class="sel" data-level="${level}">
+    <label class="label" for="sel_${level}">${esc(label)}</label>
+    ${info ? `<span class="info" data-info="${esc(info)}">?</span>` : ''}
+    <select id="sel_${level}"${has ? '' : ' disabled'}>
+      ${known
+        // Kept, and RE-WORDED: unchosen it is a placeholder saying what the state is; chosen
+        // it is the one thing on the level that is an action rather than a selection.
+        ? (keepEmpty ? `<option value="">${esc(keepEmpty)}</option>` : '')
+        : `<option value="" selected>${esc(has ? empty : `no ${label.toLowerCase()}`)}</option>`}
+      ${options.map((o) => `<option value="${esc(o.value)}"${o.value === chosen ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}
+    </select>
+    ${commands.map(([id, glyph, title]) =>
+      `<button class="cmd" id="cmd_${id}" title="${esc(title)}">${glyph}</button>`).join('')}
   </div>`;
 }
 
 /**
- * Whether a level's list is showing.
+ * A foldable heading for a level's FIELDS — which is where the chevron went.
  *
- * Two sources, in order: an explicit answer from the chevron, then the default — a level is
- * open while it has nothing chosen, which is what gets you started without anybody managing
- * it. Selecting from a list <b>pins it open</b> rather than collapsing it, because the next
- * thing somebody does is very often choose again, and a list that shut itself the instant
- * it was used made that two clicks.
+ * It used to open a list of things to choose from; the selector does that now, in a line. What
+ * is actually worth getting out of the way is the other half: a course's fields and a variant's
+ * sequence are long, and somebody who came back to move a mark is not re-reading either. So the
+ * chevron folds the form, and folded it still answers for itself — `trailing` is what the
+ * heading says while it is shut.
+ */
+function fold(level, title, trailing = '') {
+  const open = isOpen(level);
+  return `<button class="fold" id="fold_${level}">
+    <span class="chev">${open ? '&#9662;' : '&#9656;'}</span>
+    <span>${esc(title)}</span>
+    <span class="sp"></span>
+    <span class="mono small muted">${trailing}</span>
+  </button>`;
+}
+
+/**
+ * Whether a level's FIELDS are unfolded.
+ *
+ * It used to answer "is this level's list showing", and the defaults were about getting you
+ * started — a level was open while it had nothing chosen, because the list was how you chose.
+ * A selector does that now in one line, so the question this answers has changed: it is about
+ * the long thing below the selector, not about finding anything.
+ *
+ * <b>A level's fields start OPEN and the chevron closes them</b>, which is what "closeable"
+ * means: they are the thing you came to the level for, and a pane that opened with everything
+ * shut would make choosing a course a two-click job to see the course. The exception is the
+ * series' own fields, which are an id and a title nobody edits twice — a fold that starts
+ * closed there costs nothing and keeps the top of the pane to the two questions it is for.
+ * Two sources, in order: an explicit answer from the chevron, then the default.
  */
 function isOpen(level) {
   if (state.open[level] !== undefined) return state.open[level];
-  if (level === 'series') return !state.key;
-  if (level === 'items') return state.tab !== 'courses';
-  // Not a level of the drill-down — a field group inside the variant's form — but it folds
-  // the same way and by the same rule, so there is one mechanism rather than two. Open by
-  // default: the sequence IS the course, and hiding it by default would hide the point.
+  // A field group inside the variant's form rather than a level of its own, but it folds by
+  // the same mechanism so there is one rather than two. Open, because the sequence IS the
+  // course and hiding it by default would hide the point.
   if (level === 'sequence') return true;
-  if (state.tab !== 'courses') return false;
-  if (level === 'course') return !state.selectedCourse;
-  if (level === 'variant') return !!state.selectedCourse && !state.selectedVariant;
-  // Open while nothing is chosen, like every other level: the list is how you find one,
-  // and once you have, the breadcrumb says which and the capture takes the space.
-  if (level === 'snapshot')
-    return !!state.selectedVariant && !state.selectedSnapshot
-      && (lifeOf(state.selectedCourse, state.selectedVariant).snapshots ?? []).length > 0;
+  if (level === 'course' || level === 'variant') return true;
   return false;
 }
 
@@ -1773,120 +1807,129 @@ function toggle(level) {
 }
 
 /**
- * The open list, as markup, placed directly under the row that owns it.
+ * Forget every form's guard, so the next render rebuilds them.
  *
- * One slot at the bottom of all the rows was wrong in two visible ways: the series list
- * opened BELOW the tab strip it is choosing for, and the variant list opened below the
- * course it belongs to and above that course's own fields. A list belongs under its level.
+ * <b>One call, because there is more than one guard and a caller that cleared one and forgot
+ * another is a form that silently stops updating.</b> That is exactly what happened when the
+ * variant's fields moved inline and got a key of their own: `Add line` went on clearing the
+ * course's key, the variant form was recognised as unchanged, and the step it had just added
+ * never appeared. The guards exist to keep the caret in whatever somebody is typing, which is
+ * worth having — they just must not be reachable one at a time.
  */
-function listSlot(level) {
-  // Its OWN container: several lists can be open at once now, so one shared slot would
-  // have them overwrite each other.
-  if (!isOpen(level)) return '';
-  const height = state.listHeight[level];
-  return `<div class="listSlot" id="list_${level}"${height ? ` style="height:${height}px"` : ''}></div>`;
-}
-
-/** Remember what a drag on the resize grip did, so the next render keeps it. */
-function watchHeight(level) {
-  const slot = el(`list_${level}`);
-  if (!slot || typeof ResizeObserver === 'undefined') return;
-  new ResizeObserver(() => { state.listHeight[level] = slot.offsetHeight; }).observe(slot);
+function formsChanged() {
+  state.courseFormFor = undefined;
+  state.courseFieldsFor = undefined;
+  state.variantFieldsFor = undefined;
+  state.seriesFormFor = undefined;
 }
 
 function renderRows() {
   const course = currentCourse();
-  const variant = currentVariant();
 
-  // A level's FORM sits under its list, not at the bottom of the pane: the variant list
-  // belongs below the course's fields, and both belong to the level whose chevron is open.
-  // Closing the chevron hides the list and the fields together — there is one thing there,
-  // not two.
-  const top = crumb('series', state.key, '', [
-    ['series_add', '+', 'new series'],
-    ['series_clone', '&#10697;', 'clone this series'],
-    ['series_delete', '&times;', 'delete this series'],
-  ], 'no series') + listSlot('series')
-    + (isOpen('series') ? '<div id="seriesForm"></div>' : '');
+  /*
+   * THE CLUB AND THE SERIES ARE TWO QUESTIONS, and they used to be one selector showing
+   * `myc.org.au/2026-summer`. A club has several series and a series belongs to one club, so
+   * choosing is naturally two steps — and the compound label was the widest thing on the pane
+   * while saying less than either half would on its own.
+   *
+   * The club carries NO commands. A club is a domain: it is not created here, not renamed here
+   * (that would be a migration across every record path and the ledger's own filename), and not
+   * deleted here. Three disabled buttons would say those are things that might one day work
+   * from this row; nothing says it is not that kind of level.
+   */
+  const clubs = [...new Set(state.programmes.map((p) => p.club))].sort();
+  const club = state.key ? state.key.split('/')[0] : (clubs[0] ?? '');
+  const inClub = byId(state.programmes.filter((p) => p.club === club), (p) => p.series);
+  const top = picker('club', 'Club', clubs.map((c) => ({ value: c, label: c })), club)
+    + picker('series', 'Series',
+      inClub.map((p) => ({ value: `${p.club}/${p.series}`, label: p.series })), state.key, [
+        ['series_add', '+', 'new series'],
+        ['series_clone', '&#10697;', 'clone this series'],
+        ['series_delete', '&times;', 'delete this series'],
+      ])
+    + (state.key ? fold('series', 'Series details') : '')
+    + (state.key && isOpen('series') ? '<div class="foldBody" id="seriesForm"></div>' : '');
+
   // Assigned only when it CHANGED, because these containers hold form fields and rewriting
   // them on every pan would take the caret out of whatever somebody was typing in.
   if (state.rowsTop !== top) {
     el('rowSeries').innerHTML = top;
     state.rowsTop = top;
     state.seriesFormFor = undefined;
-    // Wired HERE, beside the assignment that destroyed the old buttons. It used to be
-    // wired with the rest below, under a guard that watches #rows — a different element —
-    // so any render that rebuilt this row while #rows stayed put left the series chevron
-    // and its commands dead. Each container re-wires its own.
+    // Wired HERE, beside the assignment that destroyed the old controls. Each container
+    // re-wires its own: #rowSeries and #rows are rebuilt on independent conditions, and
+    // wiring one under the guard that watches the other leaves it dead on every render that
+    // rebuilds one and not the other.
     wireRow(['series']);
-    // Wired HERE, beside the assignment that destroyed the old buttons. It used to be
-    // wired with the rest below, under a guard that watches #rows — a different element —
-    // so any render that rebuilt this row while #rows stayed put left the series chevron
-    // and its commands dead. Each container re-wires its own.
   }
 
   let out = '';
   if (state.tab === 'courses') {
-    out += crumb('course', state.selectedCourse,
-      state.selectedCourse ? dirtyDot(course) : '', [
+    // PUBLIC IS SAID IN THE OPTION, because an option cannot carry a chip and the flag has to
+    // be visible without choosing the course first — "which of these is the fleet being
+    // offered" is a question about the list, not about one entry.
+    out += picker('course', 'Course',
+      byId([...state.courses.values()]).map((c) => ({
+        value: c.id, label: c.public ? `${c.id} — public` : c.id,
+      })),
+      state.selectedCourse, [
         ['course_add', '+', 'new course'],
         ['course_clone', '&#10697;', 'clone this course, with all its variants'],
         ['course_delete', '&times;', 'delete this course'],
-      ], 'no course') + listSlot('course')
-      + (isOpen('course') ? '<div id="courseForm"></div>' : '');
+      ], 'choose a course', INFO.courses);
     if (course) {
-      out += crumb('variant', state.selectedVariant,
-        state.selectedVariant ? chip(course.id, state.selectedVariant) : '', [
+      out += fold('course', 'Course details', dirtyDot(course))
+        + (isOpen('course') ? '<div class="foldBody" id="courseForm"></div>' : '');
+      out += picker('variant', 'Variant',
+        byId([...course.variants.values()]).map((v) => ({
+          value: v.id, label: v.template ? `${v.id} — template` : v.id,
+        })), state.selectedVariant, [
           ['variant_add', '+', 'new variant'],
           ['variant_clone', '&#10697;', 'clone this variant'],
           ['variant_template', '&#9873;', 'add a variant from a template'],
           ['variant_delete', '&times;', 'delete this variant'],
-        ], 'no variant') + listSlot('variant');
+        ], 'choose a variant');
     }
-    if (state.selectedVariant) {
+    if (state.selectedVariant && course) {
+      // The variant's own fields, the sequence among them, folded by the same chevron.
+      out += fold('variant', 'Variant details', chip(course.id, state.selectedVariant))
+        + (isOpen('variant') ? '<div class="foldBody" id="variantForm"></div>' : '');
+
       const life = lifeOf(course.id, state.selectedVariant);
-      const design = course.variants.get(state.selectedVariant);
-      out += `<div class="lifecycle">
-        <button id="cmd_snapshot"${design?.template ? ' disabled title="a template can never be snapshotted"' : ''}>Snapshot</button>
-        <span class="info" id="lifeInfo" data-info="${esc(INFO.snapshots)}">?</span>
-      </div>`;
       // The fourth level. A snapshot is not a draft — it is what a boat was handed — so its
       // commands are what you can do ABOUT one, never to it.
-      if ((life.snapshots ?? []).length) {
-        const chosen = currentSnapshotEntry();
-        out += crumb('snapshot', state.selectedSnapshot ? (chosen?.label ?? state.selectedSnapshot) : null,
-          state.selectedSnapshot === life.published
-            ? '<span class="state current">published</span>' : '', [
-            ['snapshot_clone', '&#10697;', 'create a new variant from this capture'],
-            ['snapshot_publish', '&#8593;', 'publish this snapshot'],
-            ['snapshot_delete', '&times;', 'delete this snapshot'],
-            // The row is only emitted when there ARE snapshots, so the closed label says
-            // that none is CHOSEN, not that none exists — "no snapshot" read as the latter.
-          ], 'snapshots') + listSlot('snapshot');
-      }
+      out += picker('snapshot', 'Snapshot',
+        (life.snapshots ?? []).map((snap) => ({
+          value: snap.revision,
+          label: `${snapshotName(snap, snap.revision)}${snap.revision === life.published ? ' — published' : ''}`,
+        })), state.selectedSnapshot ?? '', [
+          ['snapshot_clone', '&#10697;', 'create a new variant from this capture'],
+          ['snapshot_publish', '&#8593;', 'publish this snapshot'],
+          ['snapshot_delete', '&times;', 'delete this snapshot'],
+        ], 'none chosen', null, '\u2190 back to the design');
+      // Read-only and only when one is deliberately chosen, so it needs no chevron of its
+      // own: choosing a capture IS the act of asking to see it.
+      if (state.selectedSnapshot) out += '<div class="foldBody" id="snapshotForm"></div>';
     }
   } else {
-    // Points and lines are the CLUB's, so their row sits under the series and carries no
-    // course above it — which is the tab rule made visible. No chevron here: this list has
-    // no level below it to collapse into.
-    out += `<div class="crumb">
-      <span class="pick" style="cursor:default">
-        <span class="mono">${state.tab === 'points' ? 'points' : 'lines'}</span>
-        <span class="info" id="paneInfo">?</span>
-      </span>
-      <span class="cmds">
-        <button class="cmd" id="cmd_item_add" title="new ${state.tab === 'points' ? 'point' : 'line'}">+</button>
-        <button class="cmd" id="cmd_item_delete" title="delete the selected ${state.tab === 'points' ? 'point' : 'line'}">&times;</button>
-      </span>
-    </div>` + listSlot('items');
+    // Points and lines are the CLUB's, so their selector sits under the series and carries no
+    // course above it — which is the tab rule made visible.
+    const points = state.tab === 'points';
+    const things = points
+      ? byId([...state.points.values()]).map((t) => ({ value: t.id, label: t.id }))
+      : byId([...state.lines.values()]).map((t) => ({ value: t.id, label: t.id }));
+    out += picker('items', points ? 'Point' : 'Line', things,
+      points ? state.selected : state.selectedLine, [
+        ['item_add', '+', `new ${points ? 'point' : 'line'}`],
+        ['item_delete', '&times;', `delete the selected ${points ? 'point' : 'line'}`],
+      ], `choose a ${points ? 'point' : 'line'}`, points ? INFO.points : INFO.lines);
   }
-  out += '<div id="rowMsg"></div>';
   if (state.rowsHtml === out) return;
   el('rows').innerHTML = out;
   state.rowsHtml = out;
   state.courseFieldsFor = undefined;
+  state.variantFieldsFor = undefined;
   wireRow(['course', 'variant', 'items']);
-  if (el('paneInfo')) el('paneInfo').dataset.info = INFO[state.tab];
 }
 
 /**
@@ -1899,14 +1942,54 @@ function renderRows() {
  * open.
  */
 function wireRow(levels) {
-  for (const level of levels) {
-    el(`crumb_${level}`)?.addEventListener('click', () => toggle(level));
-    watchHeight(level);
+  for (const level of [...levels, 'snapshot']) {
+    el(`fold_${level}`)?.addEventListener('click', () => toggle(level));
   }
-  if (levels.includes('variant')) {
-    el('crumb_snapshot')?.addEventListener('click', () => toggle('snapshot'));
-    watchHeight('snapshot');
+  // EVERY SELECTOR'S CHANGE, and each resolves what it needs at the moment it fires rather
+  // than from this render's closure — the markup is only re-assigned when it changes, so a
+  // captured course or variant would go stale and the handler would act on the wrong design.
+  const pick = (level, fn, emptyToo = false) => el(`sel_${level}`)?.addEventListener('change', (ev) => {
+    // The empty option is a question, not an answer — except where it is the way back out of
+    // a level, which is `keepEmpty` in `picker` and the snapshot level below.
+    if (ev.target.value === '' && !emptyToo) return;
+    fn(ev.target.value === '' ? null : ev.target.value);
+  });
+  if (levels.includes('series')) {
+    // Choosing a club loads that club's first series, because a club on its own is not a
+    // scope anything can be edited in: every list on this pane comes out of a programme file.
+    pick('club', (club) => {
+      const first = byId(state.programmes.filter((p) => p.club === club), (p) => p.series)[0];
+      if (first) loadProgramme(`${first.club}/${first.series}`);
+    });
+    pick('series', (key) => loadProgramme(key));
   }
+  pick('course', selectCourse);
+  pick('variant', selectVariant);
+  pick('snapshot', selectSnapshot, true);
+
+  /*
+   * OPENING THE VARIANT SELECTOR AND LANDING BACK ON THE SAME VARIANT ALSO LETS THE CAPTURE GO.
+   *
+   * Going to that selector is an act of attention on the design level — somebody went to
+   * choose a design — so whichever one they come back with, including the one they had, the
+   * snapshot they were looking at is no longer what they asked for. A `<select>` fires no
+   * `change` when the chosen option is re-chosen, so `change` alone cannot see this: it is
+   * the pointer that opened the list and the blur that closed it.
+   *
+   * Gated on the pointer deliberately. A blur on its own would drop the capture for somebody
+   * merely tabbing through the pane, which is not a decision about the design at all; and a
+   * keyboard user who genuinely changes the variant is served by `change` like anybody else.
+   */
+  const variantSel = el('sel_variant');
+  variantSel?.addEventListener('pointerdown', () => { state.variantOpened = true; });
+  variantSel?.addEventListener('blur', () => {
+    if (!state.variantOpened) return;
+    state.variantOpened = false;
+    // Already gone if `change` fired — selectVariant lets go of it — so this is only the
+    // same-variant case.
+    if (state.selectedSnapshot) selectVariant(state.selectedVariant);
+  });
+  pick('items', (id) => (state.tab === 'points' ? selectPoint(id) : selectLine(id)));
   const on = (id, fn) => el(id)?.addEventListener('click', fn);
   const withCourse = (fn) => () => { const c = currentCourse(); if (c) fn(c); };
   const withVariant = (fn) => () => {
@@ -1926,7 +2009,6 @@ function wireRow(levels) {
   on('cmd_variant_clone', withVariant((c, v) => cloneVariant(c, v, c)));
   on('cmd_variant_template', withCourse(addFromTemplate));
   on('cmd_variant_delete', deleteVariant);
-  on('cmd_snapshot', withVariant(takeSnapshot));
   on('cmd_snapshot_clone', cloneSnapshot);
   on('cmd_snapshot_publish', publishSnapshot);
   on('cmd_snapshot_delete', forgetSnapshot);
@@ -1942,66 +2024,135 @@ function note(message, bad = false) {
 
 function renderList() {
   renderRows();
-  if (isOpen('series')) renderSeriesForm();
+  if (isOpen('series') && state.key) renderSeriesForm();
   if (isOpen('course') && currentCourse()) renderCourseFields();
+  if (isOpen('variant') && currentVariant()) renderVariantFields();
+  if (state.selectedSnapshot) renderSnapshotDetail();
   // The tab is required to show the course length ALWAYS, so it is set from the selection
-  // rather than by whichever list happens to be open — collapsing a list must not take the
-  // figure off the screen with it.
+  // rather than from whichever section happens to be unfolded — folding a form must not take
+  // the figure off the screen with it.
   if (state.tab === 'courses' && state.selectedVariant) {
     el('status').innerHTML = `<span class="ok">${nm(state.selectedCourse, state.selectedVariant)}</span>`;
+  } else if (state.tab === 'courses') {
+    el('status').innerHTML = `<span class="muted">${state.courses.size} courses</span>`;
+  } else if (state.tab === 'lines') {
+    const lines = [...state.lines.values()];
+    const unplaced = lines.filter((l) => !(endPosition(l.port) && endPosition(l.starboard)));
+    el('status').innerHTML = unplaced.length
+      ? `<span class="warn">${unplaced.length} of ${lines.length} incomplete</span>`
+      : `<span class="ok">all ${lines.length} lines placed</span>`;
+  } else {
+    const points = [...state.points.values()];
+    const unplaced = points.filter((pt) => pt.latitude == null || pt.longitude == null);
+    el('status').innerHTML = unplaced.length
+      ? `<span class="warn">${unplaced.length} of ${points.length} without a position</span>`
+      : `<span class="ok">all ${points.length} points placed</span>`;
   }
   // Unconditionally, and after the forms: both of them return early on a guard, and several of
   // those early returns are before the point a form would have synced itself. One call here
   // means whatever is on screen agrees with the lifecycle after every render, whichever branch
   // got there.
   if (state.tab === 'courses') syncCourseForm();
-  // Each open level fills its own slot. Slots are not emitted when closed, rather than
-  // emitted and hidden, so no empty box is left behind.
-  if (isOpen('series')) renderSeriesList();
-  if (state.tab === 'courses') {
-    if (isOpen('course')) renderCourseList();
-    if (isOpen('variant') && state.selectedCourse) renderVariantList();
-    if (isOpen('snapshot') && state.selectedVariant) renderSnapshotList();
-  } else if (isOpen('items')) {
-    if (state.tab === 'lines') renderLineList();
-    else renderPointList();
-  }
+  renderPaneBottom();
 }
 
-function renderLineList() {
-  const into = el('list_items');
+/**
+ * The three view tickboxes, pinned to the foot of the pane.
+ *
+ * <b>They are settings for the CHART, not a level of the drill-down</b>, and they were at the
+ * bottom of the variant form — under the sequence, which is the longest thing in the pane — so
+ * reaching them meant scrolling past a course to get at a control that decides how that course
+ * is drawn. Pinned, they are always in the same place, and the scrolling surface above them
+ * gets on with being a drill-down.
+ *
+ * Only on the Courses tab, because all three are about how a course is drawn: `hide unused` is
+ * defined against the selected course, and the move/turn grips act on a variant.
+ */
+/**
+ * The three view tickboxes' handlers.
+ *
+ * View settings, not edits: they change what is DRAWN, not what is stored, so none of them
+ * saves and none consumes the undo slot.
+ */
+function wireViewToggles() {
+  el('c_track')?.addEventListener('change', (ev) => { state.showTrack = ev.target.checked; render(); });
+  el('c_unused')?.addEventListener('change', (ev) => { state.hideUnused = ev.target.checked; render(); });
+  el('c_move')?.addEventListener('change', (ev) => { state.showTransform = ev.target.checked; render(); });
+}
+
+function renderPaneBottom() {
+  const into = el('paneBottom');
   if (!into) return;
-  const lines = byId(state.lines.values());
-  into.innerHTML = lines.length === 0
-    ? '<p class="muted">No lines.</p>'
-    : lines.map((line) => {
-        const on = line.id === state.selectedLine;
-        const placed = endPosition(line.port) && endPosition(line.starboard);
-        return `<div class="row${on ? ' on' : ''}" data-id="${esc(line.id)}">
-          <span class="mono">${esc(line.id)}</span>
-          ${placed ? `<span class="muted trail small">${lineLength(line)} m</span>`
-            : '<span class="warn trail small">incomplete</span>'}
-        </div>`;
-      }).join('');
+  const wanted = state.tab === 'courses' && !!currentVariant() && !readOnly();
+  const html = wanted ? `<div class="endrow">
+    <label class="cb"><input type="checkbox" id="c_track"${state.showTrack ? ' checked' : ''}> show track</label>
+    <label class="cb"><input type="checkbox" id="c_unused"${state.hideUnused ? ' checked' : ''}> hide unused</label>
+    <label class="cb"><input type="checkbox" id="c_move"${transformShown() ? ' checked' : ''}> move/turn</label>
+  </div>` : '';
+  if (state.paneBottomHtml === html) return;
+  state.paneBottomHtml = html;
+  into.innerHTML = html;
+  if (!wanted) return;
+  wireViewToggles();
+}
 
-  for (const row of into.querySelectorAll('.row')) {
-    row.addEventListener('click', () => {
-      state.selectedLine = row.dataset.id;
-      state.picking = null;
-      const line = state.lines.get(row.dataset.id);
-      const ends = [endPosition(line?.port), endPosition(line?.starboard)].filter(Boolean);
-      // A FIFTH of the chart, not four fifths. Filling the view with the line leaves it
-      // floating on featureless water: what a line means is where it sits relative to the
-      // shore and the marks around it, so the surroundings are the point.
-      if (ends.length) state.view.fit(ends, FRAME_FRACTION);
-      render();
-    });
-  }
 
-  const unplaced = lines.filter((l) => !(endPosition(l.port) && endPosition(l.starboard)));
-  el('status').innerHTML = unplaced.length
-    ? `<span class="warn">${unplaced.length} of ${lines.length} incomplete</span>`
-    : `<span class="ok">all ${lines.length} lines placed</span>`;
+/* ------------------------------------------------- choosing, one level at a time */
+
+/**
+ * Choose a course.
+ *
+ * <b>A course with ONE design opens straight onto it</b>, so nobody editing an ordinary club
+ * course has to learn the word "variant" to do it; a course with several leaves the variant
+ * unchosen, so nobody editing one that has several can forget to say which.
+ */
+function selectCourse(id) {
+  state.selectedCourse = id;
+  const course = state.courses.get(id);
+  const only = course && course.variants.size === 1 ? [...course.variants.keys()][0] : null;
+  state.selectedVariant = only;
+  state.selectedSnapshot = null;
+  state.snapshotShown = null;
+  state.showTransform = undefined;       // decide afresh for this design
+  formsChanged();
+  refreshGeo();
+  frameVariant(currentVariant());
+  render();
+}
+
+/** Choose a variant. A capture belongs to the design it was taken of, so it is let go of. */
+function selectVariant(id) {
+  state.selectedVariant = id;
+  state.selectedSnapshot = null;
+  state.snapshotShown = null;
+  state.showTransform = undefined;
+  formsChanged();
+  refreshGeo();
+  frameVariant(currentVariant());
+  render();
+}
+
+/** Choose a point, and frame the chart on it. */
+function selectPoint(id) {
+  select(id);
+  const point = state.points.get(id);
+  if (point?.latitude != null) state.view.fit([point]);
+  render();
+}
+
+/**
+ * Choose a line, and FRAME IT to a fifth of the chart.
+ *
+ * Not four fifths: filling the view with the line leaves it floating on featureless water, and
+ * what a line means is where it sits relative to the shore and the marks around it.
+ */
+function selectLine(id) {
+  state.selectedLine = id;
+  state.picking = null;
+  const line = state.lines.get(id);
+  const ends = [endPosition(line?.port), endPosition(line?.starboard)].filter(Boolean);
+  if (ends.length) state.view.fit(ends, FRAME_FRACTION);
+  render();
 }
 
 function lineLength(line) {
@@ -2261,37 +2412,6 @@ function renameLine(oldId, wanted) {
 }
 
 /** The club's points. Its own list, on its own tab, at the series level. */
-function renderPointList() {
-  const into = el('list_items');
-  if (!into) return;
-  const points = byId(state.points.values());
-  const unplaced = points.filter((p) => p.latitude == null);
-
-  into.innerHTML = points.length === 0
-    ? '<p class="muted">No points.</p>'
-    : points.map((p) => {
-        const on = p.id === state.selected;
-        // One line. Where the point actually is belongs in the form below; repeating it
-        // here halved how many rows fitted on screen.
-        return `<div class="row${on ? ' on' : ''}" data-id="${esc(p.id)}">
-          <span class="mono">${esc(p.id)}</span>
-          ${p.latitude == null ? '<span class="warn trail small">not placed</span>' : ''}
-        </div>`;
-      }).join('');
-
-  for (const row of into.querySelectorAll('.row')) {
-    row.addEventListener('click', () => {
-      select(row.dataset.id);
-      const point = state.points.get(row.dataset.id);
-      if (point?.latitude != null) state.view.fit([point]);
-      render();
-    });
-  }
-
-  el('status').innerHTML = unplaced.length
-    ? `<span class="warn">${unplaced.length} of ${points.length} not placed</span>`
-    : `<span class="ok">all ${points.length} placed</span>`;
-}
 
 /**
  * Every club and series the server has.
@@ -2300,24 +2420,6 @@ function renderPointList() {
  * choosing a SCOPE, not a chart control, and the bar above the chart is for things that act
  * on the chart — background, undo, save state.
  */
-function renderSeriesList() {
-  const into = el('list_series');
-  if (!into) return;
-  into.innerHTML = state.programmes.length === 0
-    ? '<p class="muted">No series. Add one with +.</p>'
-    : byId(state.programmes, (p) => `${p.club}/${p.series}`).map((p) => {
-        const key = `${p.club}/${p.series}`;
-        return `<div class="row${key === state.key ? ' on' : ''}" data-series="${esc(key)}">
-          <span class="mono">${esc(p.series)}</span>
-          <span class="muted trail small">${esc(p.club)}</span>
-        </div>`;
-      }).join('');
-  for (const row of into.querySelectorAll('.row')) {
-    // Choosing a series is working at the series level, so its form is what follows.
-    row.addEventListener('click', () => loadProgramme(row.dataset.series));
-  }
-  el('status').innerHTML = `<span class="muted">${state.programmes.length} series</span>`;
-}
 
 /**
  * The variants of the selected course.
@@ -2326,44 +2428,6 @@ function renderSeriesList() {
  * variant are different kinds of thing and looking alike made a course row select a course
  * with NO variant — a state the form could only apologise for.
  */
-function renderVariantList() {
-  const into = el('list_variant');
-  const course = currentCourse();
-  if (!into || !course) return;
-  // Templates first, then the races. A template is what the others were made FROM, so it
-  // reads as the heading of the list rather than an entry buried in the middle of it — and
-  // the list fills up with dated races over a season while the templates stay put.
-  const order = [...course.variants.values()]
-    .sort((a, b) => (b.template - a.template) || a.id.localeCompare(b.id));
-  // A course with no design is an ordinary state, not a broken one — every new course
-  // starts there, and the last variant may be deleted — so the empty list says what to do
-  // rather than leaving a blank box.
-  into.innerHTML = order.length === 0
-    ? '<p class="muted small">No variants. Add one with + or from a template with &#9873;.</p>'
-    : order.map((variant) => {
-        const on = variant.id === state.selectedVariant;
-        return `<div class="row${on ? ' on' : ''}" data-course="${esc(course.id)}" data-variant="${esc(variant.id)}">
-          <span class="mono">${esc(variant.id)}</span>
-          ${chip(course.id, variant.id)}
-          <span class="muted trail small">${nm(course.id, variant.id)}</span>
-        </div>`;
-      }).join('');
-  for (const row of into.querySelectorAll('.row')) {
-    row.addEventListener('click', () => {
-      state.selectedVariant = row.dataset.variant;
-      state.selectedSnapshot = null;     // a capture belongs to the design it was taken of
-      state.snapshotShown = null;
-      state.showTransform = undefined;   // decide afresh for this design
-      // Pinned open, not collapsed: picking a variant is often followed by picking a
-      // different one to compare.
-      state.open.variant = true;
-      state.courseFormFor = undefined;
-      refreshGeo();
-      frameVariant(currentVariant());
-      render();
-    });
-  }
-}
 
 /**
  * The captures taken of this variant, newest last.
@@ -2373,24 +2437,21 @@ function renderVariantList() {
  * being unable to change — so what you can do here is about it, never to it: make a new
  * variant from it, hand it to boats, or take it out of the list.
  */
-function renderSnapshotList() {
-  const into = el('list_snapshot');
-  if (!into) return;
-  const life = lifeOf(state.selectedCourse, state.selectedVariant);
-  const snapshots = life.snapshots ?? [];
-  into.innerHTML = snapshots.length === 0
-    ? '<p class="muted">None yet.</p>'
-    : snapshots.map((snap) => {
-        const on = snap.revision === state.selectedSnapshot;
-        return `<div class="row${on ? ' on' : ''}" data-revision="${esc(snap.revision)}">
-          <span class="mono small">${esc(snap.label ?? snap.revision)}</span>
-          ${snap.revision === life.published ? '<span class="state current trail">published</span>' : ''}
-        </div>`;
-      }).join('');
-  for (const row of into.querySelectorAll('.row')) {
-    row.addEventListener('click', () => selectSnapshot(row.dataset.revision));
-  }
-}
+/**
+ * A snapshot named for a person, with its REVISION always beside the name.
+ *
+ * <b>The name is for reading and the hash is for checking, and only one of them is what a
+ * boat was handed.</b> A label is `div-1/2027-06-06` — the design and the day — which is how
+ * somebody talks about a capture and is deliberately not unique-looking; the revision is the
+ * twelve hex characters a record carries, that `GET /api/courses/{revision}` answers to, and
+ * that the client prints in its own top bar. Comparing what a fleet is sailing against what
+ * the editor is showing means comparing those, and a list that showed only labels made the
+ * one question somebody actually asks — *is that the one they have?* — unanswerable without
+ * clicking through to a form.
+ */
+export const snapshotName = (snap, fallback = '') =>
+  (snap?.label ? `${snap.label} · ${snap.revision ?? fallback}` : (snap?.revision ?? fallback));
+
 
 /**
  * Put a capture on the chart.
@@ -2401,10 +2462,16 @@ function renderSnapshotList() {
  * would be asking again for something that cannot have changed.
  */
 async function selectSnapshot(revision) {
-  if (state.selectedSnapshot === revision) {
-    state.selectedSnapshot = null;      // clicking the chosen one puts the design back
+  // The way back to the design, which is the level's empty option (`keepEmpty` in `picker`).
+  // It used to be a toggle — choosing the capture that was already chosen put the design back
+  // — which worked while this level was a list of rows and became unreachable the moment it
+  // was a selector, since a `<select>` fires no `change` for the option already selected.
+  if (!revision) {
+    state.selectedSnapshot = null;
     state.snapshotShown = null;
-    state.courseFormFor = undefined;
+    formsChanged();
+    refreshGeo();
+    frameVariant(currentVariant());
     render();
     return;
   }
@@ -2412,7 +2479,7 @@ async function selectSnapshot(revision) {
     const snap = await json(`/api/courses/${revision}`);
     state.snapshotShown = { revision, snapshot: snap, variant: variantFromSnapshot(snap) };
     state.selectedSnapshot = revision;
-    state.courseFormFor = undefined;
+    formsChanged();
     refreshGeo();
     frameVariant(currentVariant());
     render();
@@ -2451,7 +2518,7 @@ function cloneSnapshot() {
   state.selectedVariant = id;
   state.open.variant = true;
   state.showTransform = undefined;
-  state.courseFormFor = undefined;
+  formsChanged();
   endEdit();
   render();
   note(`${id} made from ${shown.snapshot.label ?? shown.revision}`);
@@ -2466,7 +2533,7 @@ async function publishSnapshot() {
       publish: [{ course: course.id, variant: state.selectedVariant, revision: state.selectedSnapshot }],
     });
     await loadLifecycle();
-    state.courseFormFor = undefined;
+    formsChanged();
     render();
     note('published');
   } catch (e) {
@@ -2493,7 +2560,7 @@ async function forgetSnapshot() {
   state.selectedSnapshot = null;
   state.snapshotShown = null;
   await loadLifecycle();
-  state.courseFormFor = undefined;
+  formsChanged();
   render();
   note(`${gone} is off the list — its geometry is still readable`);
 }
@@ -2506,44 +2573,6 @@ async function forgetSnapshot() {
  * word "variant" to do it. A course with several shows its variants indented under it, each
  * with its own state, because that is when the distinction starts earning its keep.
  */
-function renderCourseList() {
-  const into = el('list_course');
-  if (!into) return;
-  const courses = byId(state.courses.values());
-  into.innerHTML = courses.length === 0
-    ? '<p class="muted">No courses. Add one with +.</p>'
-    : courses.map((course) => {
-        const on = course.id === state.selectedCourse;
-        const only = course.variants.size === 1 ? [...course.variants.keys()][0] : null;
-        return `<div class="row${on ? ' on' : ''}" data-course="${esc(course.id)}"${only ? ` data-variant="${esc(only)}"` : ''}>
-          <span class="mono">${esc(course.id)}</span>
-          ${course.public ? '<span class="state open" title="listed on the front page">public</span>' : ''}
-          ${dirtyDot(course)}
-          <span class="muted trail small">${only ? nm(course.id, only)
-            : (course.variants.size === 0 ? 'no variants' : `${course.variants.size} variants`)}</span>
-        </div>`;
-      }).join('');
-
-  for (const row of into.querySelectorAll('.row')) {
-    row.addEventListener('click', () => {
-      state.selectedCourse = row.dataset.course;
-      // A course with ONE design opens straight onto it, so nobody editing an ordinary club
-      // course has to learn the word "variant" to do it. A course with several leaves the
-      // variant unchosen, which opens the variant list — you have to say which one.
-      state.selectedVariant = row.dataset.variant ?? null;
-      state.selectedSnapshot = null;
-      state.snapshotShown = null;
-      state.showTransform = undefined;   // decide afresh for this design
-      state.open.course = true;
-      state.courseFormFor = undefined;
-      refreshGeo();
-      frameVariant(currentVariant());
-      render();
-    });
-  }
-  if (!state.selectedVariant)
-    el('status').innerHTML = `<span class="muted">${courses.length} courses</span>`;
-}
 
 /**
  * The state of one variant, as a word.
@@ -2613,30 +2642,39 @@ function frameVariant(variant) {
  * {@link renderCourseFields}, so that closing the course chevron puts both away together
  * and the variant list can sit below them.
  */
-function renderCourseForm() {
+/**
+ * The variant's own fields, INLINE under its selector rather than at the foot of the pane.
+ *
+ * A level's fields belong with the level. They were in the one form region at the bottom, with
+ * the snapshot selector above them — so the pane read course, variant, snapshot, and then the
+ * variant's sequence, out of order and a scroll away from the thing it belonged to.
+ */
+function renderVariantFields() {
+  const into = el('variantForm');
   const course = currentCourse();
   const variant = currentVariant();
-  // The fold is part of the key, not just of the markup: the guard exists to keep the
-  // caret in whatever somebody is typing, and without this a folded sequence would be
-  // recognised as the same form and never redrawn.
-  const key = `${state.selectedCourse}/${variant ? variant.id : ''}/${isOpen('sequence') ? 'seq' : 'fold'}`;
-
-  if (state.courseFormFor === key) { syncCourseForm(); return; }
-  state.courseFormFor = key;
-
-  if (readOnly()) {
-    el('form').innerHTML = snapshotFields();
-    return;
-  }
-  if (!variant) {
-    el('form').innerHTML = course
-      ? '<p class="muted small">Select a variant to edit its sequence.</p>'
-      : '<p class="muted small">Select a course.</p>';
-    return;
-  }
-  el('form').innerHTML = variantFields(course, variant);
+  if (!into || !course || !variant) return;
+  // The fold is part of the key, not just of the markup: the guard exists to keep the caret in
+  // whatever somebody is typing, and without this a folded sequence would be recognised as the
+  // same form and never redrawn.
+  const key = `${course.id}/${variant.id}/${isOpen('sequence') ? 'seq' : 'fold'}`;
+  if (state.variantFieldsFor === key) { syncCourseForm(); return; }
+  state.variantFieldsFor = key;
+  into.innerHTML = variantFields(course, variant);
   wireVariantFields(course, variant);
+  el('cmd_snapshot')?.addEventListener('click', () => takeSnapshot(course, variant));
   syncCourseForm();
+}
+
+/** A capture, read-only, under the selector that chose it. */
+function renderSnapshotDetail() {
+  const into = el('snapshotForm');
+  if (!into) return;
+  if (state.snapshotFor === state.selectedSnapshot
+    && state.snapshotShownFor === state.snapshotShown) return;
+  state.snapshotFor = state.selectedSnapshot;
+  state.snapshotShownFor = state.snapshotShown;
+  into.innerHTML = snapshotFields();
 }
 
 /** The course's own three fields, under its list and above the variant list. */
@@ -2785,10 +2823,16 @@ function variantFields(course, variant) {
           <button id="c_alt">Add alternative</button>
         </div>` : ''}
 
-      <div class="endrow" style="margin-bottom:8px">
-        <label class="cb"><input type="checkbox" id="c_track"${state.showTrack ? ' checked' : ''}> show track</label>
-        <label class="cb"><input type="checkbox" id="c_unused"${state.hideUnused ? ' checked' : ''}> hide unused</label>
-        <label class="cb"><input type="checkbox" id="c_move"${transformShown() ? ' checked' : ''}> move/turn</label>
+      <!--
+        SNAPSHOT SITS WITH THE DESIGN IT CAPTURES. It was on the variant's row, among the
+        commands that create and delete variants — which put "capture this design" beside
+        "delete this design", one button apart. Capturing is the last thing you do to a
+        variant you have finished editing, so it belongs at the end of the thing you were
+        editing.
+      -->
+      <div class="lifecycle">
+        <button id="cmd_snapshot"${variant.template ? ' disabled title="a template can never be snapshotted"' : ''}>Snapshot</button>
+        <span class="info" id="lifeInfo" data-info="${esc(INFO.snapshots)}">?</span>
       </div>
 
       <label class="label" for="v_notes">Variant notes</label>
@@ -2814,7 +2858,7 @@ function wireVariantFields(course, variant) {
     // position. Dropped rather than left dormant, so a course cannot carry a marking that
     // says something untrue about it.
     if (!variant.closed) for (const step of variant.sequence) step.entry = false;
-    state.courseFormFor = undefined;
+    formsChanged();
     endEdit();
     render();
   });
@@ -2824,17 +2868,13 @@ function wireVariantFields(course, variant) {
   el('v_template').addEventListener('change', (ev) => {
     beginEdit();
     variant.template = ev.target.checked;
-    state.courseFormFor = undefined;
+    formsChanged();
     endEdit();
     render();
   });
 
   // Both are view settings, not edits: they change what is drawn, not what is stored, so
   // neither saves nor consumes the undo slot.
-  el('c_track').addEventListener('change', (ev) => { state.showTrack = ev.target.checked; render(); });
-  el('c_unused').addEventListener('change', (ev) => { state.hideUnused = ev.target.checked; render(); });
-  el('c_move').addEventListener('change', (ev) => { state.showTransform = ev.target.checked; render(); });
-
   el('c_seq').addEventListener('click', () => toggle('sequence'));
   // Folded, there is no sequence editor to wire and no rows to render — and the two Add
   // buttons go with it, since adding a step you cannot see is not something to offer.
@@ -2848,7 +2888,7 @@ function wireVariantFields(course, variant) {
       line: firstLineId(lastLineId(variant), variant.closed ? firstLineOf(variant) : null),
       cross: 'forward', gate: [], notes: null,
     });
-    state.courseFormFor = undefined;
+    formsChanged();
     endEdit();
     render();
   });
@@ -2865,7 +2905,7 @@ function wireVariantFields(course, variant) {
     }
     // An alternative to the same line is not a choice, so it too avoids repeating.
     last.gate.push({ line: firstLineId(last.gate[0]?.line), cross: 'forward' });
-    state.courseFormFor = undefined;
+    formsChanged();
     endEdit();
     render();
   });
@@ -3010,11 +3050,11 @@ async function takeSnapshot(course, variant) {
     const result = await post(`/api/lifecycle/${state.key}/snapshots`,
       { course: course.id, variant: variant.id });
     await loadLifecycle();
-    state.courseFormFor = undefined;
+    formsChanged();
     render();
     note(result.fresh
-      ? `snapshot ${result.label}`
-      : `already captured as ${result.label} — nothing has changed since`);
+      ? `snapshot ${snapshotName(result, result.revision)}`
+      : `already captured as ${snapshotName(result, result.revision)} — nothing has changed since`);
   } catch (e) {
     note(e.message, true);
   }
@@ -3068,13 +3108,13 @@ async function snapshotDirty(course) {
       if (result.fresh) taken.push(id);
     } catch (e) {
       await loadLifecycle();
-      state.courseFormFor = undefined;
+      formsChanged();
       render();
       return note(`${id}: ${e.message}`, true);
     }
   }
   await loadLifecycle();
-  state.courseFormFor = undefined;
+  formsChanged();
   render();
   note(taken.length
     ? `captured ${taken.length} of ${wanted.length}: ${taken.join(', ')}`
@@ -3100,7 +3140,7 @@ async function publishLatest(course) {
     await post(`/api/lifecycle/${state.key}/publications`,
       { publish: wanted.map((id) => ({ course: course.id, variant: id })) });
     await loadLifecycle();
-    state.courseFormFor = undefined;
+    formsChanged();
     render();
     note(`published the latest of ${wanted.length}: ${wanted.join(', ')}`
       + (course.public ? '' : ' — the course is not public, so nobody can see it yet'));
@@ -3135,7 +3175,7 @@ function cloneVariant(course, variant, into = course) {
   state.selectedVariant = id;
   state.showTransform = undefined;
   state.open.variant = true;     // show what was just made, beside its siblings
-  state.courseFormFor = undefined;
+  formsChanged();
   endEdit();
   render();
 }
@@ -3350,7 +3390,7 @@ async function expandTemplate(course, template) {
   state.selectedVariant = id;
   state.open.variant = true;
   state.showTransform = undefined;
-  state.courseFormFor = undefined;
+  formsChanged();
   endEdit();
   render();
   note(renamed.length
@@ -3450,7 +3490,7 @@ function cloneCourse(course) {
   for (const variant of course.variants.values()) cloneVariant(course, variant, copy);
   state.selectedCourse = id;
   state.selectedVariant = [...copy.variants.keys()][0] ?? null;
-  state.courseFormFor = undefined;
+  formsChanged();
   endEdit();
   render();
 }
@@ -3474,7 +3514,7 @@ function addCourse() {
   state.selectedCourse = id;
   state.selectedVariant = null;
   state.open.course = true;      // show what was just made, beside its siblings
-  state.courseFormFor = undefined;
+  formsChanged();
   endEdit();
   render();
 }
@@ -3489,7 +3529,7 @@ function deleteCourse() {
   state.courses.delete(id);
   state.selectedCourse = null;
   state.selectedVariant = null;
-  state.courseFormFor = undefined;
+  formsChanged();
   endEdit();
   render();
 }
@@ -3504,7 +3544,7 @@ function addVariant(course, from) {
   state.selectedVariant = id;
   state.showTransform = undefined;
   state.open.variant = true;     // show what was just made, beside its siblings
-  state.courseFormFor = undefined;
+  formsChanged();
   endEdit();
   render();
 }
@@ -3524,7 +3564,7 @@ function deleteVariant() {
   // list with its + and its ⚐ is the only thing worth looking at, so open it even if the
   // chevron had been shut.
   if (course.variants.size === 0) state.open.variant = true;
-  state.courseFormFor = undefined;
+  formsChanged();
   endEdit();
   render();
 }
@@ -3623,7 +3663,7 @@ function renderSteps(variant) {
       node.addEventListener(cls === 's_line' ? 'change' : 'click', (ev) => {
         beginEdit();
         fn(Number(node.dataset.step), Number(node.dataset.alt), ev, node);
-        state.courseFormFor = undefined;
+        formsChanged();
         endEdit();
         render();
       });
@@ -3670,7 +3710,7 @@ function senseOf(entry) {
  * Everything on the course and variant forms that changes without the form being rebuilt.
  *
  * <b>The forms are guarded on identity, not on content</b> — `renderCourseFields` returns
- * early while the same course is selected, and `renderCourseForm` while the same variant is —
+ * early while the same course is selected, and `renderVariantFields` while the same variant is —
  * because the guard exists to keep the caret in whatever somebody is typing. So anything whose
  * appearance depends on state that moves under a selection has to be updated HERE, not baked
  * into the markup once and left.
@@ -3730,7 +3770,7 @@ function renameCourse(oldId, wanted) {
   // the old name, which is right — they record what a boat was given, not what the design
   // is called now.
   state.selectedCourse = newId;
-  state.courseFormFor = undefined;
+  formsChanged();
   state.courseFieldsFor = undefined;
   // Saved HERE, not left to the blur that would normally do it. A rename re-renders, and
   // the re-render destroys the very input the browser was in the middle of leaving — so the
@@ -3756,7 +3796,7 @@ function renameVariant(course, variant, wanted) {
   }
   course.variants = rebuilt;
   state.selectedVariant = newId;
-  state.courseFormFor = undefined;
+  formsChanged();
   // Saved HERE, not left to the blur that would normally do it. A rename re-renders, and
   // the re-render destroys the very input the browser was in the middle of leaving — so the
   // `blur` that calls endEdit() lands on a detached node, or never fires at all, and the
@@ -4065,7 +4105,7 @@ function takeUndo() {
   state.selectedLine = back.selectedLine;
   state.selectedCourse = back.selectedCourse;
   state.selectedVariant = back.selectedVariant;
-  state.courseFormFor = undefined;
+  formsChanged();
   state.formFor = undefined;
   // Renames have to be undone in the file as well as in memory: backwards, inverted, and
   // KEEPING THE KIND. Without the kind the server follows the wrong key — a line rename

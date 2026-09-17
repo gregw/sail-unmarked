@@ -13,7 +13,9 @@
  * on its own, and when the line is passed the course comes back.</em> Nothing is clicked to
  * make either happen.
  */
-import { $, H, ok, report, settle } from './dom.mjs';
+import { $, H, choose, chosenIn, ok, optionsOf, paneHtml, report, settle, unfold } from './dom.mjs';
+import { BOAT } from '../../client/www/markscreen.js';
+import { ROLE_COLOUR } from '../../client/www/coursedraw.js';
 
 /* ------------------------------------------- something public and published to join */
 
@@ -64,16 +66,53 @@ const mod = await import('../../client/www/client.js');
 await settle(1200);
 
 const device = () => $('device').innerHTML || '';
-ok('the page comes up on the join screen', device().includes('Join and sail'));
-ok('...offering only courses that are public AND published, since a client is handed a snapshot',
-  device().includes(taken.course));
+// Identified by the form itself rather than by the button's words, which now say which level
+// is still unanswered and so are not the same on the first render as on the last.
+ok('the page comes up on the join screen', /<div class="join">/.test(device()));
 ok('...and asking who the boat is before where it is going',
   device().includes('id="j_sail"') && device().includes('id="j_name"'));
+
+ok('...with nothing below the club chosen for it, so no course is suggested that nobody picked',
+  /<select id="j_series" disabled>/.test(device())
+  && /<select id="j_course" disabled>/.test(device())
+  && /<select id="j_variant" disabled>/.test(device()));
+ok('...and the button naming what is still missing rather than sitting greyed out in silence',
+  /id="j_go" disabled>Choose a club</.test(device()));
 
 $('j_sail').value = 'AUS 1';
 H('j_sail:input')({ target: { value: 'AUS 1' } });
 $('j_name').value = 'Bombora';
 H('j_name:input')({ target: { value: 'Bombora' } });
+
+// THE DRILL, one level at a time, because that is now the only way through: each `change`
+// re-renders and the next level's options appear only then.
+const pick = (field, value) => { H(`j_${field}:change`)({ target: { value } }); };
+pick('club', programme.club);
+ok('choosing a club opens the series, and nothing further', !/<select id="j_series" disabled>/.test(device())
+  && /<select id="j_course" disabled>/.test(device()));
+pick('series', programme.series);
+// Asserted HERE rather than on the first render: the course list does not exist until a series
+// has been chosen, which is the whole point of the cascade.
+ok('...offering only courses that are public AND published, since a client is handed a snapshot',
+  device().includes(taken.course));
+pick('course', taken.course);
+ok('...and each level in turn opens the one below it',
+  !/<select id="j_variant" disabled>/.test(device()));
+ok('...the button still refusing while the last one is unanswered',
+  /id="j_go" disabled>Choose a variant</.test(device()));
+pick('variant', taken.variant);
+ok('...and offering to sail once the whole path is chosen',
+  /id="j_go">Join and sail</.test(device()));
+
+// WHAT IS REMEMBERED IS THE BOAT, NOT THE COURSE. A sail number and a club are facts about
+// whoever is holding the phone; the series, course and variant are the decision being made, and
+// a remembered one would be a default nobody chose.
+const held = JSON.parse(globalThis.sessionStorage.getItem('unmarkable.join') ?? '{}');
+ok('the sail number, the boat name and the club are kept for next time',
+  held.sail === 'AUS 1' && held.name === 'Bombora' && held.club === programme.club);
+ok('...and the series, course and variant are NOT, since they are today\'s decision',
+  !('series' in held) && !('course' in held) && !('variant' in held));
+
 H('j_go:click')();
 await settle(1500);
 
@@ -168,8 +207,13 @@ ok('...still showing the line that was crossed, so it can be looked at where it 
 // The approach closes in: at three hundred metres the plot shows a couple of hundred metres
 // of water, and by the line it is showing tens. In steps, not continuously — a view that
 // re-fitted on every fix would be a view that never held still.
+// A factor of two, not three. Holding one END of the line in view bounds how far the plot can
+// close in: on this fixture's 199 m leeward line the tightest view is about 118 m of water
+// rather than 75 m, so the zoom over an approach that starts where the screen takes over is
+// now a little over double rather than triple. That bound is the point of the end being in the
+// fit and is measured in the unit specs; what this asserts is that the plot still closes in.
 ok('the plot ZOOMS IN as the boat closes the line',
-  lastApproach.scale > firstApproach * 3);
+  lastApproach.scale > firstApproach * 2);
 ok('...in steps rather than on every update', reframes > 3 && reframes < 40);
 ok('...the next-leg arrow going green instead, which is what says something happened',
   /stroke="var\(--ok\)" stroke-width="[\d.]+" stroke-linecap="round"/.test(device()));
@@ -234,5 +278,191 @@ ok('...and the screen reports a speed rather than a dash', !st.client.stale(Date
 
 H('run:click')();
 ok('the boat can be stopped again', $('run').textContent === 'Start');
+
+/* ---------------------------------------------------- navigating on the device alone */
+
+// HIDE COURSE takes away the operator's own knowledge of where the marks are, which is the
+// only way to find out whether the device beside it is enough to sail by. What it must hide is
+// exactly the geometry; what it must NOT hide is everything the operator steers with.
+const lineIds = st.client.steps.flatMap((step) => step.crossings.map((c) => c.line));
+const drawnCourse = () => lineIds.some((id) => (chart() || '').includes(`>${id}<`))
+  || /stroke="var\(--line\)" stroke-width="2.5"/.test(chart() || '')
+  || /stroke="var\(--ok\)" stroke-width="4"/.test(chart() || '');
+H('run:click')();                          // sailing again, so the overlay keeps redrawing
+await settle(600);
+ok('the rig draws the course by default — it is the operator\'s chart', drawnCourse());
+
+$('hidecourse').checked = true;
+$('hidecourse').fire('change', { target: { checked: true } });
+await settle(600);
+ok('ticking Hide course takes the lines, their ends and their letters off the rig',
+  st.hideCourse === true && !drawnCourse());
+// The point of the exercise is that the boat is still sailable, so none of what the operator
+// steers with may go with the course: the boat itself, its true track and the fixes the client
+// accepted are all still there.
+ok('...and leaves the boat on the chart, or there would be nothing to steer',
+  chart().includes(BOAT.hull));
+ok('...along with its true track and the fixes, which say nothing about where a mark is',
+  chart().includes('var(--fromside)'));
+// And the DEVICE still says where to go, which is the whole claim: BTW, DTW and the line's name.
+const shown = $('device').innerHTML || '';
+ok('...while the device still says which way, how far, and to which line',
+  shown.includes('BTW') && shown.includes('DTW') && lineIds.some((id) => shown.includes(id)));
+
+$('hidecourse').fire('change', { target: { checked: false } });
+await settle(600);
+ok('unticking it puts the course back', st.hideCourse === false && drawnCourse());
+
+/* ------------------------------------- picking the screen, and COG up */
+
+// AUTO is the design — the sailor never has to ask for the Mark screen — but never has to is
+// not cannot, and the selector is on both screens because either may be the one you want to
+// leave.
+const on = (attr, key) => new RegExp(`data-${attr}="${key}" class="on"`).test(device());
+// Found through the SAME selector the page's own handler uses, so the click lands on the very
+// node the handler was wired to. (That selector is what caught the stub reading `[data-view]`
+// as a character class and answering with divs.)
+const press = (attr, key) => {
+  const button = $('device').querySelectorAll(`[data-${attr}]`)
+    .find((b) => b.dataset[attr] === key);
+  if (!button) throw new Error(`no button with data-${attr}="${key}"`);
+  return button.fire('click', {});
+};
+ok('the device opens on AUTO, the application deciding which screen', on('view', 'auto'));
+const auto = st.client.view(Date.now());
+H('run:click')();                            // held still, so the rule cannot change under us
+press('view', auto === 'mark' ? 'overview' : 'mark');
+ok('...and asking for the other screen gets it, at whatever range the boat is at',
+  st.client.view(Date.now()) !== auto && on('view', auto === 'mark' ? 'overview' : 'mark'));
+press('view', 'auto');
+ok('...while handing AUTO back returns the rule\'s own answer',
+  st.client.view(Date.now()) === auto && on('view', 'auto'));
+
+// COG up is the fourth orientation and the one every plotter has: the boat's heading straight
+// up, so what is ahead on the screen is what is ahead over the bow.
+press('view', 'mark');
+press('orient', 'cog');
+ok('COG up is offered alongside the brief\'s three, and takes', on('orient', 'cog'));
+ok('...and it is a different bearing from the leg the boat is sailing',
+  Math.abs(mod.__state.client.legInto(mod.__state.client.live())
+    - (mod.__state.client.fix.cogDeg ?? 0)) > 0.5);
+press('orient', 'north');
+press('view', 'auto');
+
+/* -------------------------------------- the overview's own chart controls */
+
+press('view', 'overview');
+const overviewSvg = () => /<svg class="plot"[\s\S]*?<\/svg>/.exec(device())?.[0] ?? '';
+const boatOn = () => /translate\(([-\d.]+),([-\d.]+)\) rotate\([-\d.]+\) scale/
+  .exec(overviewSvg())?.slice(1, 3).map(Number) ?? [0, 0];
+// THE LINE THE BOAT IS HEADING FOR, in the live triangle's own colour, and the COG run out
+// across the whole picture.
+ok('the overview marks the line being sailed at, not only the triangle on it',
+  new RegExp(`<line [^>]*stroke="${ROLE_COLOUR.start.replace(/[()]/g, '\\$&')}" stroke-width="3.5"`)
+    .test(overviewSvg()));
+ok('...and runs the COG out as far as the picture goes',
+  /stroke="var\(--cog\)" stroke-width="1.2"/.test(overviewSvg()));
+
+ok('the overview carries a bar of chart controls under the chart',
+  /data-zoom="in"/.test(device()) && /id="o_basemap"/.test(device()));
+ok('...with Fit dead while the picture is still the screen\'s own fit',
+  /data-zoom="fit"[^>]*disabled/.test(device()));
+
+const fitted = boatOn();
+press('zoom', 'in');
+ok('zooming in moves the course away from the middle of the picture',
+  Math.hypot(boatOn()[0] - 200, boatOn()[1] - 165) > Math.hypot(fitted[0] - 200, fitted[1] - 165));
+ok('...and Fit comes alive, since there is now something to go back from',
+  !/data-zoom="fit"[^>]*disabled/.test(device()));
+press('zoom', 'fit');
+ok('...and Fit puts it back where the screen had it',
+  boatOn().every((v, i) => Math.abs(v - fitted[i]) < 0.5));
+
+// A BACKGROUND IS FETCHED BY THE BROWSER, NOT BY US. Selecting one emits <image> elements and
+// asks nothing of `fetch`, which is what lets it exist on a screen that has to work offline.
+ok('the overview draws no background until one is asked for',
+  !overviewSvg().includes('<image'));
+// The render is HELD while the selector has focus, or the panel — rebuilt on every fix —
+// destroys the open popup and the browser closes it. At a fix a second that made the
+// background unpickable: the list appeared and vanished before the pointer reached an option.
+//
+// SAILING for this, and that is the whole test: with the boat stopped nothing re-renders
+// anyway, so a held panel and a running one look identical and both checks pass saying
+// nothing. (They did, until this comment.)
+H('run:click')();
+await settle(1500);
+const running = device();
+await settle(1500);
+ok('the panel is being rebuilt as fixes arrive, which is what makes the rest of this a test',
+  device() !== running);
+
+document.activeElement = $('o_basemap');
+const beforeChoosing = device();
+await settle(1500);
+ok('the panel holds still while a background is being chosen, so the popup survives a fix',
+  device() === beforeChoosing);
+document.activeElement = null;
+await settle(1500);
+ok('...and starts again the moment focus goes elsewhere, with nothing to remember to release',
+  device() !== beforeChoosing);
+H('run:click')();
+await settle(400);
+
+H('o_basemap:change')({ target: { value: 'chart', blur: () => { document.activeElement = null; } } });
+await settle(300);
+ok('...and draws one when it is, without a single call of its own',
+  overviewSvg().includes('<image'));
+H('o_basemap:change')({ target: { value: 'none', blur: () => { document.activeElement = null; } } });
+await settle(300);
+
+// THE PAN, followed on the document rather than on the chart: this panel is rebuilt on every
+// fix, so a `pointermove` wired to the element the drag started on would stop arriving halfway
+// through the gesture and the chart would follow the finger and then stick.
+const beforeDrag = boatOn();
+$('device').querySelector('.plot').fire('pointerdown', { clientX: 100, clientY: 100 });
+H('document:pointermove')({ clientX: 140, clientY: 75 });
+ok('dragging the overview moves it by the distance the finger moved',
+  Math.abs(boatOn()[0] - beforeDrag[0] - 40) < 0.5 && Math.abs(boatOn()[1] - beforeDrag[1] + 25) < 0.5);
+H('document:pointerup')({});
+// Letting go means the document is no longer being listened to at all — asserted as the
+// handler being GONE rather than as a move that does nothing, because a handler still there
+// and merely inert is a drag that resumes the next time anything moves.
+ok('...and lets go of the document when the finger lifts, rather than listening for ever',
+  H('document:pointermove') === undefined);
+press('zoom', 'fit');
+
+press('view', 'auto');
+H('run:click')();
+
+/* ------------------------------------------------ the phone moves around the desk */
+
+// The case is the handle and the screen is not, because the screen's own chart pans on a drag
+// and two gestures on one pointer means one of them sometimes does nothing. The targets below
+// stand in for what a real node answers to `closest`, which is what the page asks.
+const CASE = { closest: () => null };
+const SCREEN = { closest: (sel) => (sel === '.device' ? $('device') : null) };
+const phone = $('phone');
+
+phone.fire('pointerdown', { clientX: 100, clientY: 20, target: SCREEN });
+ok('a press on the SCREEN does not move the phone — that gesture belongs to the chart',
+  H('document:pointermove') === undefined && !phone.classList.contains('dragging'));
+
+// Taken hold of 100 px in and 20 px down from the phone's own top-left, so the grip offset is
+// (100, 20) and every position below is the pointer less that.
+phone.fire('pointerdown', { clientX: 100, clientY: 20, target: CASE });
+ok('...but a press on the case takes hold of it, and says so',
+  phone.classList.contains('dragging'));
+H('document:pointermove')({ clientX: 400, clientY: 300 });
+ok('...and it follows the pointer, keeping the grip where it was taken',
+  phone.style.left === '300px' && phone.style.top === '280px');
+// Dragged hard at the edge: a phone released just off the screen is a phone nobody can get
+// back, and this page has no command to fetch it.
+H('document:pointermove')({ clientX: 9000, clientY: 9000 });
+ok('...and cannot be dragged off the desk, whatever the pointer does',
+  Number(phone.style.left.replace('px', '')) <= 1400
+  && Number(phone.style.top.replace('px', '')) <= 900);
+H('document:pointerup')({});
+ok('...and is put down when the pointer lifts',
+  !phone.classList.contains('dragging') && H('document:pointermove') === undefined);
 
 report();

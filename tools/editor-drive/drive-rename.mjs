@@ -12,12 +12,11 @@
  * These drive the `change` event WITHOUT a following blur, which is the real sequence once
  * the node is gone, so a rename that only works because of the blur fails here.
  */
-import { $, H, ok, report, settle } from './dom.mjs';
+import { $, H, choose, chosenIn, ok, optionsOf, paneHtml, report, settle, unfold } from './dom.mjs';
 
 await import('../../client/www/editor.js');
 await settle(900);
 
-const list = (id) => $(id).querySelectorAll('.row');
 const get = async (p) => (await fetch(p)).json();
 const [prog] = await get('/api/programmes');
 const url = `/api/programmes/${prog.club}/${prog.series}`;
@@ -34,14 +33,13 @@ const retitle = async (field, value) => {
 
 H('tab-courses:click')();
 await settle();
-const COURSE = list('list_course')[0].dataset.course;
-H(`${list('list_course')[0].id}:click`)();
+const COURSE = optionsOf('course')[0];
+choose('course', optionsOf('course')[0]);
 await settle(600);
-if (!$('rows').innerHTML.includes('list_variant')) { H('crumb_variant:click')(); await settle(); }
-H(`${list('list_variant')[0].id}:click`)();
+if (!chosenIn('variant')) choose('variant', optionsOf('variant')[0]);
 await settle(700);
 
-const wasVariant = list('list_variant')[0].dataset.variant;
+const wasVariant = optionsOf('variant')[0];
 await retitle('v_id', 'drive-renamed-variant');
 
 const afterVariant = await get(url);
@@ -50,7 +48,7 @@ ok('a renamed variant reaches the file, not just the screen',
 ok('...and the old id is gone from it',
   !(wasVariant in afterVariant.courses[COURSE].variants));
 ok('...and the editor agrees',
-  list('list_variant').some((r) => r.dataset.variant === 'drive-renamed-variant'));
+  optionsOf('variant').includes('drive-renamed-variant'));
 
 // The two symptoms the user sees, which are both just "the server never heard about it":
 // the length comes back from the server keyed by the id it knows, so a row for an id it has
@@ -77,8 +75,8 @@ ok('...and takes its variants with it',
 
 H('tab-lines:click')();
 await settle(600);
-const LINE = list('list_items')[0].dataset.id;
-H(`${list('list_items')[0].id}:click`)();
+const LINE = optionsOf('items')[0];
+choose('items', LINE);
 await settle(600);
 await retitle('l_id', 'drive-renamed-line');
 
@@ -94,8 +92,8 @@ ok('...and no course is left standing on the name that no longer exists',
 
 H('tab-points:click')();
 await settle(600);
-const POINT = list('list_items')[0].dataset.id;
-H(`${list('list_items')[0].id}:click`)();
+const POINT = optionsOf('items')[0];
+choose('items', POINT);
 await settle(600);
 await retitle('f_id', 'drive-renamed-point');
 

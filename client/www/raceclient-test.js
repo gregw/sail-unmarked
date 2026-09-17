@@ -31,6 +31,27 @@ function line(id, northM, cross = 'FORWARD', halfM = 150) {
   };
 }
 
+/**
+ * A line running NORTH along the leg, `eastM` off the centreline, infinite southward.
+ *
+ * The shape of a gate's side: a mark with a line running back down the leg from it, so the
+ * fleet comes up between the two and turns out through one of them. It is also the shape that
+ * makes perpendicular distance useless as a measure of how near the mark a boat is.
+ */
+function alongLeg(id, eastM, cross = 'FORWARD') {
+  // Port end south and infinite, starboard end north, so a forward crossing of a line east of
+  // the centreline goes east and one west of it goes west — outward, as a gate is rounded.
+  const south = at(eastM, -60);
+  const north = at(eastM, 40);
+  const outward = eastM > 0;
+  return {
+    line: id,
+    cross,
+    port: { ...(outward ? north : south), infinite: !outward },
+    starboard: { ...(outward ? south : north), infinite: outward },
+  };
+}
+
 const DEFAULTS = {
   confirmFixes: 3,
   accuracyBandM: null,
@@ -339,28 +360,98 @@ export function run(check) {
   sail(screen, { e: 0, n: -900 }, { e: 0, n: -600 }, { stepM: 20, dtSeconds: 5 });
   check('a boat six hundred metres off is looking at the course, not at one mark',
     screen.view(screen.fix.time.getTime()) === 'overview');
-  check('...which is the distance the rule is actually reading', Math.round(screen.nearestM()) === 600);
+  check('...which is the distance the rule is actually reading', Math.round(screen.approachM()) === 600);
+  check('...and on a line met square that is the perpendicular distance, so nothing about '
+    + 'the ordinary case changed', Math.round(screen.nearestM()) === 600);
 
+  // Slowly, so the TIME test cannot be what takes the screen: at 4 m/s, 30 s is 120 m, so a
+  // boat at 150 m is outside both tests and one at 80 m is inside the radius.
   sail(screen, { e: 0, n: -600 }, { e: 0, n: -150 }, { stepM: 20, dtSeconds: 5 });
+  check('...and is still on the course a hundred and fifty metres out', screen.view(screen.fix.time.getTime()) === 'overview');
+  sail(screen, { e: 0, n: -150 }, { e: 0, n: -80 }, { stepM: 20, dtSeconds: 5 });
   check('inside the approach radius the Mark screen takes over by itself',
     screen.view(screen.fix.time.getTime()) === 'mark');
 
-  // Hysteresis. Backing off to 250 m — outside the 200 m it was taken at, inside the 320 m
+  // Hysteresis. Backing off to 130 m — outside the 100 m it was taken at, inside the 160 m
   // it is given back at — must NOT hand the screen back, or a boat holding station near a
   // start line would flip between them on noise alone.
-  sail(screen, { e: 0, n: -150 }, { e: 0, n: -250 }, { stepM: 20, dtSeconds: 5 });
+  sail(screen, { e: 0, n: -80 }, { e: 0, n: -130 }, { stepM: 20, dtSeconds: 5 });
   check('...and holds it while the boat backs off a little — no flicker on station',
     screen.view(screen.fix.time.getTime()) === 'mark');
-  sail(screen, { e: 0, n: -250 }, { e: 0, n: -400 }, { stepM: 20, dtSeconds: 5 });
+  sail(screen, { e: 0, n: -130 }, { e: 0, n: -400 }, { stepM: 20, dtSeconds: 5 });
   check('...but gives it back once the boat has genuinely gone away',
     screen.view(screen.fix.time.getTime()) === 'overview');
 
   // Time, not just distance: a fast boat is shown the mark earlier than a fixed radius
-  // would allow, because at fifteen knots two hundred metres is under thirty seconds.
+  // would allow, because at fifteen knots a hundred metres is thirteen seconds and a boat
+  // wants the screen before that.
   const quick = fresh(WINDWARD_LEEWARD);
-  sail(quick, { e: 0, n: -900 }, { e: 0, n: -300 }, { stepM: 30, dtSeconds: 4 });
+  sail(quick, { e: 0, n: -900 }, { e: 0, n: -180 }, { stepM: 30, dtSeconds: 4 });
   check('a boat coming in fast gets the Mark screen before it is inside the radius',
-    quick.nearestM() > quick.approach.enterM && quick.view(quick.fix.time.getTime()) === 'mark');
+    quick.approachM() > quick.approach.enterM && quick.view(quick.fix.time.getTime()) === 'mark');
+
+  // A LINE THAT RUNS ALONG THE LEG, which is what a gate's half-infinite sides do — and what
+  // broke this. Perpendicular distance is the distance to the line's infinite EXTENSION, so a
+  // boat four kilometres down the leg between two such lines is still only the gate's
+  // half-width from both of them: the Mark screen took over on the start line and never gave
+  // it back. Measured to the nearest point of the DEFINED extent instead, the same boat is
+  // four kilometres away and is shown the course, which is what it needs.
+  const ALONG_THE_LEG = snapshot([
+    { letter: 'S', entry: false, legNm: null, crossings: [line('leeward', -4300, 'FORWARD')] },
+    { letter: '1', entry: false, legNm: null, crossings: [
+      // Both sides run north, infinite southward, 75 m either side of the centreline: the
+      // fleet comes up between them and turns out through one.
+      alongLeg('gate-west', -75, 'FORWARD'),
+      alongLeg('gate-east', 75, 'FORWARD'),
+    ] },
+    { letter: 'F', entry: false, legNm: null, crossings: [line('leeward', -4300, 'REVERSE')] },
+  ]);
+  const distant = fresh(ALONG_THE_LEG);
+  sail(distant, { e: 0, n: -4400 }, { e: 0, n: -4200 }, { stepM: 20, dtSeconds: 5 });
+  check('a boat four kilometres from a gate whose sides run along the leg is shown the '
+    + 'COURSE, not the mark', distant.at === 1 && distant.view(distant.fix.time.getTime()) === 'overview');
+  check('...because it is measured to the part of the line it would cross, not to the '
+    + 'line\'s infinite extension', Math.round(distant.approachM()) > 4000);
+  check('...which perpendicular distance put at the gate\'s half-width, and that is the '
+    + 'reading that took the screen', Math.round(distant.nearestM()) === 75);
+  sail(distant, { e: 0, n: -4200 }, { e: 0, n: -100 }, { stepM: 40, dtSeconds: 8 });
+  check('...and it still takes the screen once the boat is genuinely up at the gate',
+    distant.view(distant.fix.time.getTime()) === 'mark');
+
+  /* --------------------------------------- and the sailor can overrule the rule */
+
+  // The sailor never has to ASK for the Mark screen, which is the design — but "never has to"
+  // is not "cannot": somebody setting up, or checking the next leg on a long beat, has every
+  // right to pick, and a display that refused would be insisting it knows better about what
+  // somebody wants to look at.
+  const forced = fresh(WINDWARD_LEEWARD);
+  sail(forced, { e: 0, n: -900 }, { e: 0, n: -600 }, { stepM: 20, dtSeconds: 5 });
+  check('six hundred metres out, AUTO says the course', forced.view(forced.fix.time.getTime()) === 'overview');
+  forced.setViewMode('mark');
+  check('...and asking for the line gets the line, at any range',
+    forced.view(forced.fix.time.getTime()) === 'mark');
+  // The rule goes on running underneath, so AUTO resumes with the right answer for where the
+  // boat is NOW rather than for where it was when a button was pressed.
+  sail(forced, { e: 0, n: -600 }, { e: 0, n: -70 }, { stepM: 20, dtSeconds: 5 });
+  forced.setViewMode('auto');
+  check('...and handing AUTO back answers for where the boat is now, not for where it was '
+    + 'when the button was pressed', forced.view(forced.fix.time.getTime()) === 'mark');
+  forced.setViewMode('overview');
+  check('...asking for the course holds it even inside the approach radius',
+    forced.view(forced.fix.time.getTime()) === 'overview');
+  check('...and anything else is read as AUTO, so a stale value cannot strand somebody on a '
+    + 'screen with no way back',
+    forced.setViewMode('nonsense') === 'auto' && forced.view(forced.fix.time.getTime()) === 'mark');
+
+  // Forcing the Mark screen cannot conjure a mark that is not there: a complete course has no
+  // live step, and the honest answer then is the course.
+  const complete = fresh(WINDWARD_LEEWARD);
+  sail(complete, { e: 0, n: -123 }, { e: 0, n: 117 });
+  sail(complete, { e: 0, n: 117 }, { e: 0, n: 320 });
+  sail(complete, { e: 0, n: 320 }, { e: 0, n: -30 });
+  complete.setViewMode('mark');
+  check('...but a finished course has no mark to force, and says so',
+    complete.finished && complete.view(complete.fix.time.getTime()) === 'overview');
 
   // And the dwell: the moment of the cross is the thing somebody wants to look at twice.
   // Stopped at the fix that latches — three confirming the far side and no more — so the
@@ -451,10 +542,26 @@ export function run(check) {
   const closing = fresh(WINDWARD_LEEWARD);
   sail(closing, { e: 0, n: -400 }, { e: 0, n: -200 });
   const ttl = closing.timeToLine();
-  // Ten metres every two seconds is 5 m/s; 200 m of it is forty seconds.
+  // Ten metres every two seconds is 5 m/s; 200 m of it is forty seconds to the water.
   check('time to line is the distance along the COG over the speed being made',
-    Math.abs(ttl.seconds - 40) < 4);
+    Math.abs(ttl.reachSeconds - 40) < 4);
   check('...and says the present course DOES cross the line', ttl.crossing === true);
+
+  // THE NUMBER SHOWN COUNTS DOWN TO THE LATCH, NOT TO THE WATER. A crossing is not latched
+  // when it happens, it is latched when three consecutive fixes have proved it — so a
+  // countdown that stopped at the water would reach zero and then sit there while nothing
+  // happened, which reads as the application having missed it.
+  check('...with the confirmation delay added, since that is when the screen will say CROSSED',
+    Math.abs(ttl.seconds - (ttl.reachSeconds + ttl.confirmSeconds)) < 1e-9
+    && ttl.confirmSeconds > 0);
+  // Fixes two seconds apart and three of them wanted: six seconds, measured from the fixes
+  // that actually arrived rather than from what the receiver was asked for.
+  check('...the delay being the fix interval times the count the detector wants',
+    Math.abs(ttl.confirmSeconds - closing.confirmFixes * 2) < 0.5);
+  const slower = fresh(WINDWARD_LEEWARD);
+  sail(slower, { e: 0, n: -400 }, { e: 0, n: -200 }, { dtSeconds: 4 });
+  check('...so a receiver reporting half as often is twice as long to be sure',
+    slower.timeToLine().confirmSeconds > ttl.confirmSeconds * 1.6);
 
   // The colour question, which is the more important half: a projection can be a perfectly
   // good twenty seconds away and still be running out past the pin.

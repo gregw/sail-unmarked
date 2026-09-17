@@ -61,9 +61,9 @@ const KN_TO_MS = M_PER_NM / 3600;
  * would flip between the two screens on GPS noise alone, several times a minute.
  */
 export const APPROACH = {
-  enterM: 200,
-  exitM: 320,
-  enterS: 45,
+  enterM: 100,
+  exitM: 160,
+  enterS: 30,
   /**
    * How long the Mark screen is held after a crossing latches.
    *
@@ -245,10 +245,13 @@ export class RaceClient {
     this.dwellUntil = 0;
     this.crossed = null;
     this.showingMark = false;
+    // AUTO: the application decides. See `view`.
+    this.viewMode = 'auto';
     this.relocations = 0;
     this.smoothSogMs = null;      // metres per second, smoothed
     this.smoothCogM = null;       // metres along the COG to the cut, smoothed
     this.sinceGood = 0;        // rejected fixes since the last accepted one
+    this.fixSeconds = null;    // how fast fixes are arriving, for the confirmation estimate
     this.relocation = new RelocationWatch(this.qc, { confirmFixes: this.confirmFixes });
 
     this.arm();
@@ -543,10 +546,45 @@ export class RaceClient {
    * thirty seconds from now the boat will be past the end having scored nothing.
    */
   timeToLine() {
-    if (this.smoothCogM == null || this.smoothSogMs == null) return { seconds: null, crossing: false };
+    if (this.smoothCogM == null || this.smoothSogMs == null) {
+      return { seconds: null, crossing: false, reachSeconds: null, confirmSeconds: this.confirmSeconds() };
+    }
     const crossing = !!this.cogCrosses;
-    if (this.smoothSogMs < 0.2) return { seconds: null, crossing };
-    return { seconds: this.smoothCogM / this.smoothSogMs, crossing };
+    if (this.smoothSogMs < 0.2) {
+      return { seconds: null, crossing, reachSeconds: null, confirmSeconds: this.confirmSeconds() };
+    }
+    const reachSeconds = this.smoothCogM / this.smoothSogMs;
+    const confirmSeconds = this.confirmSeconds();
+    // THE NUMBER COUNTS DOWN TO THE LATCH, not to the water. See `confirmSeconds`.
+    return { seconds: reachSeconds + confirmSeconds, crossing, reachSeconds, confirmSeconds };
+  }
+
+  /**
+   * How long after the boat crosses before the crossing is CONFIRMED, in seconds.
+   *
+   * <b>A crossing is not latched when it happens; it is latched when it has been proved.</b>
+   * The detector wants `confirmFixes` consecutive fixes resolved to the far side before it will
+   * call it — that is what stops a boat sitting on a line assembling a crossing out of noise —
+   * so between the instant the bow cuts the line and the instant the screen says CROSSED there
+   * is a real gap, and at one fix a second with the default of three it is about three seconds.
+   * A time-to-line that ignored it counted down to zero and then sat at zero while nothing
+   * happened, which reads as the application having missed it.
+   *
+   * <b>The estimate is the fix interval times the count</b>, and both parts are honest: the
+   * count is the detector's own, and the interval is measured from the fixes actually arriving
+   * rather than from what the receiver was asked for. It is an over-estimate by up to one
+   * interval — the first confirming fix may land immediately after the crossing, so the true
+   * delay is somewhere between `(N-1)` and `N` intervals — and over-estimating is the right
+   * way round: a countdown that reaches zero a moment early has told the truth late, where one
+   * that reaches zero a moment late says the boat has already crossed when it has not.
+   *
+   * Falls back to the interval the receiver was asked for when nothing has arrived yet, and to
+   * one second when even that is unknown, because a null here would take the whole readout away
+   * over a detail.
+   */
+  confirmSeconds() {
+    const interval = this.fixSeconds ?? 1;
+    return this.confirmFixes * interval;
   }
 
   /** Blend this fix's speed and COG cut into the smoothed pair the readout is built from. */
@@ -559,6 +597,15 @@ export class RaceClient {
 
     const seconds = this.lastApproachAt ? (fix.time - this.lastApproachAt) / 1000 : null;
     this.lastApproachAt = fix.time;
+    // How fast fixes are actually arriving, which is what the confirmation delay is measured
+    // in. Smoothed the same way everything else on this screen is, and only from intervals
+    // that look like a fix rate: a gap while a receiver was refusing everything says nothing
+    // about how quickly the next three will come.
+    if (seconds > 0 && seconds < 10) {
+      this.fixSeconds = this.fixSeconds == null
+        ? seconds
+        : this.fixSeconds + (1 - Math.exp(-seconds / TTL_TAU_S)) * (seconds - this.fixSeconds);
+    }
     const alpha = seconds > 0 ? 1 - Math.exp(-seconds / TTL_TAU_S) : 1;
     const blend = (was, now) => (was == null || now == null ? now : was + alpha * (now - was));
 
@@ -611,11 +658,102 @@ export class RaceClient {
     return bearingLocal(from, here);
   }
 
-  /** How far the boat is from the live step, in metres: the nearer side of a gate. */
+  /**
+   * A gate's own AXIS: its two crossings' centres, and the leg that leads into them.
+   *
+   * <b>What Line perp squares up at a gate, because neither side's own normal is the answer
+   * there.</b> The two shapes a gate takes pull in different directions. Where the sides are
+   * collinear — two lines end to end with a gap between them — each side's crossing normal
+   * already points the way the fleet comes through, and the join between the centres runs
+   * along them. Where they are parallel, either side of a centreline, the normals point
+   * OUTWARD in opposite directions: squaring up to one of them turns the display ninety
+   * degrees off the approach, and squaring up to the other turns it ninety degrees the other
+   * way, so the same gate reads two different ways depending only on which side a boat has
+   * committed to. The perpendicular to the join between the centres is the one bearing both
+   * shapes agree on: it is the normal itself when they are collinear, and the approach when
+   * they are parallel.
+   *
+   * <b>The sign comes from the leg INTO the gate, never from where the boat is.</b> A join
+   * has two perpendiculars and the geometry cannot choose between them. Taking the one
+   * pointing from the boat towards the gate would flip through a hundred and eighty degrees
+   * the moment the boat drew level with it — which is the latch, and the one moment the
+   * display must hold still. The leg is a fact about the course and does not move.
+   *
+   * Null for an ordinary step, which has no axis beyond its own crossing normal.
+   */
+  gateOf(step) {
+    if (!step || step.crossings.length < 2) return null;
+    const centres = step.crossings
+      .map((crossing) => (crossing.midpoint ? toLocal(this.origin, crossing.midpoint) : null));
+    if (centres.some((centre) => !centre)) return null;
+    const mean = {
+      x: centres.reduce((sum, c) => sum + c.x, 0) / centres.length,
+      y: centres.reduce((sum, c) => sum + c.y, 0) / centres.length,
+    };
+    // A gate can be neither the first step nor the last, so the leg into it is there to be
+    // had. The fallback is for an archive from an older build that says otherwise: the
+    // bearing to the gate is a worse answer, since it moves, but it is an answer.
+    const legInDeg = this.legInto(step)
+      ?? (this.point ? bearingLocal(this.point, mean) : null);
+    return { centres, mean, legInDeg };
+  }
+
+  /**
+   * Perpendicular distance to the live step, in metres: the nearer side of a gate.
+   *
+   * <b>Which screen a sailor is looking at is deliberately NOT decided by this</b> — see
+   * `approachM`, which is the one the rule reads. This is the distance to the line's infinite
+   * extension, which is the right quantity for "how close am I to crossing" and the wrong one
+   * for "how near the mark am I". Kept because the difference between the two is exactly what
+   * the specs for both have to argue about.
+   */
   nearestM() {
     const step = this.live();
     if (!step || !this.point) return null;
     return Math.min(...step.crossings.map((c) => Math.abs(signedDistanceM(c.prepared, this.point))));
+  }
+
+  /**
+   * How far the boat is from the part of the line it would actually cross, in metres.
+   *
+   * <b>Perpendicular distance is the wrong quantity for deciding when the Mark screen takes
+   * over, and a line that runs ALONG the leg is where it falls apart.</b> It is the distance
+   * to the line's infinite extension, so it answers "how far to the plane of the line"
+   * rather than "how far to the crossing" — and the two are the same number only for a line
+   * the fleet meets square. A gate's sides do the opposite: they run out along the leg, half
+   * infinite, so the fleet comes up between them and turns out through one. A boat FOUR
+   * KILOMETRES down that leg is still only the gate's half-width from both lines'
+   * extensions, so the approach screen took over on the start line and never gave up — which
+   * is exactly what was seen on the water.
+   *
+   * So the boat is measured to the nearest point of the line BETWEEN ITS TWO DEFINED POINTS,
+   * infinite ends included. That sounds like it contradicts "an infinite end is a bearing,
+   * not a place", and it does not: the point given for an infinite end is the handle that
+   * says where the fleet actually crosses, which is its whole job, so it is precisely the
+   * right bound for this question. Nothing about SCORING changes — the extent test still
+   * runs out without limit past an infinite end, and a crossing out there still counts. This
+   * decides which screen a sailor is looking at, and no more.
+   *
+   * It is also the point the plot seats its triangle on, so the screen comes up about the
+   * part of the line the picture is already about.
+   */
+  approachM() {
+    const step = this.live();
+    if (!step || !this.point) return null;
+    return Math.min(...step.crossings.map((c) => this.seatedM(c.prepared)));
+  }
+
+  /** The distance from the boat to the nearest point of one line's defined extent. */
+  seatedM(prepared) {
+    const unit = { x: prepared.d.x / prepared.length, y: prepared.d.y / prepared.length };
+    const along = (this.point.x - prepared.port.x) * unit.x
+      + (this.point.y - prepared.port.y) * unit.y;
+    const clamped = Math.max(0, Math.min(prepared.length, along));
+    const seat = {
+      x: prepared.port.x + unit.x * clamped,
+      y: prepared.port.y + unit.y * clamped,
+    };
+    return resolve(Math.hypot(this.point.x - seat.x, this.point.y - seat.y));
   }
 
   /**
@@ -626,14 +764,27 @@ export class RaceClient {
    * make than the person steering — it knows where the line is and they are looking at
    * the water. So the screen follows the situation, which is what makes it worth writing
    * down carefully rather than leaving to a magic number in a render function.
+   *
+   * The distance it reads is `approachM` and not the perpendicular one — see there, and note
+   * that the two agree for every line the fleet meets square. Where they part company is a
+   * line running along the leg, and the screen was taking over four kilometres out.
+   *
+   * <b>And the sailor can overrule it.</b> `viewMode` is `auto` by default, which is the design
+   * above; set to `overview` or `mark` it simply says which screen, because somebody setting up
+   * or checking the next leg has every right to pick and a display that refused would be
+   * insisting it knows better about what somebody wants to look at. The rule underneath goes on
+   * running either way — the hysteresis is still updated below — so `auto` resumes with the
+   * right answer rather than with whatever happened to be true when it was left.
    */
   view(now = Date.now()) {
+    // No live step means the course is complete, and there is no Mark screen to force: there
+    // is no mark. This comes before the override deliberately.
     if (!this.live()) return 'overview';
     // The dwell is its own reason to be on the Mark screen and deliberately does NOT set
     // the hysteresis flag. Priming it here would hand the next mark the screen at the exit
     // threshold instead of the enter one, purely because the last mark had been crossed.
     if (now < this.dwellUntil) return 'mark';
-    const near = this.nearestM();
+    const near = this.approachM();
     if (near == null) return 'overview';
 
     // Seconds to the line at the speed the boat is making. Floored so a stopped boat gets
@@ -648,7 +799,24 @@ export class RaceClient {
     } else {
       this.showingMark = near <= this.approach.enterM || seconds <= this.approach.enterS;
     }
+    // Tracked above whatever is returned, so a forced view does not leave the rule stale: the
+    // moment AUTO is handed back it answers for where the boat is NOW, not for where it was
+    // when somebody pressed a button.
+    if (this.viewMode !== 'auto') return this.viewMode;
     return this.showingMark ? 'mark' : 'overview';
+  }
+
+  /**
+   * Which screen the sailor has asked for: `auto`, `overview` or `mark`.
+   *
+   * Here rather than on the page, because `view()` is the single answer to "which screen" and a
+   * page that second-guessed it would be a second rule to keep in agreement with the first.
+   * Anything other than the three is treated as `auto`, so a stale value cannot strand somebody
+   * on a screen with no way back.
+   */
+  setViewMode(mode) {
+    this.viewMode = mode === 'overview' || mode === 'mark' ? mode : 'auto';
+    return this.viewMode;
   }
 
   /**
@@ -737,7 +905,33 @@ export class RaceClient {
       // what the screen is focused on — the readouts, the fit and the time all belong to the
       // one the boat is sailing towards — but drawing only one side of a gate says there is
       // only one side, and the choice is the boat's to make right up to the moment it crosses.
-      alternatives: step.crossings.filter((crossing) => crossing !== watched),
+      //
+      // EACH SIDE CARRIES ITS OWN PERPENDICULAR DISTANCE AND ITS OWN NEXT LEG, because those
+      // are the two numbers the choice actually turns on and they differ between the sides.
+      // The distance comes from that side's own detector rather than being measured by the
+      // drawing: how far off a line a boat is is the detector's question, and two sides
+      // answered by two different routines would put two different quantities on one screen
+      // drawn the same way. The leg runs from THAT side's midpoint, so the arrows say what
+      // taking each side costs on the leg that follows — which is the whole of what a gate
+      // is a choice between.
+      alternatives: step.crossings
+        .filter((crossing) => crossing !== watched)
+        .map((crossing) => ({
+          line: crossing.line,
+          prepared: crossing.prepared,
+          required: crossing.required,
+          perpDistM: crossing.detector
+            ? crossing.detector.status(this.point).perpDistM
+            : signedDistanceM(crossing.prepared, this.point),
+          legBearing: after && crossing.midpoint
+            ? (() => {
+              const to = this.midOf(after);
+              return to ? bearingLocal(toLocal(this.origin, crossing.midpoint), to) : null;
+            })()
+            : null,
+        })),
+      // The gate's own axis, for the orientation that squares up to a line. See `gateOf`.
+      gate: this.gateOf(step),
       relocations: this.relocations,
     };
   }

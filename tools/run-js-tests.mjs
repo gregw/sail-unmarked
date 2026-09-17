@@ -20,6 +20,7 @@ const SPECS = [
   'geo-test.js',
   'coursedraw-test.js',
   'boatsim-test.js',
+  'receiver-test.js',
   'raceclient-test.js',
   'markscreen-test.js',
 ];

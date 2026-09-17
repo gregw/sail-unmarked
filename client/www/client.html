@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Prototype client &middot; Unmarkable Racing</title>
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="device.css">
 <style>
 /*
  * Two panels, and the split between them is the point of the page.
@@ -16,15 +17,99 @@
  */
 body { padding: 0; height: 100vh; overflow: hidden; }
 
+/*
+ * THE RIG IS THE PAGE, and the phone floats over it.
+ *
+ * It was a two-column grid, which made the device a panel of the page — and a panel is not what
+ * is being prototyped. What ships is a phone in a bracket, and a phone sits ON the chart the
+ * way it sits on a cockpit bulkhead: over the water, in the way of some of it, movable when it
+ * is in the way of the wrong part. Giving the rig the whole window also gives it back the
+ * quarter of the screen it was paying for a column that is now a floating object.
+ */
 .split {
   display: grid;
-  grid-template-columns: 1fr 400px;
+  /*
+   * ONE DEFINITE ROW, and that is what keeps the rig honest. An implicit `auto` row is sized
+   * by its tallest content, so anything inside that wants to be taller than the window grows
+   * the row instead of being clamped by it — and `height: 100%` on a child then resolves
+   * against the grown row, which is circular and lets content win. The chart is an SVG, and
+   * an SVG with a viewBox has an intrinsic ratio it will happily impose at a width this wide.
+   * A row of exactly 100% gives the rig a definite height to stretch to and to shrink inside.
+   */
+  grid-template-rows: 100%;
   height: 100vh;
 }
 
+/*
+ * THE PHONE: a case round the screen, and the case is the handle.
+ *
+ * <b>Dragged by the case and never by the screen</b>, which is the whole reason there is a case
+ * at all rather than a border. The screen's own chart pans on a drag, and a phone that moved
+ * when you dragged the chart — or a chart that stayed put when you dragged the phone — would be
+ * two gestures fighting over one pointer. A bezel wide enough to take hold of settles it in the
+ * way the real object does: you pick a phone up by its edges.
+ *
+ * Floating rather than docked, because a prototype you cannot move is a prototype that is
+ * permanently over the part of the chart you need. It starts out of the way, top right.
+ */
+.phone {
+  position: fixed;
+  /* Clear of the rig's own bar, which is the one strip of the page that must never be under
+     it: those are the controls for the chart the phone is sitting on. */
+  top: 58px;
+  right: 24px;
+  z-index: 10;
+  background: #05090d;
+  border-radius: 40px;
+  padding: 30px 11px 22px;
+  box-shadow: 0 20px 55px rgba(0, 0, 0, 0.6), 0 0 0 1px #223444, inset 0 0 0 1px #0d151d;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.phone.dragging { cursor: grabbing; box-shadow: 0 26px 70px rgba(0, 0, 0, 0.7), 0 0 0 1px var(--line); }
+
+/* The earpiece and lens: what makes the case read as a phone rather than as a rounded box. */
+.phone .case { position: absolute; top: 0; left: 0; right: 0; height: 30px; }
+.phone .speaker {
+  position: absolute; top: 13px; left: 50%; transform: translateX(-50%);
+  width: 52px; height: 5px; border-radius: 3px; background: #16222e;
+}
+.phone .camera {
+  position: absolute; top: 12px; left: calc(50% + 40px);
+  width: 7px; height: 7px; border-radius: 50%; background: #16222e;
+  box-shadow: inset 0 0 0 1px #223444;
+}
+/* The home indicator, which is also the bottom edge of the grab area. */
+.phone .home {
+  position: absolute; bottom: 9px; left: 50%; transform: translateX(-50%);
+  width: 96px; height: 4px; border-radius: 2px; background: #1b2a37;
+}
+
+/*
+ * The SCREEN is not draggable and says so: the cursor over it belongs to whatever is under the
+ * pointer — the chart's own, a button's — and never to the case.
+ */
+.phone .device { cursor: default; border-radius: 6px; }
+
 /* ------------------------------------------------------------------ the rig */
 
-.rig { display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--panel2); }
+/*
+ * FULL HEIGHT, ALWAYS. The rig is the chart the boat is sailed on and the knobs that lie to it,
+ * and every pixel of it is worth having — it is the desk, not the device. Constraining the
+ * DEVICE's height must never reach it: `align-items: start` on the split did, which left the
+ * rig at its content height and the chart, being a flex child free to shrink, collapsed to a
+ * thin strip. So the constraint lives on `.device` alone, as `align-self`, and the rig takes
+ * the whole of the definite row by stretching into it — the default, and now the row is
+ * definite it means something.
+ *
+ * `min-height: 0` so the chart can shrink inside it rather than pushing it open, and
+ * `overflow: hidden` as the backstop for the same thing.
+ */
+.rig {
+  display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden;
+  border-right: 1px solid var(--panel2);
+}
 
 .rigbar {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
@@ -32,6 +117,17 @@ body { padding: 0; height: 100vh; overflow: hidden; }
 }
 .rigbar .sp { flex: 1; }
 .rigbar h1 { font-size: 17px; }
+
+/* A tickbox in the bar, lettered like the labels under it rather than like body text. */
+.rigbar .tick {
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--muted); cursor: pointer; user-select: none;
+}
+.rigbar .tick input { accent-color: var(--line); cursor: pointer; margin: 0; }
+/* Lit while it is doing something, because a rig with the course hidden looks like a rig
+   with no course loaded, and the difference matters. */
+.rigbar .tick:has(:checked) { color: var(--ok); }
 
 /*
  * No system cursor: the chart draws its own, which is far more visible on dark water and can
@@ -59,143 +155,30 @@ body { padding: 0; height: 100vh; overflow: hidden; }
  * Deliberately narrow and its own scrolling surface: this is a phone in a bracket on a
  * tiller, not a desktop window, and a prototype shown wider than the thing it prototypes
  * flatters itself about how much will fit.
+ *
+ * <b>AND PHONE-SHAPED, not merely phone-wide.</b> It was 400px against the full window height,
+ * which on a desktop monitor is 1:2.5 and on a tall one worse — a panel that shape has room
+ * for things a phone has not, so anything laid out until it "fits" fits nothing. 9:19.5 is an
+ * iPhone from the X onwards and near enough every Android flagship; 20:9 and 19:9 are within a
+ * few percent of it, so one ratio stands in for all of them.
+ *
+ * Written once, as the `aspect-ratio`. The height is what is capped — by the window, or by
+ * what 400px of width implies — and the width follows from the ratio, so the two can never
+ * disagree. On a short window the panel narrows instead of being cropped, which is why every
+ * type size below is in `cqi`: it is a fraction of THIS panel, not of a number somebody once
+ * measured against a 400px one.
+ *
+ * Everything else about this screen — its type, its rows, its colours — is in `device.css`,
+ * which `boat.html` links as well. What is HERE is only where the screen sits.
  */
-.device { display: flex; flex-direction: column; min-height: 0; background: var(--sea); overflow-y: auto; }
-
-.device .bar {
-  display: flex; align-items: center; gap: 8px;
-  padding: 8px 12px; border-bottom: 1px solid var(--panel2); font-size: 12px;
-}
-.device .bar .sp { flex: 1; }
-.device .bar .disp { font-family: var(--disp); font-size: 16px; letter-spacing: 0.03em; }
-
-.orient { display: flex; gap: 0; padding: 6px 12px 0; }
-.orient button {
-  flex: 1; background: none; border: 1px solid var(--panel2); color: var(--muted);
-  font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase;
-  padding: 5px 2px; cursor: pointer;
-}
-.orient button.on { color: var(--ink); border-color: var(--line); background: var(--panel2); }
-
-/*
- * The top arrow carries the state, so its colour is not decoration: grey outline while
- * approaching, solid green the instant a crossing latches, bold red outline on a miss.
- */
-.leg {
-  display: flex; align-items: center; gap: 8px; margin: 8px 12px;
-  padding: 6px 10px; border: 2px solid var(--muted); border-radius: 5px; color: var(--muted);
-}
-.leg .disp { font-family: var(--disp); font-size: 17px; font-weight: 600; letter-spacing: 0.08em; }
-.leg .mono { margin-left: auto; font-size: 15px; }
-.leg.crossed { border-color: var(--ok); background: var(--ok); color: var(--sea); }
-.leg.missed { border-color: var(--warn); color: var(--warn); border-width: 3px; }
-
-.plot { display: block; width: 100%; height: auto; background: var(--sea); }
-
-.device .readout { padding: 6px 12px; gap: 12px; }
-.device .readout .value { font-size: 26px; }
-
-/*
- * The two numbers the course screen exists to give: which way, and how far. Big enough to be
- * glanced at from the tiller rather than read.
- */
-.steer { display: flex; gap: 26px; padding: 8px 12px 2px; }
-.steer .label {
-  font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em;
-  text-transform: uppercase; color: var(--muted);
-}
-.steer .value { font-family: var(--disp); font-size: 46px; font-weight: 600; line-height: 1; }
-.steer .unit { font-size: 15px; color: var(--muted); margin-left: 3px; }
-.steer.stale .value { opacity: 0.45; }
-
-/*
- * TIME TO LINE. The largest thing on the approach screen, because it is the one number being
- * steered to — and its COLOUR is the warning: green crosses the line, red runs out past the
- * end of it.
- */
-.ttl {
-  display: flex; align-items: baseline; gap: 10px;
-  margin: 6px 12px 2px; padding: 4px 12px;
-  border-left: 4px solid currentColor;
-}
-.ttl .label {
-  font-family: var(--mono); font-size: 11px; letter-spacing: 0.2em;
-  text-transform: uppercase; opacity: 0.75;
-}
-.ttl .value { font-family: var(--disp); font-size: 62px; font-weight: 700; line-height: 0.95; }
-.ttl .unit { font-family: var(--mono); font-size: 16px; opacity: 0.75; }
-.ttl.ok { color: var(--ok); }
-.ttl.missing { color: var(--warn); }
-
-/*
- * What the boat is steering at, on its own row rather than in a readout cell: a line id may
- * be scoped (`manly-to-shark/windward`) and is far too long for a cell built for a number.
- */
-.wpt {
-  display: flex; align-items: baseline; gap: 8px;
-  margin: 8px 12px 0; padding: 5px 10px;
-  border: 1px solid var(--panel2); border-left: 3px solid var(--line); border-radius: 4px;
-}
-.wpt .letter {
-  font-family: var(--disp); font-size: 19px; font-weight: 700; color: var(--line);
-  min-width: 16px; text-align: center;
-}
-.wpt .name { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wpt .gate {
-  margin-left: auto; font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase;
+.device {
+  --panel-w: 400px;
+  aspect-ratio: 9 / 19.5;
+  height: min(calc(100vh - 160px), calc(var(--panel-w) * 19.5 / 9));
+  border-bottom: 1px solid var(--panel2);
 }
 
-/*
- * Stale readouts are dimmed rather than hidden. The numbers are the last that were true and
- * are still worth something for position; what must not happen is their looking as current
- * as the ones beside them.
- */
-.readout.stale .value { opacity: 0.45; }
-/* A finished run is a result, not a reading: the clock has stopped and says so. */
-.readout.done .value { color: var(--ok); }
-.readout.done .label { color: var(--ok); opacity: 0.8; }
-
-.signal {
-  margin: 0 12px 8px; padding: 4px 8px; font-size: 12px;
-  border-left: 3px solid var(--warn); background: var(--panel);
-}
-
-.status { padding: 4px 12px 10px; font-size: 12.5px; color: var(--muted); }
-.status.crossed { color: var(--ok); }
-.status.missed { color: var(--warn); }
-
-.crossings { padding: 0 12px 12px; font-size: 11px; }
-.crossings li { padding: 1px 0; color: var(--muted); }
-
-/* ------------------------------------------------------------- the join screen */
-
-.join { padding: 14px 12px; }
-.join h2 { margin: 14px 0 6px; font-size: 15px; color: var(--ink); }
-.join h2:first-child { margin-top: 0; }
-.join label {
-  display: block; font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em;
-  text-transform: uppercase; color: var(--muted); margin: 8px 0 3px;
-}
-.join input, .join select {
-  width: 100%; background: var(--panel2); color: var(--ink); font-family: var(--body);
-  font-size: 14px; border: 1px solid var(--panel2); border-radius: 4px; padding: 6px 8px;
-}
-.join input:focus, .join select:focus { outline: none; border-color: var(--line); }
-.join .pair { display: grid; grid-template-columns: 40% 60%; gap: 8px; }
-
-button.go {
-  width: 100%; margin-top: 14px; padding: 10px; border: none; border-radius: 5px;
-  background: var(--line); color: var(--sea); font-family: var(--disp); font-size: 17px;
-  font-weight: 600; letter-spacing: 0.06em; cursor: pointer;
-}
-button.go:disabled { background: var(--panel2); color: var(--muted); cursor: not-allowed; }
-
-button.plain {
-  background: var(--panel2); color: var(--ink); border: 1px solid var(--panel2);
-  border-radius: 4px; padding: 5px 10px; font-family: var(--body); font-size: 13px; cursor: pointer;
-}
-button.plain:hover { border-color: var(--line); }
-button.plain.on { border-color: var(--ok); color: var(--ok); }
+/* ------------------------------------------------- the rig's own two controls */
 
 select.basemap {
   background: var(--panel2); color: var(--ink); border: 1px solid var(--panel2);
@@ -203,17 +186,33 @@ select.basemap {
 }
 
 /*
- * The audit trail, which is the reason the receiver is allowed to lie at all: every fix,
- * the decision made about it, and why. Newest first, because that is the one being asked
- * about.
+ * THE FIXES ARE A FIXED FIVE LINES AND THEN A SCROLLBAR.
+ *
+ * It is an append-only log at up to five a second, so anything that grows with it eats the
+ * page: unbounded, the knobs went off the bottom of the window and most of the rig became a
+ * list of accepted fixes. Five lines is enough to see the last second or two of decisions,
+ * which is what the log is read for while something is happening; the rest is scrollback, for
+ * afterwards.
+ *
+ * <b>A fixed height, not a maximum.</b> A box that grew to five lines and stopped would still
+ * push the sliders down the instant the first fix arrived, so the controls would move under the
+ * hand that was about to use them. This way the rig's bottom bar never changes height.
+ *
+ * Said in `em` rather than in pixels, so it follows the type: `7.5em` is five lines at a
+ * line-height of 1.5, and stays five lines if the font size changes. The rows carry no padding
+ * of their own for the same reason — a row has to be exactly one line for the arithmetic to
+ * mean anything.
  */
-.trail { font-family: var(--mono); font-size: 10.5px; max-height: 92px; overflow-y: auto; }
-.trail div { padding: 1px 0; color: var(--muted); white-space: nowrap; }
+.trail {
+  font-family: var(--mono); font-size: 10.5px; line-height: 1.5;
+  height: 7.5em; overflow-y: auto;
+}
+.trail div { color: var(--muted); white-space: nowrap; }
 .trail div.bad { color: var(--warn); }
 
 @media (max-width: 860px) {
-  .split { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
-  .device { border-top: 1px solid var(--panel2); }
+  .device { --panel-w: 280px; }
+  .phone { top: 52px; right: 12px; }
 }
 </style>
 </head>
@@ -228,6 +227,14 @@ select.basemap {
       <button class="plain" id="place">Place boat</button>
       <span class="sp"></span>
       <span class="mono" id="truth" style="font-size:11px; color:var(--muted)"></span>
+      <!--
+        HIDE COURSE puts the rig's chart back to what the water looks like: no lines, no end
+        dots, no letters. It is beside the basemap selector because both decide what the chart
+        SHOWS, where Start and Place boat decide what the boat does.
+      -->
+      <label class="tick" title="Draw no course on the rig's chart, so the only thing saying where the marks are is the device beside it">
+        <input type="checkbox" id="hidecourse"> Hide course
+      </label>
       <select class="basemap" id="basemap"></select>
       <a href="index.html" style="font-size:12px">&larr; home</a>
     </div>
@@ -252,7 +259,18 @@ select.basemap {
     </div>
   </div>
 
-  <div class="device" id="device"></div>
+  <!--
+    THE PHONE. The screen is the `.device` inside it; everything round it is case, and the case
+    is the handle — see the CSS.
+  -->
+  <div class="phone" id="phone">
+    <div class="case">
+      <span class="speaker"></span>
+      <span class="camera"></span>
+    </div>
+    <div class="device" id="device"></div>
+    <div class="home"></div>
+  </div>
 
 </div>
 

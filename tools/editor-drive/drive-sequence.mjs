@@ -8,13 +8,14 @@
  * so the caret stays where somebody is typing, and a guard that did not know about the fold
  * would recognise the folded form as the same one and never redraw it.
  */
-import { $, H, ok, report, settle } from './dom.mjs';
+import { $, H, choose, chosenIn, ok, optionsOf, paneHtml, report, settle, unfold } from './dom.mjs';
 
 await import('../../client/www/editor.js');
 await settle(900);
 
-const list = (id) => $(id).querySelectorAll('.row');
-const form = () => $('form').innerHTML;
+// The variant's fields sit inline under its own selector now, not in the one form region at
+// the foot of the pane — a level's fields belong with the level.
+const form = () => $('variantForm').innerHTML;
 const steprows = () => $('c_steps').querySelectorAll('.steprow').length;
 const folded = () => !form().includes('id="c_steps"');
 /** What the header says about itself: the count it shows once there are no rows to count. */
@@ -22,10 +23,9 @@ const summary = () => (/>(\d+ lines?|empty)</.exec(form()) ?? [])[1];
 
 H('tab-courses:click')();
 await settle();
-H(`${list('list_course')[0].id}:click`)();
+choose('course', optionsOf('course')[0]);
 await settle(600);
-if (!$('rows').innerHTML.includes('list_variant')) { H('crumb_variant:click')(); await settle(); }
-H(`${list('list_variant')[0].id}:click`)();
+if (!chosenIn('variant')) choose('variant', optionsOf('variant')[0]);
 await settle(700);
 
 // Whatever the fixture holds, make sure there is something to count.

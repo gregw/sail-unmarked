@@ -29,6 +29,8 @@
  * the whole value of one is being able to say "do that again, slower".
  */
 
+import { fromLocal } from './crossing.js';
+
 const M_PER_DEG_LAT = 111320;
 const M_PER_NM = 1852;
 const KN_TO_MS = M_PER_NM / 3600;
@@ -65,14 +67,14 @@ export function gaussianPair(random) {
   return [r * Math.cos(2 * Math.PI * v), r * Math.sin(2 * Math.PI * v)];
 }
 
-/** Metres east and north of an origin, back as a position. */
-export function offsetBy(origin, eastM, northM) {
-  const mPerDegLon = M_PER_DEG_LAT * Math.cos((origin.latitude * Math.PI) / 180);
-  return {
-    latitude: origin.latitude + northM / M_PER_DEG_LAT,
-    longitude: origin.longitude + eastM / mPerDegLon,
-  };
-}
+/**
+ * Metres east and north of an origin, back as a position.
+ *
+ * `crossing.fromLocal` does the arithmetic. Two copies of one tangent-plane approximation is
+ * exactly the kind of pair that drifts, and this one would drift between the simulator that
+ * places a boat and the detector that decides where it crossed.
+ */
+export const offsetBy = (origin, eastM, northM) => fromLocal(origin, { x: eastM, y: northM });
 
 /** Metres between two positions, on the same local-tangent approximation. */
 export function metresBetween(a, b) {

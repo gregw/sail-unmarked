@@ -179,28 +179,33 @@ export function run(check) {
   check('a western longitude reads W', formatPosition({ latitude: 33.8, longitude: -151.2 }).includes('W'));
 
   // --------------------------------------------------------------- basemaps
-  check('the plain basemap fetches nothing', BASEMAPS.plain.layers.length === 0);
+  check('the `none` basemap fetches nothing, which is what an offline-first screen needs',
+    BASEMAPS.none.layers.length === 0);
   check('the sea chart carries the seamark overlay',
     BASEMAPS.sea.layers.some((l) => l.url(14, 1, 2).includes('openseamap')));
   // The whole point of the second sea basemap: the marks are a separate transparent
   // layer, so leaving it off gives the same chart without the buoys and lights.
   check('sea simple drops the seamarks',
-    BASEMAPS.seaSimple.layers.every((l) => !l.url(14, 1, 2).includes('openseamap')));
+    BASEMAPS.chart.layers.every((l) => !l.url(14, 1, 2).includes('openseamap')));
   check('...but keeps the same ocean base',
-    BASEMAPS.seaSimple.layers[0].url(14, 1, 2) === BASEMAPS.sea.layers[0].url(14, 1, 2));
+    BASEMAPS.chart.layers[0].url(14, 1, 2) === BASEMAPS.sea.layers[0].url(14, 1, 2));
   check('...and is exactly one layer lighter',
-    BASEMAPS.seaSimple.layers.length === BASEMAPS.sea.layers.length - 1);
+    BASEMAPS.chart.layers.length === BASEMAPS.sea.layers.length - 1);
   check('the ocean base is z/y/x, not z/x/y', BASEMAPS.sea.layers[0].url(14, 111, 222).endsWith('/14/222/111'));
   check('every basemap has a label the selector can show',
     Object.values(BASEMAPS).every((b) => typeof b.label === 'string' && b.label.length > 0));
 
   const tiles = view.tileLayer('sea');
   check('the sea chart emits tiles', tiles.includes('<image'));
-  check('sea simple emits fewer of them',
-    (view.tileLayer('seaSimple').match(/<image/g) || []).length
+  check('the plain chart emits fewer of them',
+    (view.tileLayer('chart').match(/<image/g) || []).length
       < (tiles.match(/<image/g) || []).length);
-  check('the plain basemap emits none', view.tileLayer('plain') === '');
-  check('an unknown basemap is plain rather than an error', view.tileLayer('nonsense') === '');
+  check('`none` emits none', view.tileLayer('none') === '');
+  check('an unknown basemap draws nothing rather than erroring — which is also what a stale '
+    + 'stored name from an older build becomes', view.tileLayer('seaSimple') === ''
+    && view.tileLayer('nonsense') === '');
+  check('the selector offers them least ink first, ending at the full sea chart',
+    Object.keys(BASEMAPS).join() === 'none,osm,chart,sea');
 
   // A runaway tile count is a hang and a lot of requests, so it is bounded.
   const wide = new MapView(4000, 4000);

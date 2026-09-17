@@ -1,7 +1,7 @@
 /**
  * Line ends, and the handles they are dragged by.
  */
-import { $, H, ok, report, settle } from './dom.mjs';
+import { $, H, choose, chosenIn, ok, optionsOf, paneHtml, report, settle, unfold } from './dom.mjs';
 
 await import('../../client/www/editor.js');
 await settle(900);

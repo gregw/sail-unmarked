@@ -18,18 +18,33 @@
  */
 
 import { prepareLine } from './crossing.js';
+import { BASEMAPS } from './geo.js';
+import { ROLE_COLOUR } from './coursedraw.js';
 import { clock } from './raceclient.js';
 import {
   HOLD,
   NM_FROM_M,
+  BOAT,
   REAL,
   TURN_DEG_S,
   northPointer,
+  ORIENTATIONS,
+  OVERVIEW_ZOOM,
+  OverviewView,
+  chartBar,
   orientationBar,
+  viewBar,
   overview,
   overviewUp,
   PlotView,
   bearingOf,
+  boxesClash,
+  clipToView,
+  labelBox,
+  COG_FIT_CAP,
+  turnBetween,
+  LINE_LABEL_PX,
+  OTHER_SIDE,
   rejectMark,
   signalLine,
   crossingNormal,
@@ -106,6 +121,11 @@ export function run(check) {
     upBearing(state, 'leg') === 60 && upBearing(state, 'leg') !== state.legBearing);
   check('Line perp squares the line across, so the crossing is always straight up',
     near(upBearing(state, 'perp'), 0));
+  check('COG up puts the boat\'s own heading at the top, which is not the leg it is sailing',
+    upBearing(state, 'cog') === 30 && upBearing(state, 'cog') !== upBearing(state, 'leg'));
+  check('...falling back to the leg with no COG to hand, rather than snapping the world to '
+    + 'north under somebody who asked for it not to',
+    upBearing({ ...state, cogDeg: null }, 'cog') === 60);
   check('...and Leg up falls back to the COG where there is no leg at all, rather than '
     + 'snapping to north under the helm at the last mark',
     upBearing({ ...state, legUp: null, legBearing: null }, 'leg') === 30);
@@ -160,7 +180,9 @@ export function run(check) {
   const mark = client.markState(t);
   const svg = plot(mark, { orientation: 'north' });
   check('the plot draws the line it is watching', svg.includes('var(--line)'));
-  check('...the boat', svg.includes('M0,-15 L9,12 L0,6 L-9,12 Z'));
+  check('...the boat, as a hull seen from above rather than an arrow — an arrow says which way '
+    + 'something points and on a chart reads as a cursor',
+    svg.includes(BOAT.hull) && /<circle cx="0" cy="-2.6"/.test(svg));
   check('...the COG projection with a ring where it cuts', svg.includes('stroke-dasharray="7,5"'));
   check('...and every fix it has accepted',
     (svg.match(/r="3\.5"/g) || []).length === client.fixes.length);
@@ -186,7 +208,12 @@ export function run(check) {
     return m ? { x: Number(m[1]), y: Number(m[2]) } : null;
   };
 
-  const startPoint = { ...mark.point };
+  // A HUNDRED AND EIGHTY METRES FURTHER OUT than the fixture everything else uses, because
+  // the fixture sits at twenty metres, which is on the zoom floor: inside `MIN_SPAN_M` the
+  // scale is clamped, so twelve metres of progress is a fifth of the scale and the frame is
+  // rightly given up as "closer in". That is the stepped zoom working, not a frame failing to
+  // hold, and asserting the hold at the one range where it should not hold tested nothing.
+  const startPoint = { x: mark.point.x, y: mark.point.y - 180 };
   const first = whereBoat(shot(startPoint));
   const framedAt = { ...held.centre, scale: held.scale };
   const crept = whereBoat(shot({ x: startPoint.x, y: startPoint.y + 12 }));
@@ -338,6 +365,16 @@ export function run(check) {
   check('the orientation selector offers all three', ['Leg up', 'North up', 'Line perp']
     .every((label) => orientationBar('north').includes(label)));
   check('...marking the one in force', orientationBar('perp').includes('data-orient="perp" class="on"'));
+  check('...COG up among them, beside Leg up, since the two are the course-referenced pair',
+    Object.keys(ORIENTATIONS).slice(0, 2).join() === 'leg,cog');
+
+  /* -------------------------------------------------- what to look at, and who decides */
+
+  check('the view selector offers the course, the line and AUTO',
+    ['Course', 'Line', 'Auto'].every((label) => viewBar('auto').includes(label)));
+  check('...marking the one in force', viewBar('mark').includes('data-view="mark" class="on"'));
+  check('...and AUTO is what it opens on, because the sailor never has to ASK for the Mark '
+    + 'screen — only to be able to', viewBar('auto').includes('data-view="auto" class="on"'));
 
   /* ----------------------------------------------------------- the clock on screen */
 
@@ -375,8 +412,14 @@ export function run(check) {
   check('...and the elapsed has stopped moving, because it is a result now',
     frozen && frozen[1] === clock(startedClient.elapsed(ticking + 600000))
     && frozen[1] === clock(startedClient.finishAt - startedClient.startAt));
-  check('...and is marked as final', done.includes('final')
-    && done.includes('class="readout done"'));
+  // MARKED AS FINAL BY THE COLOUR, NOT BY THE LABEL. It used to say "Elapsed — final", written
+  // with an `&mdash;` and then put through `esc` like every other label — which escaped the
+  // ampersand and printed the entity, so the screen read "ELAPSED &MDASH; FINAL". `.readout.done`
+  // turns the row green, which says result in the place somebody is already looking.
+  check('...and is marked as final, by the row that carries the colour',
+    done.includes('class="readout done"'));
+  check('...with the label still just the word, and no entity printed at it',
+    done.includes('>Elapsed<') && !done.includes('&amp;') && !done.toLowerCase().includes('mdash'));
 
   const primary = overviewPanel(client, { now: t });
   check('the primary screen ALWAYS shows BTW, DTW and the line',
@@ -425,7 +468,16 @@ export function run(check) {
   // metres from four hundred out, in four orientations, with the boat crabbing.
   const W = 400;
   const Hgt = 330;
-  const inView = (x, y) => x >= 0 && x <= W && y >= 0 && y <= Hgt;
+  // NOT MERELY INSIDE — WELL INSIDE. Something a few pixels off the border reads as on its
+  // way out of the picture, and on a phone in a bracket the outermost pixels are the ones a
+  // thumb and a rounded corner take first. So the sweep asserts a real buffer rather than
+  // mere containment. Measured over these four approaches the closest anything came to the
+  // border went from 25 px to 45 px when `FIT_FRACTION` and `HOLD.edgeFraction` were widened
+  // together; 11% of the axis is just inside that, so the spec has headroom without being
+  // satisfied by a near miss.
+  const BUFFER = 0.11;
+  const inView = (x, y) => x >= W * BUFFER && x <= W * (1 - BUFFER)
+    && y >= Hgt * BUFFER && y <= Hgt * (1 - BUFFER);
 
   function sweep(cogDeg, orientation) {
     const flown = new RaceClient(snapshot);
@@ -446,7 +498,7 @@ export function run(check) {
       const dots = [...svg.matchAll(/<circle cx="([-\d.]+)" cy="([-\d.]+)" r="3\.5"/g)]
         .map((x) => [Number(x[1]), Number(x[2])]);
       if (!dots.slice(-3).every(([x, y]) => inView(x, y))) missing.dots += 1;
-      const boat = /translate\(([-\d.]+),([-\d.]+)\) rotate\([-\d.]+\)"><path d="M0,-15/.exec(svg);
+      const boat = /translate\(([-\d.]+),([-\d.]+)\) rotate\([-\d.]+\) scale\([\d.]+\)">/.exec(svg);
       if (boat && !inView(Number(boat[1]), Number(boat[2]))) missing.boat += 1;
     }
     return missing;
@@ -459,13 +511,225 @@ export function run(check) {
     ['line perp', 20, 'perp'],
   ]) {
     const swept = sweep(cogDeg, orientation);
-    check(`over a whole approach, ${label}: the crossing triangle stays in view`,
+    check(`over a whole approach, ${label}: the crossing triangle stays well clear of the border`,
       swept.frames > 50 && swept.triangle === 0);
     check(`...the next-leg arrow too, though where it hangs depends on a triangle whose size `
       + `depends on the very scale being solved for`, swept.arrow === 0);
     check(`...the last three fixes behind the boat`, swept.dots === 0);
     check(`...and the boat`, swept.boat === 0);
   }
+
+  /* ----------------------------- the overview: a background, zoom and pan */
+
+  const courseOf = (client, extra = {}) =>
+    overview(client, { orientation: 'north', width: 400, height: 330, ...extra });
+  const overClient = (() => {
+    const flown = new RaceClient(snapshot);
+    let when = 0;
+    for (let n = -300; n <= -100; n += 20) {
+      const p = at(0, n);
+      flown.accept({ latitude: p.latitude, longitude: p.longitude, time: new Date((when += 1000)),
+        accuracyM: 3, satellites: 12, sogKn: 9, cogDeg: 0 });
+    }
+    return flown;
+  })();
+  const imagesIn = (svg) => (svg.match(/<image/g) || []).length;
+
+  // THE LINE THE BOAT IS HEADING FOR is drawn in the same colour as the triangle on it, and
+  // thicker. It was the same blue as every other line, so the one thing worth finding on the
+  // picture was marked on a shape a few pixels across and not on the stroke it sits on.
+  const overSvg = courseOf(overClient);
+  const strokes = [...overSvg.matchAll(/<line [^>]*stroke="([^"]+)" stroke-width="([\d.]+)"/g)]
+    .map((m) => ({ colour: m[1], width: Number(m[2]) }));
+  const liveLine = strokes.find((l) => l.colour === ROLE_COLOUR.start);
+  check('the overview marks the LINE the boat is heading for, not only the triangle on it',
+    !!liveLine);
+  check('...in the live triangle\'s own colour, so the two say the same thing',
+    overSvg.includes(`fill="${ROLE_COLOUR.start}"`) && liveLine.colour === ROLE_COLOUR.start);
+  check('...and heavier than the lines that are not being sailed at',
+    strokes.some((l) => l.colour === 'var(--line)' && l.width < liveLine.width));
+
+  // THE COG, run out as far as the picture goes: on this screen the question is what the boat
+  // is pointing at, and that is only legible if the line reaches it.
+  const cogLine = /<line x1="([-\d.]+)" y1="([-\d.]+)" x2="([-\d.]+)" y2="([-\d.]+)" stroke="var\(--cog\)"/
+    .exec(overSvg);
+  check('the overview runs the COG out across the whole picture', !!cogLine);
+  check('...from the boat, forward only — a line through it would show a back bearing '
+    + 'nobody asked for', !!cogLine && (() => {
+    const [, x1, y1, x2, y2] = cogLine.map(Number);
+    const boat = /translate\(([-\d.]+),([-\d.]+)\) rotate\([-\d.]+\) scale/.exec(overSvg)
+      .slice(1, 3).map(Number);
+    return Math.hypot(x1 - boat[0], y1 - boat[1]) < 0.2
+      && Math.hypot(x2 - x1, y2 - y1) > Math.hypot(400, 330) * 0.99;
+  })());
+  check('...and none of it is drawn before there is a fix to draw it from',
+    !/stroke="var\(--cog\)"/.test(courseOf(new RaceClient(snapshot))));
+
+  check('the overview draws no background by default, and asks nothing of the network for it',
+    imagesIn(courseOf(overClient)) === 0 && imagesIn(courseOf(overClient, { basemap: 'none' })) === 0);
+  check('...and draws one when asked for it', imagesIn(courseOf(overClient, { basemap: 'chart' })) > 0);
+  check('...the sea chart being the same base with the seamarks stacked on it, so it is more',
+    imagesIn(courseOf(overClient, { basemap: 'sea' }))
+      > imagesIn(courseOf(overClient, { basemap: 'chart' })));
+  check('...turned with the world rather than left north-up under a turned course',
+    /rotate\(-?\d/.test(courseOf(overClient, { basemap: 'chart', orientation: 'leg' })));
+
+  // THE POINT OF THE WHOLE THING: tiles are <image> elements, so the browser fetches them on
+  // its own and NOTHING on the path from a fix to a drawn course touches the network. Asserted
+  // with `fetch` replaced by something that throws, which is how `drive-client` sails the
+  // course — a background that could block would be the one thing that must never be on this
+  // screen.
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = () => { throw new Error('the network is not available'); };
+  let offline = null;
+  try {
+    offline = courseOf(overClient, { basemap: 'sea' });
+  } catch (e) {
+    offline = null;
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  check('A BACKGROUND NEVER BLOCKS: the course draws with the network gone, tiles and all',
+    !!offline && imagesIn(offline) > 0 && offline.includes('<svg class="plot"'));
+
+  // Zoom and pan. Untouched, the overview is the fit it always was; touched, it is anchored to
+  // the fit at the moment it was taken hold of, so it does not wander while it is being dragged.
+  const boatOn = (svg) => /translate\(([-\d.]+),([-\d.]+)\) rotate\([-\d.]+\) scale/.exec(svg)
+    .slice(1, 3).map(Number);
+  const hand = new OverviewView();
+  const fitted = boatOn(courseOf(overClient, { view: hand }));
+  check('an untouched overview is the fit, and says so', !hand.manual);
+  hand.zoomBy(OVERVIEW_ZOOM.step);
+  const zoomed = boatOn(courseOf(overClient, { view: hand }));
+  check('zooming in moves everything away from the middle of the picture',
+    hand.manual && Math.hypot(zoomed[0] - 200, zoomed[1] - 165)
+      > Math.hypot(fitted[0] - 200, fitted[1] - 165) * 1.4);
+  hand.zoomBy(1 / OVERVIEW_ZOOM.step);
+  check('...and zooming back out returns exactly where it was',
+    boatOn(courseOf(overClient, { view: hand })).every((v, i) => Math.abs(v - fitted[i]) < 0.05));
+  hand.panByPx(40, -25);
+  const panned = boatOn(courseOf(overClient, { view: hand }));
+  check('...a pan moves the picture by the pixels the finger moved, and no more',
+    Math.abs(panned[0] - fitted[0] - 40) < 0.05 && Math.abs(panned[1] - fitted[1] + 25) < 0.05);
+  hand.reset();
+  check('...and Fit gives the screen its own answer back',
+    !hand.manual && boatOn(courseOf(overClient, { view: hand })).every((v, i) => Math.abs(v - fitted[i]) < 0.05));
+
+  const wayOut = new OverviewView();
+  for (let i = 0; i < 20; i += 1) wayOut.zoomBy(OVERVIEW_ZOOM.step);
+  const wayIn = new OverviewView();
+  for (let i = 0; i < 20; i += 1) wayIn.zoomBy(1 / OVERVIEW_ZOOM.step);
+  check('the zoom is bounded at both ends — the fit is the picture this screen is for, and '
+    + 'these are for looking into it and back out a little',
+    wayOut.zoom === OVERVIEW_ZOOM.max && wayIn.zoom === OVERVIEW_ZOOM.min);
+
+  // The bar under the chart, which is where the controls for it live.
+  check('the chart bar offers zoom, fit and a background, under the chart they act on',
+    ['data-zoom="out"', 'data-zoom="in"', 'data-zoom="fit"', 'id="o_basemap"']
+      .every((bit) => chartBar({ basemap: 'none' }).includes(bit)));
+  check('...every background the selector knows, so the labels live in one place',
+    Object.values(BASEMAPS).every((spec) => chartBar({}).includes(spec.label)));
+  check('...with Fit dead while there is nothing to reset', chartBar({}).includes('disabled'));
+  check('...and lit, and live, once the picture is the sailor\'s',
+    chartBar({ view: wayOut }).includes('class="on"')
+    && !chartBar({ view: wayOut }).includes('disabled'));
+
+  /* ------------------------- the line's own midpoint never leaves the view */
+
+  // THE MIDPOINT IS WHAT BOUNDS THE ZOOM. The seat is the nearest point of the line to the
+  // boat, so boat and seat converge as a boat closes and a fit built on those two alone zooms
+  // in without limit — on a patch of water that no longer holds the mark. Invisible sailing
+  // straight at the middle, where the seat IS the midpoint; plain the moment a boat comes in
+  // off-centre. Measured on a 300 m line approached at the pin end, the midpoint left the plot
+  // a hundred metres out and was 419 px off a 400 px picture by twenty.
+  const approach = (eastM, orientation = 'north') => {
+    const flown = new RaceClient(snapshot);
+    let when = 0;
+    const view = new PlotView();          // held across the approach, as the real client does
+    const seen = [];
+    for (let n = -400; n <= -10; n += 5) {
+      const p = at(eastM, n);
+      flown.accept({ latitude: p.latitude, longitude: p.longitude, time: new Date((when += 1000)),
+        accuracyM: 3, satellites: 12, sogKn: 9, cogDeg: 0 });
+      const shown = flown.markState(when);
+      if (!shown || flown.finished) continue;
+      plot(shown, { orientation, view, width: W, height: Hgt });
+      const line = shown.watched.prepared;
+      const px = projector(view.centre, view.up, view.scale, W, Hgt)({
+        x: (line.port.x + line.starboard.x) / 2,
+        y: (line.port.y + line.starboard.y) / 2,
+      });
+      seen.push({ n, px, across: Hgt / view.scale });
+    }
+    return seen;
+  };
+
+  // The line runs 150 m either side of the fixture's origin, so east 140 is all but on the pin.
+  for (const [label, eastM] of [['straight at the middle', 0], ['in at the pin end', 140]]) {
+    for (const orientation of ['north', 'leg', 'perp']) {
+      const frames = approach(eastM, orientation);
+      check(`coming ${label}, ${orientation}: the LINE'S MIDPOINT is in the picture at every `
+        + `range — it is the mark the leg is measured to, and the zoom must not lose it`,
+        frames.length > 70 && frames.every(({ px }) => inView(px.x, px.y)));
+    }
+  }
+
+  // And the close-in behaviour is untouched where it was already right: straight at the middle
+  // the seat and the midpoint are the same point, so the plot goes on closing in exactly as
+  // before. It is only the off-centre approach that is held back, and only as far as the mark.
+  const middle = approach(0);
+  const pin = approach(140);
+  check('...and the view still closes in on a centred approach, which is what an approach '
+    + 'screen is for', middle[middle.length - 1].across < middle[0].across / 4);
+  // WITH AN END HELD IN VIEW AS WELL, the two approaches now frame IDENTICALLY: whichever part
+  // of the line a boat comes in at, the picture holds the same three things — the mark, the
+  // nearer end and the boat — so the frame no longer depends on where along the line you are.
+  // Before the end was in the fit, the centred approach closed to 75 m of water and the pin-end
+  // one stopped at 165 m; they are both 177 m now on this 300 m line.
+  check('...and comes in at the same scale wherever along the line the boat is, since the '
+    + 'picture holds the same things either way',
+    Math.abs(pin[pin.length - 1].across - middle[middle.length - 1].across) < 2);
+
+  /* ------------------ the COG cut is capped for the view and drawn where it really is */
+
+  // A boat sailing nearly parallel to a line cuts it a very long way away, and at exactly
+  // parallel never at all. The cut is one of the things the frame is fitted around, so
+  // honouring its position at that angle zoomed the plot out until the boat was a dot: at 88°
+  // off the line the visible water was three kilometres across.
+  const shallow = (cogDeg) => {
+    const flown = new RaceClient(snapshot);
+    let when = 0;
+    for (let i = 0; i <= 20; i += 1) {
+      const p = at(-100 + i * 8, -120 + i * 0.7);
+      flown.accept({ latitude: p.latitude, longitude: p.longitude, time: new Date((when += 1000)),
+        accuracyM: 3, satellites: 12, sogKn: 9, cogDeg });
+    }
+    const shown = flown.markState(when);
+    const view = new PlotView();
+    const svg = plot(shown, { orientation: 'north', view, width: 400, height: 330 });
+    return { shown, view, svg, acrossM: 330 / view.scale };
+  };
+
+  const headOn = shallow(0);
+  const parallel = shallow(88);
+  check('a boat sailing nearly parallel to a line cuts it thousands of metres away',
+    parallel.shown.projection.distanceM > 3000);
+  // The line is 300 m between its defined points, so the cap is 600 m and the view has to
+  // hold that plus the boat, the seat and the decoration — comfortably under a kilometre, and
+  // nothing like the three it was.
+  check('...and the view is capped rather than zooming out to hold it',
+    parallel.acrossM < 1000 && headOn.acrossM < parallel.acrossM);
+  check('...the cap being twice the line\'s own length, which is the scale a line is '
+    + 'approached on', parallel.acrossM > COG_FIT_CAP * 300 * 0.5);
+  // Capping what is DRAWN would move the warning, which is the one thing on this screen that
+  // must not be moved: the figure reads the real distance and the ring falls where it falls.
+  check('...while the figure on the dashes still reads the true distance',
+    parallel.svg.includes(`>${parallel.shown.projection.distanceM} m<`));
+  check('...and it is brought inside the plot, since a warning nobody can see is not one',
+    (() => {
+      const m = /<text x="([-\d.]+)" y="([-\d.]+)"[^>]*fill="var\(--cog\)"/.exec(parallel.svg);
+      return m && Number(m[1]) > 0 && Number(m[1]) < 400 && Number(m[2]) > 0 && Number(m[2]) < 330;
+    })());
 
   /* --------------------------------- the line says which way through, and where next */
 
@@ -620,12 +884,247 @@ export function run(check) {
   plot({ ...gateState, alternatives: [] }, { orientation: 'north', view: alone, width: 400, height: 330 });
   check('...and never widens the view to fit it in', Math.abs(withGate - alone.scale) < 1e-9);
 
+  // BOTH SIDES GET A PERPENDICULAR AND BOTH GET AN ARROW. They are the two things the choice
+  // is made on, and the numbers differ between the sides — which is exactly why one of each
+  // was not enough.
+  const perps = [...gateSvg.matchAll(/font-size="([\d.]+)" fill="var\(--line\)"/g)]
+    .map((m) => Number(m[1])).sort((a, b) => b - a);
+  check('both sides of a gate show their perpendicular distance', perps.length === 2);
+  check('...the watched one at the plot\'s own label size and the other at half it, so the '
+    + 'comparison is offered rather than asserted',
+    near(perps[0], LINE_LABEL_PX, 1e-9) && near(perps[1], LINE_LABEL_PX * OTHER_SIDE.label, 1e-9));
+  check('...and the figure is the LINE\'s colour, not another grey beside the COG\'s',
+    perps.length === 2 && !gateSvg.includes(`font-size="${LINE_LABEL_PX}" fill="var(--muted)"`));
+  const arrows = [...gateSvg.matchAll(/<polygon points="[^"]+" fill="var\(--muted\)"/g)];
+  check('both sides of a gate get a next-leg arrow', arrows.length === 2);
+
+  // The other side is not in the fit, so its foot is routinely outside the picture. The
+  // figure comes to the viewport rather than the viewport going to the figure, because
+  // widening the fit for it is the one thing that must not happen.
+  const figures = [...gateSvg.matchAll(
+    /<text x="([-\d.]+)" y="([-\d.]+)"[^>]*font-size="([\d.]+)" fill="var\(--line\)"/g)]
+    .map((m) => ({ x: Number(m[1]), y: Number(m[2]), size: Number(m[3]) }));
+  check('...and the other side\'s figure is inside the plot even when the line it measures '
+    + 'to is not', figures.length === 2
+    && figures.every((f) => f.x > 0 && f.x < 400 && f.y > 0 && f.y < 330));
+
+  // Both figures on this plot run from the boat to somewhere on the line, so a boat pointed
+  // square at the line has them within a pixel of each other: the perpendicular foot and the
+  // COG's cut are the same place. Offset to opposite sides of the dashes they separate.
+  // A boat well off the line and crabbing across it shows BOTH figures: there is room for
+  // them, and at that angle they are genuinely different quantities. Close in and square on
+  // only the perpendicular is drawn, which the sweep below is about.
+  const crabbing = (() => {
+    const flown = new RaceClient(snapshot);
+    let when = 0;
+    for (let n = -400; n <= -150; n += 10) {
+      const p = at(0, n);
+      flown.accept({ latitude: p.latitude, longitude: p.longitude, time: new Date((when += 1000)),
+        accuracyM: 3, satellites: 12, sogKn: 9, cogDeg: 30 });
+    }
+    return plot(flown.markState(when), { orientation: 'north', view: new PlotView(), width: 400, height: 330 });
+  })();
+  const both = [...crabbing.matchAll(
+    /<text x="([-\d.]+)" y="([-\d.]+)"[^>]*font-size="36" fill="var\((--line|--cog)\)"/g)]
+    .map((m) => ({ x: Number(m[1]), y: Number(m[2]), colour: m[3] }));
+  check('the perpendicular and the COG figures are both drawn where there is room for them',
+    both.length === 2);
+  check('...in significantly different colours, since two greys a shade apart read as one '
+    + 'number from a cockpit',
+    both[0].colour !== both[1].colour);
+
+  // AND THEY DO NOT LAND ON TOP OF EACH OTHER, at any heading that still cuts the line ahead.
+  // Both run from the boat to somewhere on the line, so near square on they measure almost the
+  // same segment — and opposite sides of it is not enough separation for two readings seventy
+  // pixels wide: they overlapped into "61 0m m". The fix is different FRACTIONS along their own
+  // dashes, a fifth and four fifths, which pulls them apart where the two segments diverge.
+  //
+  // Anchors, not boxes, because a text box needs a DOM. In a browser the closest the two boxes
+  // come over this sweep is 16 px of clear space, against 27 px of overlap before; the anchors
+  // are 68 px apart at the tightest, so a floor of 55 px guards the arrangement without being
+  // a restatement of the numbers.
+  const figuresIn = (svg) => {
+    const found = {};
+    for (const m of svg.matchAll(
+      /<text x="([-\d.]+)" y="([-\d.]+)"[^>]*font-size="36"[^>]*fill="var\((--line|--cog)\)"[^>]*>([^<]*m)</g))
+      // `onLine` puts the baseline a third of the size below the anchor; back it out, so the
+      // box is computed from the same anchor the drawing used.
+      found[m[3]] = { x: Number(m[1]), y: Number(m[2]) - LINE_LABEL_PX / 3, text: m[4] };
+    return found;
+  };
+  let clashes = 0;
+  let dropped = 0;
+  let sweeps = 0;
+  for (const range of [-200, -150, -100, -60, -30]) {
+    for (let cogDeg = -60; cogDeg <= 60; cogDeg += 10) {
+      const flown = new RaceClient(snapshot);
+      let when = 0;
+      for (let n = -400; n <= range; n += 10) {
+        const p = at(0, n);
+        flown.accept({ latitude: p.latitude, longitude: p.longitude, time: new Date((when += 1000)),
+          accuracyM: 3, satellites: 12, sogKn: 9, cogDeg });
+      }
+      const shown = flown.markState(when);
+      if (!shown || !shown.projection) continue;
+      sweeps += 1;
+      const pair = figuresIn(plot(shown, { orientation: 'north', view: new PlotView(), width: 400, height: 330 }));
+      // The perpendicular is always there; the COG's figure gives way when it cannot fit.
+      if (!pair['--line']) clashes += 1;
+      if (!pair['--cog']) { dropped += 1; continue; }
+      // Boxes, through the same routine the drawing uses, so the two cannot disagree about
+      // what "on top of each other" means.
+      if (boxesClash(labelBox(pair['--line'], pair['--line'].text, LINE_LABEL_PX),
+        labelBox(pair['--cog'], pair['--cog'].text, LINE_LABEL_PX))) clashes += 1;
+    }
+  }
+  check('...at any heading that still cuts the line ahead, and at any range', sweeps > 50);
+  check('...with NO pair of figures ever drawn over one another — the perpendicular keeps its '
+    + 'figure and the COG\'s gives way, which costs nothing where it happens because there the '
+    + 'two numbers are the same measurement', clashes === 0);
+  // The perpendicular's figure sits at the CENTRE of its own dashes, which is where a figure
+  // measuring a segment belongs; the COG's takes what is left. That costs some give-ways — it
+  // was 3 of 65 with the perpendicular pushed down near the boat — and buying them back by
+  // moving either figure is worse in both directions: see the note in `plot`.
+  check(`...and it gives way in the minority of frames: ${dropped} of ${sweeps}, all of them `
+    + `close in or near square on`, dropped > 0 && dropped < sweeps / 4);
+
+  // A segment from the boat always meets the box, because the fit is built round the boat.
+  const clipped = clipToView({ x: 200, y: 165 }, { x: 900, y: 165 }, 400, 330, 18);
+  check('clipping keeps the near end and brings the far one inside',
+    clipped.from.x === 200 && clipped.to.x < 400 && clipped.to.x > 200);
+  check('...and a segment that misses the box entirely is handed back unchanged rather than '
+    + 'silently moved', clipToView({ x: -50, y: -50 }, { x: -20, y: -60 }, 400, 330, 18).to.x === -20);
+
+  /* ------------------------------------- Line perp at a gate: the join, not one side's normal */
+
+  // THE SHAPE THAT MAKES THE DIFFERENCE. A gate whose two lines are PARALLEL either side of a
+  // centreline has its crossing normals pointing outward in opposite directions, so squaring
+  // up to the side a boat happens to be watching turns the display ninety degrees off the
+  // approach — and the other way round the moment it changes its mind. Both lines run north
+  // and are infinite southward, so the gate is two marks to be rounded outward: cross the
+  // western line going WEST or the eastern one going EAST. That is the real club shape; the
+  // fixture above, with the two sides collinear, is the other one.
+  const PARALLEL = {
+    revision: 'pgate', club: 'c', series: 's', course: 'co', variant: 'main', name: 'Parallel gate',
+    closed: false,
+    steps: [
+      { letter: 'S', crossings: [{ line: 'start', cross: 'FORWARD',
+        port: { ...at(-150, -300), infinite: false }, starboard: { ...at(150, -300), infinite: false } }] },
+      { letter: '1', crossings: [
+        // Port end south and infinite, starboard end north: a forward crossing goes WEST.
+        { line: 'gate-west', cross: 'FORWARD',
+          port: { ...at(-75, -60), infinite: true }, starboard: { ...at(-75, 40), infinite: false } },
+        // The mirror of it, so a forward crossing goes EAST.
+        { line: 'gate-east', cross: 'FORWARD',
+          port: { ...at(75, 40), infinite: false }, starboard: { ...at(75, -60), infinite: true } },
+      ] },
+      { letter: 'F', crossings: [{ line: 'fin', cross: 'FORWARD',
+        port: { ...at(150, -300), infinite: false }, starboard: { ...at(-150, -300), infinite: false } }] },
+    ],
+    defaults: { confirmFixes: 3, accuracyBandM: null, qc: { minSatellites: 4, maxAccuracyM: 25, maxSpeedKn: 40 } },
+  };
+
+  /**
+   * Up the middle of the parallel gate and then out towards one side of it.
+   *
+   * `reach` is how far out to the side, in metres: short of 75 the boat has committed to a
+   * side without crossing it yet, which is the state Line perp has to be right about.
+   */
+  const throughParallel = (west, reach = 60) => {
+    const boat = new RaceClient(PARALLEL);
+    let when = 0;
+    const step = (e, n, cogDeg) => {
+      const p = at(e, n);
+      boat.accept({ latitude: p.latitude, longitude: p.longitude, time: new Date((when += 1000)),
+        accuracyM: 3, satellites: 12, sogKn: 9, cogDeg });
+    };
+    for (let n = -400; n <= -100; n += 10) step(0, n, 0);        // through the start, up the middle
+    const side = west ? -1 : 1;
+    for (let e = 0; e <= reach; e += 6) step(side * e, -60, west ? 270 : 90);
+    return { boat, at: (when) => when };
+  };
+
+  const westward = throughParallel(true).boat;
+  check('a boat bearing away through one side of a parallel gate is watching that side',
+    westward.at === 1 && westward.watching().line === 'gate-west');
+  const pstate = westward.markState(westward.fix.time.getTime());
+  const ownNormal = bearingOf(...Object.values(
+    crossingNormal(pstate.watched.prepared, pstate.watched.required)));
+  check('...and its own crossing normal points WEST, out through the line', near(ownNormal, 270));
+  check('...while Line perp squares up to the gate\'s AXIS — the perpendicular to the join '
+    + 'between the two centres, which is the approach', near(upBearing(pstate, 'perp'), 0));
+  check('...so the two disagree by a right angle on this shape, which is the whole reason '
+    + 'for the rule', near(Math.abs(turnBetween(upBearing(pstate, 'perp'), ownNormal)), 90));
+  check('...and the boat that took the other side is squared up the SAME way, where one '
+    + 'side\'s own normal would have turned the display the other way about',
+    near(upBearing(throughParallel(false).boat.markState(0), 'perp'), 0, 1));
+
+  // The sign is taken from the leg INTO the gate and not from where the boat is, so it cannot
+  // flip through half a turn as the boat draws level — which is the latch, and the one moment
+  // the display is required to hold still.
+  const latchedUp = (() => {
+    const boat = new RaceClient(PARALLEL);
+    let when = 0;
+    const step = (e, n, cogDeg) => {
+      const p = at(e, n);
+      boat.accept({ latitude: p.latitude, longitude: p.longitude, time: new Date((when += 1000)),
+        accuracyM: 3, satellites: 12, sogKn: 9, cogDeg });
+    };
+    for (let n = -400; n <= -100; n += 10) step(0, n, 0);
+    const seen = [];
+    for (let e = 0; e <= 150; e += 6) {
+      step(-e, -60, 270);
+      const drawn = boat.markState(when);
+      // Only while the gate is still the live step: once the boat is on the leg to the
+      // finish it is squaring up to a different line, which is not what this is about.
+      if (drawn && drawn.step.letter === '1') seen.push(upBearing(drawn, 'perp'));
+    }
+    return seen;
+  })();
+  check('Line perp holds the same bearing all the way through the gate and past it, '
+    + 'the crossing included',
+    latchedUp.length > 20 && latchedUp.every((b) => near(b, latchedUp[0], 1e-9)));
+
+  // On a gate whose sides are COLLINEAR the join runs along the lines, so its perpendicular
+  // IS the crossing normal and the rule needs no special case for the other shape.
+  check('on a collinear gate the axis and the crossing normal are the same bearing, so there '
+    + 'is one rule rather than two',
+    near(upBearing(gateState, 'perp'),
+      bearingOf(...Object.values(crossingNormal(gateState.watched.prepared,
+        gateState.watched.required)))));
+
+  // The overview is turned by the same rule, because an orientation is a property of the
+  // display and not of one screen.
+  check('the overview squares up to the same axis, so the two screens are never turned '
+    + 'different ways at a gate',
+    near(overviewUp(westward, 'perp'), upBearing(pstate, 'perp'), 1e-9));
+  check('...and an ordinary single-line step still squares up to its own crossing normal',
+    near(overviewUp(east, 'perp'), upBearing(gateState, 'perp')));
+
   /* ------------------------------- the boat and the line are drawn at their real size */
 
   // A glyph of fixed pixel size says nothing about range: at four hundred metres and at four
   // it is the same picture. Drawn to scale, the two grow together as the view closes in.
+  // ON A SHORT LINE, and deliberately: with one END of the line held in view the scale cannot
+  // close in past half the line's length, so on the 300 m fixture everything else uses, the
+  // boat grows by half again over an approach rather than by four times. That bound has its own
+  // spec below, with the measured figures; this one is about the growth mechanism, so it uses a
+  // line the bound does not reach — 92 m, which is what the club's gate sides actually are.
+  const across = (id, northM, halfM) => ({
+    line: id, cross: 'FORWARD',
+    port: { ...at(-halfM, northM), infinite: false },
+    starboard: { ...at(halfM, northM), infinite: false },
+  });
+  const SHORT = {
+    ...snapshot,
+    steps: [
+      { letter: 'S', crossings: [across('a', 0, 46)] },
+      { letter: '1', crossings: [across('b', 300, 46)] },
+      { letter: 'F', crossings: [across('c', 600, 46)] },
+    ],
+  };
   const sized = (n) => {
-    const flown = new RaceClient(snapshot);
+    const flown = new RaceClient(SHORT);
     let when = 0;
     for (let y = -400; y <= n; y += 5) {
       const p = at(0, y);
@@ -650,12 +1149,39 @@ export function run(check) {
   check('ten metres of boat is ten metres of boat once it is big enough to matter',
     Math.abs(close.boat - REAL.boatM * (close.line / REAL.lineM)) < 1);
 
+  // THE RATIO HOLDS AT EVERY RANGE, INCLUDING WHERE THE CLAMPS BIND, and that is the check
+  // worth having. It did not: the bounds were asserted independently, so the boat sat frozen
+  // on its 13 px floor from about 130 m out while the line went on scaling down to 3 px — over
+  // the part of an approach that takes longest the line visibly thickened and the boat did not
+  // move at all, and their ratio drifted from 4.3:1 at four hundred metres to 2.4:1 at a
+  // hundred and seventy-five. The line's bounds are derived from the boat's now, so one clamp
+  // governs both and there is no second number to keep in agreement.
+  const ratios = [-400, -250, -175, -150, -100, -60, -30, -15].map((n) => {
+    const drawn = sized(n);
+    return { n, line: drawn.line, ratio: drawn.boat / drawn.line,
+      beam: (drawn.boat * BOAT.beam) / BOAT.length };
+  });
+  check('the boat and the line keep their true proportion at EVERY range, floors and caps '
+    + 'included', ratios.every((r) => Math.abs(r.ratio - REAL.boatM / REAL.lineM) < 0.05));
+  // THE COMPARISON A READER ACTUALLY MAKES is the hull's beam against the line's thickness,
+  // and the figure moved when the arrow became a boat: the dart was 0.67 of its length across
+  // and a hull is 0.42, so what was 2.2x is now 1.4x. Still wider than the line at every
+  // range, which is the rule — and the length, which is what a hull shape makes legible, is
+  // over three times it. Asserted a little under the 1.4 so there is slack, and asserted at
+  // all because the two are clamped together and a change to either could invert them.
+  check('...so the boat is wider than the line is thick at every range, its beam by half '
+    + 'again and its length by over three times',
+    ratios.every((r) => r.beam > r.line * 1.25 && r.ratio > 3));
+
   // The triangle is sized against the LINE, not the plot. `coursedraw` fixes its triangles in
   // pixels and is right to — on a chart they are a notation. Here the line beneath grows, and a
   // fixed triangle becomes a chip of colour on a band eight times its size: it stops reading as
   // a thing ON the line and starts reading as a blemish in it.
+  // On the same SHORT line as `sized`, and for the same reason: the triangle is sized against
+  // the line's width, the width against the scale, and the scale is what the end held in view
+  // bounds. This is about the triangle tracking the line, not about that bound.
   const triHeight = (n) => {
-    const flown = new RaceClient(snapshot);
+    const flown = new RaceClient(SHORT);
     let when = 0;
     for (let y = -400; y <= n; y += 5) {
       const p = at(0, y);

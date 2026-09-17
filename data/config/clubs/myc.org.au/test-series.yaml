@@ -84,22 +84,22 @@ lines:
     starboard: {latitude: -33.827533, longitude: 151.277963, infinite: true}
   leeward-4:
     name: Leeward line
-    port:      {latitude: -33.809585, longitude: 151.278105}
-    starboard: {latitude: -33.809567, longitude: 151.280181}
+    port:      {latitude: -33.818451, longitude: 151.267481}
+    starboard: {latitude: -33.818927, longitude: 151.268032}
     notes: >
       Start, mark 2 and finish. One line, three crossings.
   windward-4:
     name: Windward line
-    port:      {latitude: -33.806917, longitude: 151.278715}
-    starboard: {latitude: -33.806899, longitude: 151.279502}
+    port:      {latitude: -33.816340, longitude: 151.270061}
+    starboard: {latitude: -33.816816, longitude: 151.270589}
   gate-left-3:
     name: Windward gate, left
-    port:      {latitude: -33.809064, longitude: 151.278351, infinite: true}
-    starboard: {latitude: -33.808255, longitude: 151.278338}
+    port:      {latitude: -33.818047, longitude: 151.267861, infinite: true}
+    starboard: {latitude: -33.817643, longitude: 151.268379}
   gate-right-3:
     name: Windward gate, right
-    port:      {latitude: -33.808229, longitude: 151.279977}
-    starboard: {latitude: -33.809055, longitude: 151.280000, infinite: true}
+    port:      {latitude: -33.818263, longitude: 151.269029}
+    starboard: {latitude: -33.818667, longitude: 151.268566, infinite: true}
 
 # ---------------------------------------------------------------------------------
 # Courses. A sequence of steps; THE FIRST STEP IS THE START AND THE LAST IS THE
@@ -211,7 +211,7 @@ courses:
     public: true
     variants:
       20260915-race-1:
-        name: 2 Laps
+        name: race 1 2 Laps
         sequence:
           - {line: leeward-4, cross: forward}
           - {line: windward-4, cross: forward}

@@ -17,16 +17,23 @@
     and courses against a chart, snapshot them, and publish what a fleet is handed.
   </p>
   <p style="margin-top:8px">
-    <a href="client.html"><strong>Prototype client</strong></a> &mdash; a simulated boat on
-    one side, the boat's own screens on the other. Steer it at a line by clicking the chart
-    and watch the Mark screen take over by itself as it closes. Nothing passes between the
-    two panels but a GPS fix, which is the whole point of it.
+    <a href="boat.html"><strong>The client</strong></a> &mdash; what a boat opens. It asks
+    this device for its position and detects and times your crossings on it, from raw GNSS,
+    with no network. Open it on a phone; it renders on a tablet or a laptop too, at the width
+    it would be in a bracket.
+  </p>
+  <p style="margin-top:8px">
+    <a href="client.html"><strong>Test rig</strong></a> &mdash; the same client, with a
+    simulated boat and a receiver that lies instead of a real one. Steer it at a line by
+    clicking the chart and watch the Mark screen take over by itself as it closes. Nothing
+    passes from the rig to the phone but a GPS fix, which is the whole point of it.
   </p>
   <p class="muted" style="margin-top:10px">
-    <strong>Still a scaffold.</strong> The Course and Live Place screens described in
-    <span class="mono">wiki/unmarkable-racing-brief.html</span> &sect;3 are not built, and
-    nothing here posts a record yet. The crossing detector, which is the part that decides
-    a race, <em>is</em> built and specified.
+    <strong>Still a scaffold.</strong> Live Place, the chat and the race-management screens
+    described in <span class="mono">wiki/unmarkable-racing-brief.html</span> &sect;3 and
+    <span class="mono">wiki/client-server-dialog.md</span> are not built, and nothing here
+    posts a record yet. The crossing detector, which is the part that decides a race,
+    <em>is</em> built and specified.
   </p>
   <p class="muted" style="margin-top:6px">
     Run the specs in a browser:
@@ -34,6 +41,7 @@
     <a href="raceclient-test.html">race client</a> &middot;
     <a href="markscreen-test.html">mark screen</a> &middot;
     <a href="boatsim-test.html">boat simulator</a> &middot;
+    <a href="receiver-test.html">receiver</a> &middot;
     <a href="coursedraw-test.html">course drawing</a> &middot;
     <a href="geo-test.html">geo</a>
   </p>

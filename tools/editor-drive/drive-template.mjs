@@ -6,15 +6,13 @@
  * and a name that already means something else in the target is the one case where neither
  * reusing nor overwriting is safe.
  */
-import { $, H, ok, report, settle } from './dom.mjs';
+import { $, H, choose, chosenIn, ok, optionsOf, paneHtml, report, settle, unfold } from './dom.mjs';
 
 await import('../../client/www/editor.js');
 await settle(900);
 
-const list = (id) => $(id).querySelectorAll('.row');
 const variants = () => {
-  if (!$('rows').innerHTML.includes('list_variant')) H('crumb_variant:click')();
-  return list('list_variant');
+  return optionsOf('variant');
 };
 
 const templates = await (await fetch('/api/templates')).json();
@@ -27,10 +25,10 @@ H('tab-courses:click')();
 await settle();
 // Identified by what appeared, not by reading the crumb: a crumb shows the LEVEL name
 // while its list is open, so it names the selection only half the time.
-const was = new Set(list('list_course').map((r) => r.dataset.course));
+const was = new Set(optionsOf('course'));
 H('cmd_course_add:click')();
 await settle(900);
-const COURSE = list('list_course').map((r) => r.dataset.course).find((c) => !was.has(c));
+const COURSE = optionsOf('course').find((c) => !was.has(c));
 ok('a new course has no variants — a course is not a design', variants().length === 0);
 ok('...and its row offers both ways to give it one',
   $('rows').innerHTML.includes('cmd_variant_add')
@@ -101,11 +99,11 @@ const today = new Date();
 const day = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}`
   + String(today.getDate()).padStart(2, '0');
 ok('...named yyyymmdd-race-n, for the race it is rather than the shape it came from',
-  /^\d{8}-race-\d+$/.test(variants()[0].dataset.variant)
-  && variants()[0].dataset.variant.startsWith(`${day}-race-`));
+  /^\d{8}-race-\d+$/.test(variants()[0])
+  && variants()[0].startsWith(`${day}-race-`));
 
 const after = await (await fetch(`/api/programmes/${key}`)).json();
-const variant = after.courses[COURSE].variants[variants()[0].dataset.variant];
+const variant = after.courses[COURSE].variants[variants()[0]];
 ok('...and it is not itself a template — it is a design to sail', variant.template === false);
 
 const named = (variant.sequence ?? []).flatMap((s) => (s.gate?.length ? s.gate : [s]))
@@ -175,8 +173,7 @@ const clash = named.find((id) => after.lines[id]);
 if (clash) {
   H('tab-lines:click')();
   await settle(500);
-  const row = list('list_items').find((r) => r.dataset.id === clash);
-  H(`${row.id}:click`)();
+  choose('items', clash);
   await settle(500);
   H(`l_starboard_lat:focus`)();
   $('l_starboard_lat').value = '-33.700000';
@@ -201,7 +198,7 @@ if (clash) {
     $('rowMsg').innerHTML.includes('already means somewhere else'));
 
   // And the second expansion must be pointing at the copy, not at the moved original.
-  const second = variants().map((r) => r.dataset.variant).find((v) => v !== variants()[0].dataset.variant);
+  const second = variants().find((v) => v !== variants()[0]);
   const used = new Set((now.courses[COURSE].variants[second]?.sequence ?? [])
     .flatMap((st) => (st.gate?.length ? st.gate : [st])).map((a) => a.line));
   ok('...and the new variant stands on the copy, not on what was already here',

@@ -64,6 +64,23 @@ export function toLocal(origin, position) {
 }
 
 /**
+ * The inverse of `toLocal`: metres east and north of an origin, back as a position.
+ *
+ * Beside its inverse rather than anywhere else, because the two share one approximation — a
+ * tangent plane at the origin's latitude — and a pair that disagreed about it would send a
+ * point out and bring a different one back. `boatsim.offsetBy` is this function; it keeps its
+ * own name because a simulator moving a boat reads better that way, and delegates here so
+ * there is one piece of arithmetic rather than two that must agree.
+ */
+export function fromLocal(origin, local) {
+  const mPerDegLon = M_PER_DEG_LAT * Math.cos((origin.latitude * Math.PI) / 180);
+  return {
+    latitude: origin.latitude + local.y / M_PER_DEG_LAT,
+    longitude: origin.longitude + local.x / mPerDegLon,
+  };
+}
+
+/**
  * A line prepared for testing: its two ends in local metres, its port-to-starboard
  * vector, and which ends run on forever.
  */

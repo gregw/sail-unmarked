@@ -163,16 +163,22 @@ const SEAMARKS = {
 };
 
 /**
- * The basemaps, in the order the selector offers them.
+ * The basemaps, in the order the selector offers them: least ink first.
  *
- * `plain` draws nothing and fetches nothing, which is what the on-water screens use: the
- * Mark screen is offline-first and must never depend on a tile server.
+ * `none` draws nothing and fetches nothing, which is what the on-water screens default to: the
+ * Mark screen is offline-first and must never DEPEND on a tile server.
+ *
+ * Named for what they draw rather than for how they were built. `chart` is the ocean base —
+ * bathymetry, coastline and shelf shading, which is what a chart is — and `sea` is that with
+ * every light, beacon and buoy stacked on top, which is a *sea* chart and is a great deal more
+ * ink. The old names said "sea simple" and "plain", which described the implementation (the
+ * simpler of the two sea layers; the one with no layers at all) rather than the picture.
  */
 export const BASEMAPS = {
-  sea: { label: 'Sea chart', layers: [OCEAN_BASE, SEAMARKS] },
-  seaSimple: { label: 'Sea simple', layers: [OCEAN_BASE] },
+  none: { label: 'None', layers: [] },
   osm: { label: 'OSM', layers: [{ maxZoom: 18, url: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png` }] },
-  plain: { label: 'Plain', layers: [] },
+  chart: { label: 'Chart', layers: [OCEAN_BASE] },
+  sea: { label: 'Sea chart', layers: [OCEAN_BASE, SEAMARKS] },
 };
 
 /**
@@ -222,6 +228,23 @@ export class MapView {
   pxPerNm() {
     const lat = invMercLat(this.center.wy);
     return Math.abs(mercY(lat + 1 / 60) - mercY(lat)) * this.scale();
+  }
+
+  /**
+   * Set the zoom so one metre on the ground is `px` pixels, at the centre's latitude.
+   *
+   * The inverse of `pxPerNm`, and here beside it for that reason. It exists because the course
+   * overview fits itself in METRES — it is a plot of a course, not a slippy map — and putting
+   * tiles behind it means asking the tile machinery for the one zoom that matches a scale
+   * somebody else solved for. Fractional on purpose: `tileImages` rounds to a whole zoom to
+   * pick which tiles to ask for, and scales them to fit, so the picture stays continuous while
+   * the tiles step.
+   */
+  atPxPerM(px) {
+    const lat = invMercLat(this.center.wy);
+    const worldPerM = Math.abs(mercY(lat + 1 / 60) - mercY(lat)) / 1852;
+    this.zoom = Math.log2(px / (worldPerM * TILE_PX));
+    return this;
   }
 
   /** Shift the view by a pixel delta — the drag handler. */
@@ -290,7 +313,7 @@ export class MapView {
 
   /** Every layer of a basemap, in order. */
   tileLayer(basemap) {
-    const spec = BASEMAPS[basemap] ?? BASEMAPS.plain;
+    const spec = BASEMAPS[basemap] ?? BASEMAPS.none;
     return spec.layers.map((layer) => this.tileImages(layer)).join('');
   }
 

@@ -7,16 +7,14 @@
  * options changed — and both have to be in a log anybody can read, or "what was I handed, and
  * when?" has no answer after the fact.
  */
-import { $, H, ok, report, settle } from './dom.mjs';
+import { $, H, choose, chosenIn, ok, optionsOf, paneHtml, report, settle, unfold } from './dom.mjs';
 
 await import('../../client/www/editor.js');
 await settle(900);
 
-const list = (id) => $(id).querySelectorAll('.row');
 const get = async (p) => (await fetch(p)).json();
 const variants = () => {
-  if (!$('rows').innerHTML.includes('list_variant')) H('crumb_variant:click')();
-  return list('list_variant');
+  return optionsOf('variant');
 };
 const publicly = async (course) => (await get('/api/public')).find((c) => c.course === course);
 const log = () => get('/api/log');
@@ -30,14 +28,12 @@ await settle();
 // courses in it — a driver that assumed row zero was private was asserting something
 // about the fixture rather than about the editor, and said so by failing.
 const already = new Set((await get('/api/public')).map((c) => c.course));
-const startRow = list('list_course').find((r) => !already.has(r.dataset.course))
-  ?? list('list_course')[0];
-const COURSE = startRow.dataset.course;
-H(`${startRow.id}:click`)();
+const COURSE = optionsOf('course').find((id) => !already.has(id)) ?? optionsOf('course')[0];
+choose('course', COURSE);
 await settle(700);
-H(`${variants()[0].id}:click`)();
+const VARIANT = variants()[0];
+choose('variant', VARIANT);
 await settle(800);
-const VARIANT = variants()[0].dataset.variant;
 
 /* ---------------------------------------------------------------- private by default */
 
@@ -58,7 +54,8 @@ ok('ticking public lists the course', !!listed);
 ok('...with nothing under it, because being SEEN and being joinable are different',
   listed.published.length === 0);
 ok('...and logs nothing, since nothing became joinable', (await log()).length === quiet);
-ok('...and the list says so at a glance', $('list_course').innerHTML.includes('>public<'));
+ok('...and the selector says so at a glance, without choosing the course to find out',
+  paneHtml().includes(`${COURSE} \u2014 public`));
 
 /* ------------------------------------------------- publishing to it is the visible event */
 

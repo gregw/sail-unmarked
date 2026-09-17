@@ -1,18 +1,20 @@
 /**
- * The prototype client, and the rig that drives it.
+ * THE TEST RIG, and the device sitting on the desk beside it.
  *
  * <h2>The seam is the whole point of this page</h2>
- * There are two things here and exactly one thing passes between them. On the left a
- * simulated boat and a simulated receiver; on the right a {@link RaceClient} fed the fixes
- * that receiver produces. The client is never handed the boat, the target, the speed
- * slider or the knowledge that any of it is simulated — it gets a fix, which is a position,
- * a time, a stated accuracy, a satellite count, SOG and COG, and that is all a real
- * receiver would give it either.
+ * There are two things here and exactly one thing passes between them. The rig is a simulated
+ * boat and a simulated receiver; the phone on top of it is the SAME {@link Device} that
+ * `boat.html` runs against a real phone's GNSS, fed the fixes this receiver produces. The
+ * client is never handed the boat, the target, the speed slider or the knowledge that any of
+ * it is simulated — it gets a fix, which is a position, a time, a stated accuracy, a satellite
+ * count, SOG and COG, and that is all a real receiver would give it either.
  *
- * So there is one function in this file, {@link emit}, whose body would be replaced by a
- * `navigator.geolocation.watchPosition` callback to put this on the water, and nothing else
- * in `raceclient.js`, `markscreen.js` or `crossing.js` would change by a character. A test
- * client that shared state with the thing it tests is a demonstration, not a test.
+ * So there is one call in this file that crosses the seam, in {@link emit}, and `boat.js` makes
+ * the same call with a `navigator.geolocation` reading in place of the simulator's. Nothing in
+ * `device.js`, `raceclient.js`, `markscreen.js` or `crossing.js` can tell which of the two it
+ * is being driven by, and each receiver has its own spec pinning the key set of a fix so the
+ * two cannot drift apart a convenient field at a time. A test client that shared state with
+ * the thing it tests is a demonstration, not a test.
  *
  * <h2>What the rig is for</h2>
  * Steering a boat at a line by hand is the only way to see the screens do what they are
@@ -27,36 +29,82 @@
 
 import { BASEMAPS, MapView, wheelZoomStep } from './geo.js';
 import { BoatSim, bearingTo, metresBetween, offsetBy } from './boatsim.js';
-import { RaceClient } from './raceclient.js';
-import { PlotView, Turner, crossingNormal, esc, hhmmss, markScreen, overviewPanel } from './markscreen.js';
+import { Device } from './device.js';
+import { boatArt, crossingNormal, esc, hhmmss } from './markscreen.js';
+
+/**
+ * How long the boat is drawn on the RIG's chart, in pixels.
+ *
+ * A fixed size, unlike the device's, and a little smaller than it: the rig's chart is usually
+ * showing a whole course, where a boat that grew with the zoom would be the largest thing on it.
+ */
+const RIG_BOAT_PX = 23;
 
 const el = (id) => document.getElementById(id);
 
 const state = {
   view: new MapView(),
-  basemap: 'seaSimple',
-  orientation: 'north',
+  basemap: 'chart',
   sim: new BoatSim({ at: { latitude: -33.8, longitude: 151.27 }, running: false }),
-  client: null,
-  snapshot: null,
-  courses: [],
-  boat: { sail: '', name: '', tcf: '1.000', mode: 'ANONYMOUS' },
   placing: false,
+  // Draw no course on the RIG's chart. The one thing on this page that is not a knob on the
+  // receiver: it takes away the operator's own knowledge of where the marks are, so the only
+  // thing left saying where to steer is the device beside it — which is the claim the whole
+  // application rests on and the one nothing here could otherwise test.
+  hideCourse: false,
   pointer: null,
   dragging: false,
-  // The Mark screen's frame, held across renders so the boat is seen to move across it
-  // rather than sitting in the middle of a picture that re-fits itself every frame.
-  plotView: new PlotView(),
-  // The overview turns too, and keeps its own swing: the two screens are looking at different
-  // things and arrive at a new leg at different moments, so one shared bearing would have each
-  // of them jumping whenever the other one moved.
-  courseTurn: new Turner(),
   wake: [],
   trail: [],
   tileKey: null,
   timer: null,
-  message: null,
+
+  /*
+   * WHAT THE DEVICE HOLDS IS THE DEVICE'S, and is reached rather than copied.
+   *
+   * The client, the held frame and the swing all belong to the thing that would ship, and a
+   * second copy of any of them here would be a second answer to a question that has one —
+   * "which screen", "which frame" — kept in agreement by hand. These getters exist because
+   * the rig genuinely needs to ask: it draws the client's accepted fixes on its own chart, and
+   * it drives the animation frame while a display is mid-swing.
+   */
+  get client() { return device.client; },
+  get plotView() { return device.plotView; },
+  get courseTurn() { return device.courseTurn; },
 };
+
+/* ================================================================== the device */
+
+/**
+ * The phone on the desk: the shipping client, with the rig's own button under it.
+ *
+ * Everything the device does is in `device.js`. What is passed in here is only what a rig can
+ * do that a boat cannot — put the boat back behind the start line, and know that a course has
+ * been taken. `Restart lap` is a rig button for the same reason: on the water a lap restarts
+ * by being sailed.
+ */
+const device = new Device(el('device'), {
+  kicker: 'Prototype client',
+  onJoin: () => {
+    state.trail = [];
+    state.wake = [];
+    placeOnStart();
+  },
+  onLeave: () => {
+    state.sim.running = false;
+    state.wake = [];
+    state.trail = [];
+    renderRun();
+    renderTrail();
+  },
+  extras: () => '<button class="plain" id="restart">Restart lap</button>',
+  wireExtras: () => {
+    // A restart re-joins the same snapshot rather than resetting counters in place: every
+    // detector has to be new, because they latch and stand by design, and building a fresh
+    // client is the one way to be sure nothing was left over from the last attempt.
+    el('restart')?.addEventListener('click', () => device.start());
+  },
+});
 
 /* ============================================================ the rig's chart */
 
@@ -90,7 +138,11 @@ function renderOverlay() {
   const client = state.client;
   let out = '';
 
-  if (client) {
+  // THE COURSE, unless it is being deliberately withheld. What is hidden is exactly the rig's
+  // own knowledge of the geometry — the lines, their ends and their letters — and nothing else:
+  // the true track, the accepted fixes, the helm order and the boat are all still drawn, because
+  // they are what the operator is steering with and none of them says where a mark is.
+  if (client && !state.hideCourse) {
     // One entry per distinct line, so a line used three times is drawn once. Which steps
     // use it goes on as letters, in course order, which is the same thing the editor's
     // triangles say and says it in the space a chart this small has.
@@ -186,199 +238,17 @@ function renderOverlay() {
       + `<line x1="${tx.toFixed(1)}" y1="${(ty + 3).toFixed(1)}" x2="${tx.toFixed(1)}" y2="${(ty + 11).toFixed(1)}"/></g>`;
   }
 
+  // THE BOAT, the same hull the device draws — `boatArt`, not a second copy of the path. At a
+  // FIXED size here, because the rig is a desk: this chart is panned and zoomed to suit whoever
+  // is sailing it, so a boat drawn to scale would be a dot at one zoom and fill the harbour at
+  // another. Showing range by size is the device's job, where the scale means something.
   const [bx, by] = view.toPx(state.sim.at);
-  out += `<g transform="translate(${bx.toFixed(1)},${by.toFixed(1)}) rotate(${state.sim.headingDeg.toFixed(1)})">`
-    + `<path d="M0,-13 L8,10 L0,5 L-8,10 Z" fill="var(--ink)" stroke="var(--sea)" stroke-width="1.2"/></g>`;
+  out += boatArt(bx, by, state.sim.headingDeg, RIG_BOAT_PX);
 
   el('over').innerHTML = out;
   el('truth').textContent = state.client
     ? `${state.sim.at.latitude.toFixed(5)}, ${state.sim.at.longitude.toFixed(5)} · ${state.sim.headingDeg.toFixed(0)}° · ${state.sim.sogKn.toFixed(1)} kn`
     : '';
-}
-
-/* ================================================================= the client */
-
-/** Draw whichever screen the client says the sailor should be looking at. */
-function renderDevice() {
-  if (!state.client) return renderJoin();
-  const client = state.client;
-  const now = Date.now();
-  const mark = client.view(now) === 'mark' ? client.markState(now) : null;
-  el('device').innerHTML = (mark
-    ? markScreen(mark, {
-      orientation: state.orientation, width: 400, height: 330, view: state.plotView, now,
-    })
-    : overviewPanel(client, {
-      orientation: state.orientation, width: 400, height: 330, turner: state.courseTurn, now,
-    })) + leaveRow();
-  wireOrientation();
-  wireLeave();
-}
-
-/**
- * The orientation selector is on BOTH screens and sets one setting.
- *
- * Wired here rather than in the Mark branch it started in: the choice is about how somebody
- * reads a chart, not about which screen happens to be up, and a selector that only existed on
- * the approach would mean the setting could not be changed from the screen a boat spends most
- * of its time looking at.
- */
-function wireOrientation() {
-  for (const button of el('device').querySelectorAll('[data-orient]')) {
-    button.addEventListener('click', () => {
-      state.orientation = button.dataset.orient;
-      renderDevice();
-    });
-  }
-}
-
-const leaveRow = () => `
-  <div style="padding:0 12px 16px; display:flex; gap:8px">
-    <button class="plain" id="restart">Restart lap</button>
-    <button class="plain" id="leave">Leave course</button>
-  </div>`;
-
-function wireLeave() {
-  el('leave')?.addEventListener('click', () => {
-    state.client = null;
-    state.snapshot = null;
-    state.sim.running = false;
-    state.wake = [];
-    state.trail = [];
-    renderRun();
-    renderJoin();
-  });
-  // A restart re-joins the same snapshot rather than resetting counters in place. Every
-  // detector has to be new — they latch and stand by design — and building a fresh client
-  // is the one way to be sure nothing was left over from the last attempt.
-  el('restart')?.addEventListener('click', () => {
-    state.client = new RaceClient(state.snapshot, { boat: state.boat, joinMode: state.boat.mode });
-    state.wake = [];
-    state.trail = [];
-    state.plotView = new PlotView();
-    state.courseTurn = new Turner();
-    placeOnStart();
-    renderDevice();
-  });
-}
-
-/**
- * The join screen: who the boat is, then club, series, course and variant.
- *
- * The drill is the shape of the answer somebody actually holds — "the Saturday sprints, the
- * short course" — and it is built from `/api/public`, so what can be joined here is exactly
- * what the club made public and published. A course with nothing published is not offered,
- * because there would be nothing to hand over: what a boat sails is a SNAPSHOT.
- */
-function renderJoin() {
-  const options = (values, chosen) => values.map((v) =>
-    `<option value="${esc(v.value)}"${v.value === chosen ? ' selected' : ''}>${esc(v.label)}</option>`).join('');
-
-  const clubs = [...new Set(state.courses.map((c) => c.club))];
-  const club = state.boat.club ?? clubs[0];
-  const series = [...new Set(state.courses.filter((c) => c.club === club).map((c) => c.series))];
-  const chosenSeries = state.boat.series && series.includes(state.boat.series) ? state.boat.series : series[0];
-  const courses = state.courses.filter((c) => c.club === club && c.series === chosenSeries);
-  const chosenCourse = courses.find((c) => c.course === state.boat.course) ?? courses[0];
-  const variants = chosenCourse?.published ?? [];
-  const chosenVariant = variants.find((v) => v.variant === state.boat.variant) ?? variants[0];
-
-  el('device').innerHTML = `
-    <div class="join">
-      <p class="kicker">Prototype client</p>
-      <h2>Your boat</h2>
-      <div class="pair">
-        <div><label for="j_sail">Sail no.</label>
-          <input id="j_sail" value="${esc(state.boat.sail)}" placeholder="AUS 1234"></div>
-        <div><label for="j_name">Boat name</label>
-          <input id="j_name" value="${esc(state.boat.name)}" placeholder="Bombora"></div>
-      </div>
-
-      <h2>Course</h2>
-      ${state.courses.length === 0 ? `<p class="muted" style="font-size:13px">
-        Nothing to join. A course appears here once it is ticked <strong>public</strong>
-        and has a published snapshot &mdash; both, because what a boat is handed is a
-        snapshot. Use the <a href="editor.html">editor</a>.</p>` : `
-        <label for="j_club">Club</label>
-        <select id="j_club">${options(clubs.map((v) => ({ value: v, label: v })), club)}</select>
-        <label for="j_series">Series</label>
-        <select id="j_series">${options(series.map((v) => ({ value: v, label: v })), chosenSeries)}</select>
-        <label for="j_course">Course</label>
-        <select id="j_course">${options(courses.map((c) =>
-          ({ value: c.course, label: c.name && c.name !== c.course ? `${c.name} (${c.course})` : c.course })), chosenCourse?.course)}</select>
-        <label for="j_variant">Variant</label>
-        <select id="j_variant">${options(variants.map((v) =>
-          ({ value: v.variant, label: `${v.name ?? v.variant}${v.lengthNm == null ? '' : ` — ${v.lengthNm.toFixed(2)} nm`}${v.closed ? ', cycle' : ''}` })), chosenVariant?.variant)}</select>
-        ${chosenVariant ? `<p class="muted mono" style="font-size:11px; margin-top:6px">
-          revision ${esc(chosenVariant.revision)} &middot; ${chosenVariant.steps ?? '?'} marks</p>` : ''}
-
-        <h2>How you are sailing</h2>
-        <label for="j_mode">This counts as</label>
-        <select id="j_mode">${options([
-          { value: 'ANONYMOUS', label: 'Practice — kept for you, published to nobody' },
-          { value: 'RACE', label: 'Race — goes to the club, which scores it' },
-          { value: 'RECORD', label: 'Record attempt — stands against every other' },
-        ], state.boat.mode)}</select>
-        <label for="j_tcf">TCF</label>
-        <input id="j_tcf" value="${esc(state.boat.tcf)}">
-        <p class="muted" style="font-size:11px; margin-top:4px">
-          The handicap is carried, not applied. Turning a TCF into a distance is
-          <span class="mono">CLAUDE.md</span> open question 5 and is not answered yet, so no
-          sub-line is being computed for you.</p>
-
-        <button class="go" id="j_go">Join and sail</button>`}
-      ${state.message ? `<p class="warn" style="font-size:12.5px; margin-top:10px">${esc(state.message)}</p>` : ''}
-    </div>`;
-
-  const keep = (id, field) => el(id)?.addEventListener('input', (ev) => { state.boat[field] = ev.target.value; });
-  keep('j_sail', 'sail');
-  keep('j_name', 'name');
-  keep('j_tcf', 'tcf');
-  keep('j_mode', 'mode');
-
-  // The drill resets everything BELOW the level that changed. Keeping a course id chosen
-  // under a different series would offer something that is not there.
-  const redraw = (field, ...clear) => el(`j_${field}`)?.addEventListener('change', (ev) => {
-    state.boat[field] = ev.target.value;
-    for (const lower of clear) state.boat[lower] = null;
-    renderJoin();
-  });
-  redraw('club', 'series', 'course', 'variant');
-  redraw('series', 'course', 'variant');
-  redraw('course', 'variant');
-  redraw('variant');
-
-  el('j_go')?.addEventListener('click', () => join(club, chosenSeries, chosenCourse?.course, chosenVariant?.variant));
-}
-
-/**
- * Take the course.
- *
- * This is the one network call the client makes in anger, and it is a real one: the same
- * `POST /api/join` a boat on the water would make, answering with the snapshot that was
- * published rather than whatever the editor currently holds. After it returns, the server
- * can be switched off and nothing on this page will notice.
- */
-async function join(club, series, course, variant) {
-  state.message = null;
-  if (!course || !variant) return;
-  try {
-    const response = await fetch(
-      `/api/join/${encodeURIComponent(club)}/${encodeURIComponent(series)}/${encodeURIComponent(course)}`
-      + `?variant=${encodeURIComponent(variant)}`, { method: 'POST' });
-    if (!response.ok) throw new Error(`${response.status} ${(await response.text()).slice(0, 200)}`);
-    state.snapshot = await response.json();
-    state.client = new RaceClient(state.snapshot, { boat: { ...state.boat }, joinMode: state.boat.mode });
-    state.trail = [];
-    state.wake = [];
-    state.plotView = new PlotView();
-    state.courseTurn = new Turner();
-    placeOnStart();
-    renderDevice();
-  } catch (error) {
-    state.message = `Could not join: ${error.message}`;
-    renderJoin();
-  }
 }
 
 /**
@@ -437,12 +307,13 @@ function placeOnStart() {
 /**
  * THE SEAM. One fix, from the receiver to the client, and nothing else.
  *
- * Replace the first line with a `navigator.geolocation` reading and this page is on the
- * water. Everything below it — quality control, the latch, which screen — is what ships.
+ * `boat.js` has the same two lines with a `navigator.geolocation` reading in place of the
+ * simulator's. Everything below them — quality control, the latch, which screen — is what
+ * ships, and is reached through the one `Device` both pages import.
  */
 function emit() {
   const fix = state.sim.fix(new Date());
-  const verdict = state.client.accept(fix);
+  const verdict = device.feed(fix);
 
   // A relocation is its own line in the trail, not a quiet "accepted". It is the moment the
   // client changed its mind about where the boat is, and it threw away the detectors to do
@@ -458,7 +329,6 @@ function emit() {
   });
   if (state.trail.length > 60) state.trail.pop();
   renderTrail();
-  renderDevice();
 }
 
 function renderTrail() {
@@ -513,8 +383,7 @@ function frame(now) {
   // rather than by the receiver, and at two fixes a second a ninety-degree turn would arrive
   // in six visible jerks instead of turning. So while it is turning, and only then, it is
   // drawn on the animation frame like anything else that moves.
-  if (state.client && (state.plotView.turning() || state.courseTurn.turning()))
-    renderDevice();
+  if (device.turning()) device.render();
   requestAnimationFrame(frame);
 }
 
@@ -527,8 +396,8 @@ function renderRun() {
 
 el('run').addEventListener('click', () => {
   if (!state.client) {
-    state.message = 'Join a course first — the client has nothing to be fed fixes about.';
-    return renderJoin();
+    device.message = 'Join a course first — the client has nothing to be fed fixes about.';
+    return device.renderJoin();
   }
   state.sim.running = !state.sim.running;
   renderRun();
@@ -557,6 +426,66 @@ el('basemap').addEventListener('change', (ev) => {
   state.basemap = ev.target.value;
   state.tileKey = null;
 });
+
+// Nothing to invalidate and nothing to re-fit: the overlay is redrawn every frame, so the next
+// one simply leaves the course out. The tiles are untouched — a chart with no marks on it is
+// still the water, and taking that away would be testing something nobody is claiming.
+el('hidecourse').addEventListener('change', (ev) => {
+  state.hideCourse = !!ev.target.checked;
+});
+
+/* --------------------------------------------------------- moving the phone */
+
+/**
+ * The phone is dragged by its CASE, never by its screen.
+ *
+ * The screen's own chart pans on a drag, so a phone that also moved on one would be two
+ * gestures fighting over a single pointer — and whichever won, the other would be a control
+ * that sometimes does nothing. The case settles it the way the real object does: you pick a
+ * phone up by its edges. So a press that started anywhere inside the screen is not a drag, and
+ * everything else on the phone is.
+ *
+ * Followed on the DOCUMENT like the chart's pan, and for a milder version of the same reason: a
+ * pointer that leaves the case mid-drag — which it does the moment the phone is behind the
+ * finger rather than under it — would stop being tracked by the element it started on.
+ *
+ * <b>Kept on the screen by its edges, not by its corner.</b> Clamped so a strip of the case is
+ * always in the window on every side: a phone dragged just past the edge and released is a
+ * phone nobody can get back, and this page has no command to fetch it.
+ */
+const PHONE_MARGIN = 36;
+
+function wirePhone() {
+  const phone = el('phone');
+  if (!phone) return;
+  phone.addEventListener('pointerdown', (ev) => {
+    if (ev.target?.closest?.('.device')) return;      // the screen is not a handle
+    const box = phone.getBoundingClientRect();
+    const grab = { x: ev.clientX - box.left, y: ev.clientY - box.top };
+    phone.classList.add('dragging');
+    // Switched to left/top on the first drag: it starts pinned to the right so that it sits out
+    // of the way whatever the window is, and a box with both `right` and `left` set would
+    // stretch rather than move.
+    phone.style.right = 'auto';
+    const move = (m) => {
+      const width = phone.offsetWidth;
+      const height = phone.offsetHeight;
+      phone.style.left = `${Math.max(PHONE_MARGIN - width,
+        Math.min(window.innerWidth - PHONE_MARGIN, m.clientX - grab.x))}px`;
+      phone.style.top = `${Math.max(0,
+        Math.min(window.innerHeight - PHONE_MARGIN, m.clientY - grab.y))}px`;
+    };
+    const up = () => {
+      phone.classList.remove('dragging');
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', up);
+    };
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up);
+  });
+}
+
+wirePhone();
 
 /* ------------------------------------------------------------ chart gestures */
 
@@ -623,15 +552,11 @@ el('rig').addEventListener('wheel', (ev) => {
 el('rig').innerHTML = '<g id="tiles"></g><g id="over"></g><g id="scale"></g>';
 state.view.fit([{ latitude: -33.83, longitude: 151.27 }, { latitude: -33.81, longitude: 151.29 }]);
 
-try {
-  state.courses = (await (await fetch('/api/public')).json())
-    .filter((course) => course.published.length > 0);
-} catch (error) {
-  state.message = `Could not read the public courses: ${error.message}`;
-}
+// What can be joined is what the club made public AND published — asked once, on the way in.
+await device.load();
 
 renderRun();
-renderJoin();
+device.renderJoin();
 renderTrail();
 armFixes();
 requestAnimationFrame(frame);

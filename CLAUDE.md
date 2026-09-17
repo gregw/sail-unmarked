@@ -21,6 +21,24 @@ The brief is **provisional by its own declaration** and parts of it are explicit
 unverified. Where this file and the brief disagree, this file is later — the YAML schema
 in brief §6 in particular has been superseded, see below.
 
+[`wiki/client-server-dialog.md`](wiki/client-server-dialog.md) is the third, and is
+**provisional**: what a boat and the server say to each other once there is a live race to run.
+For the formats that need one the server acts *in part* as the race committee — start sequences,
+postponement, divisions, a fleet feed — while never scoring and never recording: it keeps no
+clock, publishes an absolute start time, and every countdown, elapsed time and crossing instant
+is run and stamped by the boat. **Which is the other thing that document says out loud: the boat
+is trusted entirely.** Every position and every instant comes from it and nothing anywhere checks
+whether it told the truth; the QC gates defend against a bad receiver, never against a dishonest
+sailor, and the server will not call OCS on a boat that says it started fairly. That is workable
+because **a clock offset cancels in an elapsed time** — the quantity racing is decided on is a
+difference between two instants from the same clock — and it is *absolute* comparison, against a
+gun or between two boats, that the trust model does not support.
+
+Read it before adding anything to the wire. It also carries the rules that let an *installed*
+client and an updated server go on talking, and in §12 the race-management screens: a fourth
+`Races` tab in the editor for *defining* a race, and a separate page for *running* one, because
+there is no undo for telling a fleet to stop.
+
 [`wiki/course-lifecycle.html`](wiki/course-lifecycle.html) is its companion and is
 **settled**: course / variant / snapshot, named versus ad-hoc geometry, the tab as the
 scope of an edit, derived dirty state, snapshot versus publish, and templates. The brief
@@ -75,10 +93,10 @@ No database, no framework, no outbound HTTP client. Port **8083** (8081 is saili
 ```bash
 mvn exec:java                              # serves http://localhost:8083/ from ./data
 mvn exec:java -Dunmarkable-data=/path/to/data
-mvn test                                   # 109 Java tests + 570 JS assertions
+mvn test                                   # 109 Java tests + 673 JS assertions
 node tools/run-js-tests.mjs                # just the JavaScript specs
-tools/editor-drive/run.sh                  # the editor and the client, driven against a
-                                           # live server (217)
+tools/editor-drive/run.sh                  # the editor and both clients, driven against
+                                           # a live server
 ```
 
 ---
@@ -98,7 +116,11 @@ unmarkable/
     crossing.js                         >>> the crossing detector: sense, extent, QC, latch
     geo.js                              Web Mercator, tiles, pan/zoom — for the chart
     editor.html / editor.js             the course editor (shore-side)
-    client.html / client.js             THE PROTOTYPE CLIENT, and the rig that drives it
+    device.js / device.css              >>> THE CLIENT: join, screens, selectors. ONE copy,
+                                        imported by both pages below
+    boat.html / boat.js                 THE REAL CLIENT — the device, fed by this phone
+    receiver.js                         navigator.geolocation as a fix. What ships
+    client.html / client.js             THE TEST RIG, with the device sitting on its chart
     raceclient.js                       what a boat holds while sailing: live step, screen
     markscreen.js                       the Mark screen and the course overview, per brief §5
     boatsim.js                          a simulated boat and a receiver that lies (TEST RIG)
@@ -146,94 +168,118 @@ courses in one body, because one gesture can change two of them. **Undo holds
 exactly one edit**, in memory, until reload or a programme change; the file's longer
 history is git's job, not this page's.
 
-**The pane is a drill-down, and every command lives on its level's row.**
+**The pane is a drill-down, and every level is a SELECTOR: a label, the current value, and
+that level's commands.**
 
 ```txt
-▸ myc.org.au/2026-example                  series   — breadcrumb + ⧉ ✕
-    (the series list opens HERE, above the tabs)
-[ Points | Lines | Courses ]               the tab strip, at the SERIES level
-▸ manly-to-shark        ●dirty    + ⧉ ✕    course
-    (the course list opens here)
-▸ div-1                 ●current  + ⧉ ⚐ ✕  variant
-    (the variant list opens here)
-  Snapshot   Publish latest                variant lifecycle
-▸ div-1/2027-06-06      ●published  ⧉ ↑ ✕  snapshot
-    (the snapshot list opens here)
-  …message…
-──────────────────────────────────────
-  one level's fields
+  Club     [ myc.org.au            v ]
+  Series   [ 2026-summer           v ]  + ⧉ ✕
+  ▸ Series details
+  [ Points | Lines | Courses ]              the tab strip, at the SERIES level
+  Course   [ manly-to-shark — public v ]  + ⧉ ✕      (? explains what a course is)
+  ▾ Course details                    ●dirty
+      id / long name, public, Snapshot dirty · Publish latest, notes
+  Variant  [ div-1                  v ]  + ⧉ ⚐ ✕
+  ▾ Variant details                   ●current
+      id / long name, cycle, template, ▾ Sequence …, Add line · Add alternative, Snapshot
+  Snapshot [ div-1/2027-06-06 · a1b2c3d4e5f6 — published v ]  ⧉ ↑ ✕
+      (the capture's read-only details, when one is chosen)
+──────────────────────────────────────────  pinned, never scrolled away
+  ☑ show track   ☐ hide unused   ☐ move/turn
 ```
 
-**A level's list opens directly under that level's own row**, not in one slot at the bottom
-of them all. That slot was wrong in two visible ways: the series list opened *below* the tab
-strip it is choosing for, and the variant list opened below the course it belongs to and
-above that course's own fields. The slot is not emitted at all when nothing is open, rather
-than emitted and hidden, so no empty box is left behind.
+**It was breadcrumbs that opened fixed-height lists, and several could be open at once.** The
+pane became a stack of little windows, each with its own scrollbar and resize grip, and the
+thing you wanted was in one of four places depending on what happened to be open — so the pane
+had to be read before it could be used. A selector says what is chosen *while it is shut*, takes
+one line rather than a hundred and fifty pixels, and is a control nobody has to be taught.
 
-**An open row names the level; a closed one names the selection.** Open, the selected item
-is right below in the list and highlighted, so putting it in the row as well read like two
-entries. Closed, the row *is* the selection, with its state chip, so a dirty course stays
-visible from the top of the pane.
+**The club and the series are two questions.** They were one selector showing
+`myc.org.au/2026-summer` — the widest thing on the pane, saying less than either half would on
+its own. A club has several series and a series belongs to one club, so choosing is naturally
+two steps. **The club carries no commands**: a club is a domain, not created here, not renamed
+here (that would be a migration across every record path and the ledger's own filename), and not
+deleted here. Three disabled buttons would say those are things that might one day work from
+that row.
 
-**Choosing from a list does not close it, and several may be open at once.** The chevron is
-the only thing that opens or closes (`isOpen()`: an explicit answer if there is one, else
-open while that level has nothing chosen). A list that shut itself the instant it was used
-made choosing again — comparing two variants, say — cost two clicks. Each open level gets
-its **own** container (`#list_series`, `#list_course`, …), because one shared slot would
-have them overwrite each other.
+**The chevron moved from the lists to the FORMS.** What is worth getting out of the way is the
+long half — a course's fields and a variant's sequence — not the one-line selector above it. A
+level's fields start **open**, because they are what you came to the level for and a pane that
+opened with everything shut would make choosing a course a two-click job to see the course; the
+series' own fields are the exception, being an id and a title nobody edits twice.
 
-**Which level the form shows is tracked, not derived** (`state.focus`). With several lists
-open there is no longer a single "level you are pointing at". Focus follows what was
-actually reached: picking a single-design course lands on its *design*, not on the course's
-three fields, and adding a course lands on the empty sequence it exists to be given.
+**A level's fields sit inline under that level's own selector.** They were in one form region at
+the foot of the pane, which put the snapshot selector *above* the variant's sequence — the pane
+read course, variant, snapshot, and then the variant's fields, out of order and a scroll away
+from the thing they belonged to. The bottom region is now the Points and Lines tabs' alone.
 
-**Lists are a fixed height and can be dragged.** A list that grew and shrank as things were
-selected moved everything below it on every click, so the button you were about to press was
-never where you last saw it. `resize: vertical` puts a grip in the corner; the height is
-kept in `state.listHeight` and re-applied, because the rows are re-rendered and the inline
-height the browser wrote would otherwise be lost on the next pan.
+**`Snapshot` sits with the design it captures**, at the end of the variant's own form. It was on
+the variant's row among the commands that create and delete variants, which put *capture this
+design* one button from *delete this design*.
 
-Each level collapses to a breadcrumb once chosen, and **exactly one list is expanded** —
-whichever level a chevron opened, or else the deepest one with nothing chosen yet
-(`openLevel()`, derived, so there is no state to fall out of step with the selection).
-Reopening a level does not clear the selections below it. With a variant chosen there is
-nothing left to list, so `#listWrap` hides and the form takes the height — which is the
-whole point, since vertical space is what a 495px pane is short of.
+**The three view tickboxes are PINNED to the foot of the pane.** They are settings for the
+chart, not a level of the drill-down, and they were at the bottom of the variant form — under
+the sequence, which is the longest thing in the pane — so reaching them meant scrolling past a
+course to get at a control that decides how that course is drawn. Only on the Courses tab, since
+all three are about how a course is drawn.
 
-**The tabs sit at the series level, as siblings of Courses.** Points and lines belong to the
-programme file, not to a course, and the Points/Lines tabs edit them *club-wide on purpose*
-— that is the scope rule the model rests on. Putting them under a course would say "this
-course's points", and a newly surveyed point that no course uses yet would have no course
-to reach it through.
+**`public` is said in the course selector's own option text** (`manly-to-shark — public`). An
+option cannot carry a chip, and the flag has to be visible without choosing the course first:
+*which of these is the fleet being offered* is a question about the list, not about one entry.
 
-**A course with one design opens straight onto it**; one with several leaves the variant
-unchosen, which opens the variant list. So nobody editing an ordinary club course has to
-learn the word "variant", and nobody editing a course that has several can forget to say
-which one.
+**An empty option is offered only while nothing is chosen, and it carries no value**, so it
+cannot be picked back to. Once a level has an answer the question is gone from the list, which
+is what stops a selector being a way to un-choose a course and land the pane in a state whose
+only content is an apology. A level with nothing to offer is **disabled** and says why in the
+empty option — *no variants* is a different fact from *none chosen*, and a reader can act on the
+first.
 
-**A level's fields sit under that level's list, not at the bottom of the pane.** The series
-and course forms render inline (`#seriesForm`, `#courseForm`), so the variant list sits below
-the course's fields and closing the course chevron puts the list and the fields away
-together — there is one thing there, not two. Only the deepest thing (a point, a line, a
-variant) uses the bottom region.
+**The SNAPSHOT level is the exception (`keepEmpty`), and choosing a capture was a dead end
+without it.** Un-choosing a course or a variant empties the pane, which is the whole reason the
+question disappears once it is answered; a snapshot is not like that, because *nothing chosen*
+is that level's ordinary and useful state — it means you are editing the design. So the empty
+option stays, re-worded from the placeholder *none chosen* to the action **← back to the
+design**, since chosen it is the one entry on the level that is a command rather than a
+selection.
 
-**The row markup is re-assigned only when it changes.** It now contains form fields, and
-rewriting it on every pan would take the caret out of whatever somebody was typing. Two
-consequences to respect, both of which have already bitten:
+> **What made this invisible was the stub.** The way back used to be a toggle — choosing the
+> capture that was already chosen put the design back — which was right while the level was a
+> list of rows and became **unreachable the moment it was a selector**, because a `<select>`
+> fires no `change` for the option already selected. `drive-snapshot.mjs` asserted that way
+> back and **passed**, because `choose()` in the stub fired `change` unconditionally: it
+> modelled a browser behaviour that does not exist. The stub now refuses to fire when the value
+> is unchanged, which is both what a browser does and what turns that assertion into a test.
 
-- **Every command handler resolves the course and variant at click time**, never from the
-  enclosing render's closure. Selecting a different variant does not change the row markup
-  while its list is open, so a captured one would go stale and the commands would act on the
-  wrong design.
-- **Each container re-wires its own buttons, beside the assignment that destroyed them**
-  (`wireRow`). `#rowSeries` and `#rows` are rebuilt on independent conditions; wiring the
-  series chevron under the guard that watches `#rows` left it dead on every render that
-  rebuilt one and not the other — which is why a series could not be changed after editing a
-  course.
+**Opening the variant selector and landing back on the same variant also lets the capture go.**
+Going to that selector is an act of attention on the design level — somebody went to choose a
+design — so whichever one they come back with, including the one they had, the capture they were
+looking at is not what they asked for. `change` cannot see it, so it is the **pointer that
+opened the list and the blur that closed it**; gated on the pointer deliberately, because a blur
+alone would drop the capture for somebody merely tabbing through the pane, which is not a
+decision about the design at all. A keyboard user who genuinely changes variant is served by
+`change` like anybody else.
+
+> **`formsChanged()` clears every form's guard, and that is why it exists as one call.** The
+> guards stop a form being rewritten while somebody is typing in it, which is worth having — but
+> there is more than one of them now, and a caller that cleared one and forgot another is a form
+> that silently stops updating. That is exactly what happened when the variant's fields moved
+> inline and got a key of their own: `Add line` went on clearing the *course's* key, the variant
+> form was recognised as unchanged, and the step it had just added never appeared.
+
+> **The message line lives OUTSIDE `#rows`.** That container is rebuilt whenever the pane
+> changes, and a message written into it is wiped by the next render — which is usually the very
+> render that follows the thing being reported.
+
+**Explanation still lives in hover popups**, now hung on the level selector rather than on a row
+of its own: `?` beside Course, beside Point or Line, and beside Snapshot.
 
 > The stub in `tools/editor-drive/` **forgets an element when the innerHTML holding it is
 > reassigned**, because a stub that kept answering for a replaced node could not see that
-> class of bug at all — and did not, until it was taught to.
+> class of bug at all — and did not, until it was taught to. It also understands
+> **`[data-x]` attribute selectors**, which the client page uses to wire its two selectors: it
+> used to fall through to the tag branch, where `[data-view]` is a *character class* and
+> `<[data-view]…>` matches `<div>`, so handlers were wired to nodes standing for divs and a
+> driver could see the buttons in the markup but never press one.
 
 **The form holds fields only.** Every command that acts on a level is on that level's row at
 the top; buttons that edit a *field* — add a step, flip a crossing sense — stay beside the
@@ -383,12 +429,11 @@ three `deltaMode` units to pixels, scaled at 1/600 of a zoom level per pixel —
 mouse notches to a zoom level — and clamped per event so a device reporting an enormous
 delta cannot cross the world in one go.
 
-**The pane is three surfaces, getting lighter as they get more interactive**: the pane
-itself, the list of things on it, and the fields that edit one. Before that the list and
-the pane were the same shade and the boundary had to be inferred from a row hover. The
-lists are **one line per entry** — what a thing *is* belongs in the form below, and a
-second line per row halved how many could be seen at once — except a course's length,
-which the tab is required to show always and which moves onto the same line.
+**The pane is two surfaces, the fields lighter than the pane they sit on**, so a form reads as
+something to type in rather than as more of the same. It used to be three, the middle one being
+the list of things to choose from; a selector needs no surface of its own, which is one fewer
+boundary to infer. **A course's length is not in the selector** — the tab is required to show it
+always, so it lives in the chart bar's status where folding a form cannot take it away.
 
 **A leg's marker is one thing**: a circle holding an arrowhead holding the letter of the
 step it leads to. It was a circled arrow with a lettered circle beside it, which said two
@@ -441,7 +486,7 @@ key exists to stop needless rewrites taking the caret out of what somebody is ty
 that did not know about the fold would call the folded form identical and never redraw it.
 
 **Explanation lives in hover popups, not in the pane.** A paragraph telling you how the
-pane works is read once and then permanently in the way of the list it sits above.
+pane works is read once and then permanently in the way of the thing it sits above.
 
 **An id sits beside its long name, 40:60.** They are the same thing said twice — the key
 and the label — and stacking them cost two label rows and two field rows near the top of
@@ -610,13 +655,19 @@ page, because the editor has to name those courses in the dialog it asks with.
 > gated at all. All need a login before this is reachable from anywhere but a desk —
 > sail-jinx has a working Jetty OpenID setup to copy.
 
-**Four chart backgrounds** (default **Sea simple**), offered by a selector built from `BASEMAPS` so the labels and
-order live in one place. The two sea options share one Esri Ocean base (bathymetry,
-coastline, shelf shading); **Sea chart** stacks OpenSeaMap's seamark layer on top and
-**Sea simple** leaves it off. That layer is every light, beacon and buoy — invaluable
-while placing a line against the real marks, and a great deal of ink once they are placed
-and a course is being drawn over the top. **Plain** fetches nothing, and is what the
-on-water screens use.
+**Four chart backgrounds — `none`, `OSM`, `chart`, `sea` — offered by a selector built from
+`BASEMAPS` so the labels and order live in one place**, least ink first. `chart` and `sea` share
+one Esri Ocean base (bathymetry, coastline, shelf shading); **sea** stacks OpenSeaMap's seamark
+layer on top and **chart** leaves it off. That layer is every light, beacon and buoy —
+invaluable while placing a line against the real marks, and a great deal of ink once they are
+placed and a course is being drawn over the top. **`none`** fetches nothing, and is what the
+on-water screens default to.
+
+> **They are named for what they draw, not for how they were built.** They were `seaSimple`
+> ("Sea simple") and `plain` ("Plain"), which described the implementation — the simpler of the
+> two sea layers, the one with no layers at all — where a reader wants to know what will appear.
+> An unknown name draws nothing rather than erroring, which is also what a stale one stored by
+> an older build becomes.
 
 `geo.js` is lifted from the Geo panel of `nemesis-delta` — Web Mercator in world-[0,1]
 coordinates, tiles as plain SVG `<image>` elements, no mapping library. Keep it that way:
@@ -633,23 +684,152 @@ between a viewer and an editor.
 
 ---
 
-### The prototype client, and the seam under it
+### Two pages, one client, and the seam under both
 
-`client.html` is two panels and **the split between them is the whole point of the page**.
-Left is a test rig: a chart, a boat that sails where it is clicked, and the knobs that decide
-what its receiver reports. Right is the client, which is the thing that would ship. **Exactly
-one thing crosses between them, and it is a GPS fix** — a position, a time, a stated accuracy,
-a satellite count, SOG and COG, which is all a real receiver would hand over either.
+**There are TWO pages and exactly ONE client.** `boat.html` is what a boat opens: one panel,
+the phone's own GNSS behind it, nothing else on the page at all. `client.html` is the test rig
+— a chart, a boat that sails where it is clicked, the knobs that decide what its receiver
+reports, and the same client sitting on top of it as a phone on a desk. **Exactly one thing
+crosses into the client on either page, and it is a GPS fix** — a position, a time, a stated
+accuracy, a satellite count, SOG and COG, which is all a real receiver hands over either.
 
-So there is one function, `emit()` in `client.js`, whose body would be replaced by a
-`navigator.geolocation` callback to put this on the water, and nothing in `raceclient.js`,
-`markscreen.js` or `crossing.js` would change by a character. A test client that shared state
-with the thing it tests is a demonstration, not a test — and the seam is *asserted*, twice:
-`boatsim-test.js` pins the exact key set of a fix, so it cannot grow one convenient extra
-field at a time, and `drive-client.mjs` **takes the network away between joining and
-finishing** — `fetch` is replaced with something that throws — and sails the whole course with
-it gone. The architecture's central claim was previously only in a comment, which is to say
-nobody was checking it.
+So the two pages have two receivers and share everything else:
+
+| | |
+|---|---|
+| `device.js` + `device.css` | **the client**: the join screen, the screen-switching, the Mark screen, the overview, the selectors, and `feed(fix)`. Imported by both pages |
+| `receiver.js` | `navigator.geolocation` as a fix. What ships |
+| `boatsim.js` | a simulated boat and a receiver that lies. The rig only |
+
+**Putting the client on a real phone took a receiver and a page, and changed nothing in
+`crossing.js`, `raceclient.js`, `markscreen.js` or `device.js`** — the four files that decide a
+race. That is what the seam was for, and it is the first time it has been cashed in.
+
+**A second copy of the device would be the one thing that must not happen**, which is why the
+extraction came before the page. Two clients drift, the one that fell behind is whichever was
+edited second, and the difference is discovered on the water by the only person who can do
+nothing about it. So `device.js` holds the screens and `device.css` holds their type, spacing
+and colour; each page contributes only what the other has no use for, through a handful of
+hooks — `note()`/`wireNote()` for what has to be said before a join, `blocked()` for something
+the page is still waiting for, `extras()`/`wireExtras()` for a button under the screens, and
+`onJoin`/`onLeave`. The rig passes *Restart lap* and *place the boat behind the start*; the
+phone passes the location permission and the wake lock. **Neither page can tell the device
+which receiver is behind it**, and `drive-boat.mjs` asserts that against the *import lists*
+rather than the prose — both files discuss both receivers in their comments and should.
+
+> **What is NOT shared is the panel's size**, and that is the whole of the difference in the
+> CSS. On the rig the device is phone-*shaped* (9:19.5, capped by the window) because it is a
+> prototype of a phone sitting on a chart; on `boat.html` it is `100dvh` tall and capped at
+> 440px wide, centred, with the space beside it left empty on a laptop. `dvh` rather than `vh`
+> because on a phone `vh` is the viewport with the browser chrome hidden, so a panel sized in
+> it puts its own bottom row out of reach until something scrolls. The type inside is in `cqi`
+> either way, so it follows whichever width it turns out to have.
+
+#### The real receiver, and the two things the web API does not give
+
+**Satellite count: nothing, and nothing invented.** The Geolocation API does not report one, so
+the fix says `null` and the screens print an em dash. A plausible number would be a lie in the
+one place a sailor looks to decide whether to trust the rest of the screen. The QC gate already
+treats a missing count as *no evidence either way* rather than as a failure, so a phone is
+judged on its stated accuracy alone.
+
+**Speed and heading: DERIVED, in the receiver, and only when they can be.** `coords.speed` and
+`coords.heading` are populated by a phone's GNSS while it is moving and are `null` on a laptop,
+on a phone positioned by wifi, and on most devices while stationary. TTL is distance over speed
+and the hull is drawn pointing along its course, so a client with neither has no approach screen
+worth the name. Deriving them from consecutive positions is what a plotter does, and it belongs
+in `receiver.js` rather than in the client: this is the receiver, and a receiver is the thing
+allowed to know how its own numbers were arrived at. Two refusals, both where the derivation
+would be making things up:
+
+- **Movement inside the stated accuracy is not movement.** Two fixes five metres apart from a
+  receiver claiming five metres are one position reported twice, and dividing that by a second
+  gives ten knots for a boat on a mooring — which would run the countdown on nothing at all.
+  Below the accuracy the speed reads **zero** and the heading is **held**, which is both what a
+  plotter shows and what is true: we cannot see it moving. The same reasoning the kinematic gate
+  rests on one level up — what the boat could have done plus what the receiver could have made
+  up.
+- **A long gap derives nothing** (`MAX_GAP_S`, 10 s). A phone that was in a pocket for half a
+  minute and comes back two hundred metres away may have sailed there or may have sat still for
+  twenty-five seconds and then moved; the average across the gap is not a speed anybody is
+  making. The relocation watch is what handles the *position* side of that, and it is better
+  served by an honest zero.
+
+> **A stated zero is a reading, not an absence**, and it settles the heading too: iOS reports
+> `speed: 0` with a null heading while stationary and a position that still wanders a little.
+> Deriving a course out of that displacement would be arguing with the receiver about whether
+> the boat is moving, and losing.
+
+`receiver-test.js` pins all of it, including the assertion that matters most: **a fix from
+`receiver.js` has exactly the key set of a fix from `boatsim.js`**. The two are interchangeable
+only while that holds, and it is the kind of thing that decays one convenient field at a time —
+so each receiver's spec asserts the same list.
+
+#### Three things a real phone needs that a desk does not
+
+**The permission is asked for by a gesture, never on load.** A prompt that appears before
+anything on screen has said why is a prompt people refuse — and a refusal is sticky in a way
+that takes somebody into browser settings to undo. So the join screen carries a panel saying
+what a position is *for*, with the button that asks under it, and `drive-boat.mjs` asserts that
+the page asks the browser for nothing until it is pressed.
+
+**A course is not taken until the phone has proved it can see the sky.** The join screen is the
+one moment somebody is standing still with both hands free; finding out on the start line that
+location was refused is the same problem an hour later with nothing to be done about it. Named
+in the button — *Allow location first*, *Waiting for the first fix* — by the same rule the rest
+of that form follows, and named **ahead of** any unanswered level, because it is a precondition
+for all of them rather than another field. A refusal is reported and the watch is **not** torn
+down: a position lost under a bridge comes back on the other side, and only a refused permission
+is the end of it.
+
+**The screen is kept awake, and says so when it cannot be.** A phone that dims and sleeps is not
+a navigation instrument and nobody is going to keep tapping it on a beat. Best effort by
+necessity — the Screen Wake Lock API is missing on some browsers, refused when the page is
+hidden, and *dropped* every time the page is hidden, so it is re-taken on `visibilitychange`
+rather than assumed to have survived. It is shown as a button because it is a promise the page
+cannot always keep: a screen that quietly slept would read as the application crashing.
+
+**And a HEARTBEAT, because the one state a screen cannot be prompted into reporting is the
+absence of fixes.** The device redraws on every fix, which is right — nothing changes between
+them. But when they stop, the most important thing on the screen changes: the readouts go dashed
+and the signal line has to say how long it has been and how many went in the bin. A page that
+only redrew on a fix could never say that, so `boat.js` redraws once a second regardless. It is
+also what counts the elapsed clock up between fixes.
+
+> **Nothing on `boat.html` posts a record yet**, exactly as on the rig. The client accumulates
+> what a `CourseRecord` needs and stops there; closing that loop is the next obvious step and is
+> deliberately not guessed at.
+
+### The rig
+
+`emit()` in `client.js` reads a fix off the simulator and calls `device.feed(fix)`; `onFix()` in
+`boat.js` makes the same call with a `navigator.geolocation` reading. Nothing else crosses on
+either page. A test client that shared state with the thing it tests is a demonstration, not a
+test — and the seam is *asserted*, twice over: the two receivers' specs pin the key set of a fix,
+and `drive-client.mjs` **takes the network away between joining and finishing** — `fetch` is
+replaced with something that throws — and sails the whole course with it gone. The
+architecture's central claim was previously only in a comment, which is to say nobody was
+checking it.
+
+**HIDE COURSE is the one control on the rig that is not a knob on the receiver.** Ticking it
+draws no course on the rig's chart — no lines, no end dots, no letters — which takes away the
+*operator's* own knowledge of where the marks are and leaves the device beside it as the only
+thing saying where to steer. That is the application's central claim, and nothing on this page
+could otherwise test it: an operator who can see the line on their own chart will steer by that
+without noticing, and the screen under test is never actually relied upon.
+
+What it hides is exactly the geometry. The true track, the accepted fixes, the helm order and the
+boat are all still drawn, because they are what the operator steers *with* and none of them says
+where a mark is; the tiles are untouched, because a chart with no marks on it is still the water,
+and taking that away would be testing something nobody is claiming. It sits beside the basemap
+selector, since both decide what the chart SHOWS where Start and Place boat decide what the boat
+does, and it lights up when it is on — a rig with the course hidden otherwise looks like a rig
+with no course loaded.
+
+> One leak worth knowing about: joining aims the boat *through* the first line, so the helm
+> target is course-derived and betrays roughly where that first mark is. Pressing **Place boat**
+> replaces it with one of your own. Suppressing the initial aim instead would leave the boat
+> stopped on the line, which is the thing `aimAtMark` exists to avoid.
 
 **GNSS error WANDERS; it does not shimmer, and modelling it as white noise is the most
 misleading thing a simulator can do.** Independent draws per fix make the plotted dots hop
@@ -690,15 +870,32 @@ the situation (`RaceClient.view`), and the rule is worth stating because neither
 quantity works alone. A **fixed radius** hands a drifting boat the Mark screen four minutes out
 and a skiff thirty seconds out for the same number of metres. A **pure time-to-line** is
 meaningless the moment a boat slows, stops, or points away, and would flick the screen about on
-every lull. It is therefore the OR of the two — 200 m, or 45 seconds at the speed being made —
-and each covers the other's blind spot: the radius is the floor that works at any speed, the
-time is what gets the screen up early for a boat coming in fast.
+every lull. It is therefore the OR of the two — **100 m, or 30 seconds** at the speed being made — and each
+covers the other's blind spot: the radius is the floor that works at any speed, the time is what
+gets the screen up early for a boat coming in fast.
+
+> **And the distance it reads is to the part of the line the boat would CROSS, not to the
+> line's infinite extension** (`approachM`, not `perpDistM`). The two are the same number for
+> a line the fleet meets square, which is why the difference went unnoticed. A line running
+> *along* the leg — which is exactly the shape a gate's half-infinite sides take, a mark with
+> a line running back down the leg from it — breaks it: a boat four kilometres down that leg
+> is still only the gate's half-width from both lines' extensions, so the Mark screen took
+> over on the start line and never gave it back. The boat is measured to the nearest point of
+> the line **between its two defined points**, infinite ends included, which sounds like it
+> contradicts *an infinite end is a bearing, not a place* and does not — the point given for
+> an infinite end is the handle that says where the fleet actually crosses, so it is precisely
+> the right bound for this question. **Nothing about scoring changes**: the extent test still
+> runs out without limit, and a crossing out there still counts. It is also the point the plot
+> seats its triangle on, so the screen comes up about the part of the line the picture is
+> already about.
 
 Three details around it, each of which was a bug first:
 
-- **The screen is given back at 320 m, not 200.** Without that gap a boat holding station near
+- **The screen is given back at 160 m, not 100.** Without that gap a boat holding station near
   a start line — which is what a fleet does for the five minutes before a gun — flips between
-  the two screens on GPS noise alone, several times a minute.
+  the two screens on GPS noise alone, several times a minute. The gap moved with the threshold
+  rather than staying at its old 320 m: what it has to beat is metres of GPS noise, and a band
+  three times the trigger would have made the Line screen sticky in a way nobody asked for.
 - **The hysteresis resets on every advance.** A new mark is a new approach. Carrying the flag
   over meant that having held the screen through one crossing, the *next* mark was judged at
   the exit threshold rather than the enter one, so a mark three hundred metres off took the
@@ -716,6 +913,15 @@ a detector and both see every fix; the first to latch is the side the boat took,
 abandoned, and which it was is recorded because the next leg's bearing depends on it. On a
 **cycle** the detectors are rebuilt at each wrap: a detector latches once and stands, which is
 right within a lap and wrong across them.
+
+**The line's NAME is set at twice the size it was**, and the letter with it. The name is what a
+course is discussed in, and at 12.5 px the one identifier everybody else uses was the smallest
+thing on the screen. The letter goes up too: a 25 px name beside a 19 px letter reads as a heading
+with a footnote, where the two are one fact said twice, short and long. Still `nowrap` and still
+ellipsised — a scoped id does not fit at this size, and a name that wrapped would push the plot
+down the panel every time the boat reached a mark with a long id. It truncates at the tail, which
+keeps the club's prefix; that is the part that is the same on every line, so it is the part worth
+losing, and the trade is worth revisiting once anything real is in the field.
 
 **The overview always says what the boat is steering for: BTW, DTW and the line's NAME.** The
 name because that is what a course is discussed in — the sailing instructions and the club's
@@ -754,14 +960,63 @@ the one question the approach view exists to answer, is the one thing it then ca
 the line slides under a stationary boat, which reads as the mark moving.
 
 **What must stay in view is a precise list, and nothing else decides the fit**: the boat, the
-crossing point where the COG projection cuts, the triangle on the line, the next-leg arrow, and
-the **last three** fixes behind the boat. Fitting on anything more kept the plot uselessly wide —
+crossing point where the COG projection cuts, **the line's own midpoint**, the triangle on the
+line, the next-leg arrow, and the **last three** fixes behind the boat. Fitting on anything more kept the plot uselessly wide —
 the line's ends, which on a quarter-mile start line are a long way from anything that matters,
 and the rest of the trail, which at 5 Hz reaches back a quarter of a mile after two minutes and
 says nothing an approach needs. Three dots is the fewest that shows a direction rather than a
 pair of points. With that list the view closes in as the boat does, which is the whole point of
 an approach screen: at thirty metres you want to see metres. Measured over a real approach, the
 visible water goes from about 250 m at DTW 277 down to 36 m at DTW 39.
+
+**The COG cut is CAPPED for the purposes of the view, and drawn where it really falls**
+(`COG_FIT_CAP`, two line lengths). The cut is one of the things the frame is fitted around, and a
+boat sailing nearly parallel to a line cuts it a very long way away — at exactly parallel, never
+at all. Honouring its position there zoomed the plot out until the boat was a dot: measured at 88°
+off a 300 m line, the visible water was **three kilometres** across, for a crossing point nobody
+is steering at. What the picture needs from the projection at that angle is its *direction*, which
+a point a bounded distance along it carries just as well; two line lengths because that is the
+scale on which a line is approached. The same capped point goes into the **hold** list as well as
+the fit, or a far cut would trip "leaving the view" on every frame and the plot would never hold
+still. What is **drawn** is never capped — the ring stays where the cut is and the figure reads the
+true distance, because capping either would move the warning, which is the one thing on this screen
+that must not move. The figure is clipped into the picture instead, like the other side of a gate's.
+
+**The LINE'S MIDPOINT is what bounds the zoom, and without it the plot closed in too far.** The
+other point on the line in the fit is the *seat* — the nearest point of the line to the boat — so
+as a boat closes, boat and seat converge, and a fit built on those two alone zooms in without
+limit, onto a patch of water that no longer contains the mark. It is invisible sailing straight at
+the middle, where the seat **is** the midpoint, and plain the moment a boat comes in off-centre:
+measured on a 300 m line approached at the pin end, the midpoint left the plot a hundred metres
+out and was **419 px off a 400 px picture** by twenty. The midpoint rather than the ends, because
+the midpoint is the *mark* — what the leg length is measured to, what DTW counts down to, and on
+an infinite end the handle somebody deliberately placed where the fleet crosses. The ends stay
+out: on a quarter-mile start line they are a long way from anything that matters. It is in the
+**hold** list too, or a frame held while the boat closed would lose the mark between rebuilds.
+
+**And ONE END OR THE OTHER, whichever is nearer.** The midpoint says where the mark is and
+nothing about how much line there is: a stroke running off both edges of the picture could be a
+fifty-metre line or a quarter-mile one, and the question a boat on an approach is actually asking
+— can I fetch the end I am heading for, or am I running out of line — cannot be read off it at
+all. The *nearer* end, because "one or the other" is satisfied either way and the nearer one costs
+the least zoom and is the one a boat near that part of the line risks running past. When the boat
+is already beyond an end it asks for nothing new, the seat being clamped to the extent.
+
+> **What it costs, measured at 20 m out.** On a 92 m gate side, nothing at all: 75 m of visible
+> water either way. On the club's 174 m windward line, 75 m → 103 m; on its 199 m leeward line,
+> 75 m → 118 m; on a 300 m line, 75 m → 177 m. So the approach still closes in by four to six
+> times over a whole approach, just not to the last 75 m — and the boat, drawn to scale, ends at
+> 28–32 px instead of 44 px on the club's real lines. The tightest view is now roughly half the
+> line's length, which is the honest consequence of being asked to hold an end.
+>
+> A side effect worth having: the frame no longer depends on *where along the line* a boat comes
+> in. Centred and at-the-pin approaches used to close to 75 m and 165 m respectively on a 300 m
+> line; both are 177 m now, because the picture holds the same three things either way.
+
+> A centred approach is **unchanged at every range** — the two points coincide, so the plot goes
+> on closing in exactly as it did. Only the off-centre approach is held back, and only as far as
+> the mark: at the pin end the visible water stops shrinking at about 165 m instead of closing to
+> 75 m around the boat. The spec sweeps both, in all three orientations.
 
 > **The triangle and the arrow are fixed PIXEL sizes, so they cannot be fitted as points in
 > metres** — how far they reach depends on the very scale being solved for. Their *direction*
@@ -772,6 +1027,16 @@ visible water goes from about 250 m at DTW 277 down to 36 m at DTW 39.
 > the correction is a fifth of a view. The spec sweeps a whole approach every five metres in
 > four orientations and requires all of it to be inside the viewport, because the case that
 > breaks a fit like this is always some particular geometry at some particular range.
+
+**Nothing that matters is drawn near the border** (`FIT_FRACTION` 0.7, `HOLD.edgeFraction`
+0.1). The fit puts everything that must be seen inside 70% of each axis, and the frame is given
+up once anything has drifted to within a tenth of the edge — the two are a pair, because the fit
+only decides where things *start* and the hold decides how close they ever actually get, so
+widening one without the other buys a better first frame and lets it drift back. An element a few
+pixels off the boundary reads as on its way out of the picture, and on a phone in a bracket the
+outermost pixels are the ones a thumb, a bezel reflection and a rounded corner take first.
+Measured over four whole approaches, the closest anything came to the border went from 25 px to
+45 px of a 330 px axis, and the sweep now asserts that buffer rather than mere containment.
 
 **It closes in in STEPS, not continuously.** The frame is given up for exactly two reasons, and
 both are about its having stopped being useful rather than about anything having merely changed:
@@ -811,6 +1076,47 @@ visible jerks. **The displayed bearing is not part of the frame's identity** —
 every degree of a swing is a frame that never held still — so a deliberate change of orientation
 reaches `PlotView` inside `subject` instead.
 
+**Line perp squares up to a GATE's axis, not to one side's own normal** (`gateOf`, `gateUp`).
+The two shapes a gate takes pull in different directions. Where the sides are **collinear** — two
+lines end to end with a gap — each side's crossing normal already points the way the fleet comes
+through. Where they are **parallel**, either side of a centreline, the normals point *outward in
+opposite directions*: squaring up to the side a boat happens to be watching turns the display
+ninety degrees off the approach, and the other way round the moment it changes its mind, so the
+same gate reads two different ways depending only on which side the boat has committed to. The
+perpendicular to the join between the two **centres** is the one bearing both shapes agree on —
+the normal itself when they are collinear, the approach when they are parallel — so there is one
+rule and no special case. **The sign comes from the leg INTO the gate**, never from where the boat
+is: a join has two perpendiculars and the geometry cannot choose, and taking the one pointing from
+the boat towards the gate would flip through half a turn as the boat drew level, which is the
+latch and the one moment the display must hold still.
+
+**There is a fourth orientation, COG up**, which is the one every plotter has: the boat's own
+heading straight up, so what is ahead on the screen is what is ahead over the bow. It sits beside
+Leg up because the two are the course-referenced pair, and the difference between them is worth
+stating — it is the difference between where the boat is *going* and where it is *meant to be*
+going. On a beat, Leg up holds the rhumb line up and the boat points thirty or forty degrees off
+it, which is what shows the tack; COG up holds the boat up and swings the world on every tack
+instead. That swing is the cost, and the reason the brief left it out: a COG is noisy and a
+display following it wanders. What makes it usable is that nothing here snaps — `Turner` eases the
+displayed bearing at `TURN_DEG_S`, which low-passes the jitter into a slow drift rather than a
+shake. With no COG to hand it falls back to the leg, never to north, because snapping the world to
+north the moment a receiver hiccups is the opposite of what somebody choosing this asked for.
+
+**The sailor can also overrule the screen choice** (`VIEWS`, `RaceClient.setViewMode`). AUTO is
+the default and is the design — the sailor never has to *ask* for the Mark screen — but never has
+to is not cannot: somebody setting up, checking the next leg on a long beat, or simply disagreeing
+with the rule has every right to pick, and a display that refused would be insisting it knows
+better about what somebody wants to look at, which is not a thing it can know. Three states,
+**Course / Line / Auto**, on both screens, because either may be the one you want to leave.
+
+> **Forcing does not switch the rule off.** The hysteresis goes on tracking underneath, so AUTO
+> resumes with the answer for where the boat is *now* rather than for where it was when a button
+> was pressed. It lives on the `RaceClient` rather than on the page, because `view()` is the
+> single answer to "which screen" and a page holding its own copy would be a second rule to keep
+> in agreement with the first. A complete course still answers *overview* whatever is forced —
+> there is no mark to force. And anything other than the three reads as AUTO, so a stale value
+> cannot strand somebody on a screen with no way back.
+
 **All three orientations apply to the course overview as well.** They are a property of the
 display, not of one screen: somebody who has chosen Leg up has chosen how they read a chart, and
 having that hold for the approach and be abandoned the moment the course came back would be two
@@ -830,8 +1136,59 @@ conventions on one device. The selector is therefore on both, and sets one setti
 > first mark — the only leg there is. **One definition, shared by both screens**, or the day they
 > stopped agreeing the two would be turned different ways with no way to tell which was right.
 
-The overview always re-fits, unlike the Mark screen: seeing the whole course is what an overview
-is *for*, and a held frame would let a boat sail off the edge of its own course. The fit is done
+**The overview marks the line the boat is heading for, in the live triangle's own colour.** The
+live crossing's triangle has always been green while every other was blue or grey — and the line
+under it was the same blue as all the rest, so the one thing on the picture worth finding was
+marked on a shape a few pixels across and not on the hundred-metre stroke it sits on. A line may
+carry several crossings, and it counts as live while **any** of them is: it is the same piece of
+water either way.
+
+**And it runs the COG out as far as the picture goes.** On the approach screen the projection
+stops where it cuts the line, because there the question is where on *that* line it lands. Here
+the question is the other one — what is the boat pointing at — and the answer is only legible if
+the line reaches whatever it is pointing at: the next mark, the far end of a gate, the shore. Run
+to the viewport's diagonal so it leaves the picture whichever way it runs, and clipped by the
+viewBox rather than by arithmetic. **Forward only**: a line drawn *through* the boat would show a
+back bearing nobody asked for, and on a course where the boat has just turned it would point at
+the mark behind.
+
+**The overview can be zoomed and panned, and has a background** (`OverviewView`, `chartBar`,
+`basemapArt`). Three things about it:
+
+- **It re-fits every frame until somebody takes hold of it.** Seeing the whole course is what the
+  screen is for and a held frame would let a boat sail off the edge of its own course — but a
+  picture that re-fits while you are dragging it is a picture you cannot drag. So the first zoom
+  or pan **anchors** the fit as it was at that moment and the hand controls work from there;
+  **Fit** gives it back, and is dead while there is nothing to reset. Bounded to a quarter and
+  sixteen times the fit: these are for looking *into* the picture and back out a little, not for
+  replacing it.
+- **The pan is held in screen pixels, applied in rotated space.** A drag should follow the finger
+  by the distance the finger moved, whatever the display is turned to; moving the picture right
+  by P pixels is moving the centre left by P/scale in the rotated frame, which is the same
+  there-and-back the extent's centre already does. Followed on the **document**, not the chart:
+  the panel is rebuilt on every fix, so a `pointermove` wired to the element the drag started on
+  stops arriving halfway through and the chart follows the finger and then sticks.
+- **A background never blocks.** Tiles are `<image>` elements, so the browser fetches them on its
+  own and nothing on the path from a fix to a drawn course touches the network — no await, no
+  `fetch`. `drive-client` holds it to that: it renders the overview with the sea chart selected
+  while `fetch` is replaced by a thrower, mid-blackout, and the unit spec does the same. The
+  default is `none`, because a screen whose whole claim is that it works with the server switched
+  off does not open by asking a tile server for anything.
+
+> **Dimmed hard** (`BASEMAP_INK`, 0.32), and that is not a nicety. Every tile server worth using
+> draws for a white screen, and these screens are dark because they are read in glare and at
+> dusk; laid on at full strength the background becomes the brightest thing on the plot and the
+> course is a thin cyan line over a bright page. Drawn on a **square the size of the viewport's
+> diagonal** and rotated by `-up`, because the picture turns and a viewport-sized patch of tiles
+> would leave the corners bare at every angle but north-up.
+
+> **The Mark screen gets none of this.** It is offline-first by a rule that is not up for
+> trading, its frame is held on purpose so there is nothing to pan, and at its scale — a couple
+> of pixels to the metre — every tile server in the world is out of zoom levels and would hand
+> back a blur to sail by.
+
+The overview otherwise always re-fits, unlike the Mark screen: seeing the whole course is what an
+overview is *for*, and a held frame would let a boat sail off the edge of its own course. The fit is done
 in **rotated** space, or a course that is long east-west would be cropped once stood on end. And
 a turned chart gets a **north pointer** (`northPointer`), because a rotated chart with no north
 reference relates to nothing — not the printed chart, not a wind direction somebody called across
@@ -847,6 +1204,24 @@ computed from the other, so a third of the screen was being spent restating what
 showed. Green means the present course crosses the line; red means it does not — a red thirty is
 not a countdown, it is thirty seconds' warning that the boat is about to sail past the end
 having scored nothing, which is the warning the one-metre hard edge obliges this screen to give.
+
+**TIME TO LINE COUNTS DOWN TO THE LATCH, NOT TO THE WATER** (`confirmSeconds`). A crossing is not
+latched when it happens, it is latched when it has been *proved*: the detector wants
+`confirmFixes` consecutive fixes resolved to the far side before it will call it, which is what
+stops a boat sitting on a line assembling a crossing out of noise. So between the bow cutting the
+line and the screen saying CROSSED there is a real gap — at one fix a second with the default of
+three, about three seconds — and a countdown that ignored it reached zero and then sat at zero
+while nothing happened, which reads as the application having missed it.
+
+The estimate is **the fix interval times the count**, and both halves are honest: the count is the
+detector's own, and the interval is measured from the fixes actually arriving rather than from
+what the receiver was asked for, so a receiver reporting half as often is twice as long to be
+sure. It over-estimates by up to one interval — the first confirming fix may land immediately
+after the crossing, so the true delay is between `(N-1)` and `N` intervals — and that is the right
+way round: a countdown that reaches zero a moment early has told the truth late, where one that
+reaches zero a moment late says the boat has crossed when it has not. `timeToLine()` returns the
+parts as well as the total (`reachSeconds`, `confirmSeconds`), so a screen can show the split
+without re-deriving it.
 
 > **The smoothing is on the INPUTS, and the defence against a wild reading is physics rather
 > than statistics.** Time to line is distance over speed; the distance is geometry and moves
@@ -887,15 +1262,62 @@ Crossing the *second-last* line still has a leg after it — the one to the fini
 has a bearing worth pointing at, so it gets an arrow like any other. Keyed off "there is no next
 leg", never off "the next mark is the finish".
 
-**The boat and the line are drawn at their REAL SIZE** (`REAL`: a 10 m boat, a 5 m line), which
+**The boat is a HULL SEEN FROM ABOVE, not an arrow** (`BOAT`, drawn by `boatArt`). An arrow says
+which way something is pointing and nothing else — and on a chart it reads as a cursor or a
+bearing marker, the two things this is not. What a sailor should recognise without deciding to is
+*a boat on the water, heading that way*, and a plan view gives that for the same pixels: a pointed
+bow, the beam carried aft of midships, and a transom that squares off the stern, which is what
+makes the forward end unmistakable from the after one at thirteen pixels. The mast is the disc,
+and it is what says *sailing* boat.
+
+**No boom, deliberately.** A boom is drawn at an angle, and an angle is a claim about where the
+wind is and which tack the boat is on — neither of which anything here knows. A spar drawn at a
+guess would be the one part of the picture that was made up.
+
+**One path, one routine, three charts.** The approach plot draws it to scale (its real size is the
+point there), and the course overview and the rig's chart each draw it at a fixed size — an
+overview is re-fitted to a whole course and the rig is panned and zoomed at will, so on both of
+those a boat to scale would be a pixel on a passage leg and a monster on a short
+windward/leeward. Three copies of the path would be three things to keep in agreement, and the
+one that fell behind would be whichever was edited second. `northPointer` keeps its arrow, which
+is the one thing on these screens that really is a direction and not a boat.
+
+> **The beam moved, and with it an invariant.** The dart was 0.67 of its length across; a hull is
+> **0.42** (measured off the path with `getBBox`: 27.000 by 11.340). So the boat's beam against the
+> line's thickness went from 2.2× to **1.4×** — still wider than the line at every range, which is
+> the rule, and the length is still over three times it. Beamier than a 10 m yacht really is
+> (about 0.32), because a hull drawn honestly narrow is a sliver at thirteen pixels; narrower than
+> the dart, because a dart is not a hull. The spec asserts the surviving invariant rather than the
+> old number.
+
+**The boat and the line are drawn at their REAL SIZE** (`REAL`: a 10 m boat, a 3 m line), which
 is how the plot shows closing. A glyph of fixed pixel size says nothing about range — at four
 hundred metres and at four it is the same picture. To scale they grow together, and the moment
-the boat is a third the width of the line is a moment nobody has to read a number to understand.
-Measured over an approach: the boat goes 13 px → 67 px and the line 3 px → 33 px between 400 m
-and 15 m. Both floored, or a 10 m boat at 400 m would be ten pixels and vanish; both capped, so
-neither swallows the plot. The line is drawn with **butt** ends, because a round cap extends a
+the boat is several times the width of the line is a moment nobody has to read a number to
+understand. Measured over an approach: the boat goes 13 px → 50 px and the line 3.9 px → 15 px
+between 400 m and 15 m. The line is drawn with **butt** ends, because a round cap extends a
 stroke half its width past the point it was drawn to — invisible at three pixels, half a
 boat-length at thirty, and extending it exactly where the extent test says it stops.
+
+> **The line is 3 m, not 5, and ONE CLAMP governs both — the two together are why the picture
+> looked wrong.** The glyph's beam is two thirds of its length, so a 10 m boat is drawn 6.7 m
+> across; against a 5 m line that is a third wider than the line is thick, and a narrow dart a
+> third wider than a bright band running the whole width of the plot does not read as the bigger
+> object. Three metres is also what that width honestly is — it is the accuracy band, and a
+> receiver reporting two or three metres gives you two or three. At 3 m the beam is over twice
+> the line's thickness at **every** range.
+>
+> The second half is the clamp. Both bounds are floored (at four hundred metres a 10 m boat is
+> ten pixels and would vanish) and capped (neither should swallow the plot), but the line's
+> bounds are now **derived** from the boat's by the ratio of their lengths, so the clamp cannot
+> put the pair out of proportion. Asserting them independently is what broke it: the boat sat
+> frozen on a 13 px floor from about 130 m out while the line went on scaling down to 3 px, so
+> over the part of an approach that takes longest the line visibly thickened and the boat did not
+> move at all — the ratio drifted from 4.3:1 at four hundred metres to 2.4:1 at a hundred and
+> seventy-five. Derived, it is exactly `boatM / lineM` at every scale, and the spec checks that
+> at eight ranges rather than one. Inside the floor the pair are frozen *together*, which is
+> honest — an honest 10 m boat out there is four pixels — and growth begins for both at the same
+> moment.
 
 **An infinite end is as substantial as the line itself.** It is not a weaker part of the line, it
 is the part that *cannot be missed* — if anything the safer water to cross — and drawn as a thin
@@ -907,6 +1329,55 @@ sailing at; it is drawn first, so the focused one is over it where they meet; an
 outlined rather than filled — the shape says the sense either way, the fill says which one the
 screen is about. One routine (`crossingArt`) draws both, because a subdued copy written separately
 is where a change to how a line is drawn would quietly fail to reach.
+
+**Both sides get a PERPENDICULAR DISTANCE and both get a NEXT-LEG ARROW**, because those are the
+two things the choice is actually made on and they differ between the sides. One distance said the
+sides were the same distance away — nearly true on a parallel gate and not true at all on a
+collinear one — and one arrow said the other side had no leg out of it. Each side's distance comes
+from **its own detector** rather than being measured by the drawing (how far off a line a boat is
+is the detector's question, and two sides answered by two routines would put two different
+quantities on one screen drawn the same way), and each arrow runs from **that side's own
+midpoint**, so the pair say what taking each side costs on the leg that follows. Subdued and drawn
+before the focused pair — half the label size, less ink, the same relation its triangle already
+has — so the comparison is *offered*, not asserted: what the readouts, the clock and the fit
+belong to is never in doubt.
+
+> **The other side's figure comes to the viewport, the viewport never goes to it.** Its line is
+> not in the fit, so its perpendicular foot is routinely outside the picture — measured on a real
+> gate, the midpoint of those dashes landed at x=711 in a 400 px plot. So the figure is placed on
+> the part of its own dashes that can be seen (`clipToView`), which keeps the rule that the figure
+> sitting on the dashes *is* the label.
+
+**The perpendicular distance is written in the LINE's colour, and the two figures go to opposite
+sides of their dashes.** They were `--muted` and `--cog` — two cool greys a shade apart, which at
+a glance from a cockpit is one colour, so nothing said which figure was the distance to the line
+and which was the distance along the COG. The perpendicular is about the line, so it takes the
+line's own cyan; the dashes stay muted, because they are a construction line and cyan there would
+put a second line on the water. And both figures run from the boat to somewhere on the line, so a
+boat pointed square at the line had them within a pixel of each other — the perpendicular foot and
+the COG's cut are the same place.
+
+> **And no two figures are ever drawn over one another: the COG's gives way.** Opposite sides
+> and different fractions along the dashes separate them over almost the whole approach, but not
+> in the last thirty metres square on, where the segment is too short to pull them apart along it
+> — they overlapped into "30 3m0 m". The geometry that squeezes them is exactly the geometry that
+> makes the second figure redundant: square on and close in, the distance along the COG *is* the
+> perpendicular distance, to the metre. So the perpendicular keeps its figure and the COG's does
+> without, which costs nothing, since the dashes and the ring still say where the present course
+> cuts. `labelBox` estimates where a figure lands and `boxesClash` says whether two would
+> collide — one routine, used by the drawing *and* by its spec, so the two cannot disagree about
+> what "on top of each other" means. Measured over 65 frames of a five-range, thirteen-heading
+> sweep, the COG's figure gives way in **3**.
+
+> **Opposite sides was not enough, and a screenshot said so.** Half a figure's height each way is
+> 36 px between two readings 70 px wide: they overlapped into "61 0m m". Nor is widening the
+> offset the answer on its own — the two segments share the boat and diverge by only a few
+> degrees, so both offsets point much the same way and widening moves the pair together. What
+> separates them is sitting at different **fractions along their own dashes**, a fifth and four
+> fifths, which pulls them apart where the segments actually diverge. Measured over every heading
+> that still cuts the line ahead, at 150 m and at 60 m: the closest the two boxes come is 16 px of
+> clear space, against 27 px of overlap before. The spec sweeps five ranges and thirteen headings
+> and guards the anchors, since a text box needs a DOM and these specs run in `node`.
 
 > **Perpendicular distance is the wrong way to pick which side of a gate a boat is on.** A proper
 > gate has its two lines either side of the centreline and roughly parallel, so a boat is very
@@ -921,7 +1392,14 @@ the instant the first line was crossed, never from when the app was opened. Befo
 overview shows a dash, not a zero — a number already running before the boat crossed anything is
 not an elapsed time, it is how long somebody has been holding a phone. Once started it shows
 **Started** and a running **Elapsed**; once the finish is behind, **Started**, **Finished** and a
-total that has stopped, marked as final because it is then a result rather than a reading. Both
+total that has stopped, marked as final because it is then a result rather than a reading.
+
+> **Final is said by the COLOUR, not by the label.** The label read "Elapsed — final", written
+> with an `&mdash;` and then put through `esc` like every other label — which escaped the
+> ampersand and printed the entity, so the screen said `ELAPSED &MDASH; FINAL`. The fix is not to
+> escape it less: a label is text, `esc` is right, and a label that has to carry markup is a label
+> saying too much. `.readout.done` already turns the row green when the clock has stopped, which
+> says *result* at a glance and in the place somebody is already looking — the number itself. Both
 instants come off the *interpolated* crossings — that is the entire reason the detector
 interpolates, and showing a fix time would throw the precision away at the last step. On a cycle
 each lap restarts it, which is what makes the number a lap time.
@@ -931,6 +1409,93 @@ is *for* — which way, and how far — and they were sharing a row with two num
 speed, which the boat can feel and which says nothing about where it is going, and elapsed,
 which matters once at the end. Sharing made all four small enough to need looking at rather than
 glancing at. SOG is gone from it.
+
+**BTW, DTW, Started and Elapsed FILL the panel's width, and the ceilings are measured rather
+than chosen.** Each row lays its cells out as equal columns across the whole width
+(`grid-auto-flow: column` with `1fr` tracks, so the count follows the markup and the finished
+state's third cell needs no second rule), and the figures are sized in **`cqi`** — a fraction of
+this panel — so they go on filling it when the panel narrows. Three things about the numbers,
+each of which was wrong first:
+
+- **Sized against the SYSTEM font, not Barlow Condensed.** There is no webfont link on the page,
+  by the same rule that keeps tiles off the Mark screen, so the condensed face is only there if
+  somebody has it installed — and sizing to a face that may not load is how a number ends up
+  clipped on somebody else's machine.
+- **The binding string is not the obvious one.** At a 400 px panel `360°` would take 97 px of
+  type but `12.34 nm` only 58.7 px, and a passage race really does show a DTW over ten miles.
+  Started is 44.9 px across two cells and 28.7 px across three. So DTW sets the steering row and
+  Started sets the timing row; measured, not guessed.
+- **The paddings and the gap are in `cqi` too, and that is what makes one figure per row safe at
+  every width.** Fixed at 12 px they eat proportionally more of a narrow panel, so a size that
+  just fitted at 400 px overflowed at 230 px — which is the width this panel takes on a short
+  window. Scaled, a cell is 45.5% of the panel whatever the panel is, and the ceiling is a pure
+  ratio.
+
+> **A bearing's degree sign is part of the NUMBER, not a unit beside it.** Units are set small,
+> and a small ring shares its baseline with the digits — beside a 54 px figure it sits in the
+> bottom third and reads as a decimal point, which turns a bearing into a fraction. At the
+> digits' own size it lands where the type designer put it. `nm` and `m` stay units, because
+> that is what they are.
+
+**The RIG is always full height, and the device's constraint must never reach it.** The rig is
+the chart the boat is sailed on and the knobs that lie to it — it is the desk, not the device, and
+every pixel of it is worth having. Two things had to be right for that:
+
+- **`align-self` on the device, never `align-items` on the split.** Putting it on the grid stopped
+  the rig stretching as well, which left it at its content height and collapsed the chart — a
+  flex child free to shrink — to a thin strip.
+- **One definite grid row (`grid-template-rows: 100%`).** An implicit `auto` row is sized by its
+  tallest content, so anything inside that wants to be taller than the window grows the row
+  instead of being clamped by it, and `height: 100%` on a child then resolves against the grown
+  row, which is circular and lets content win. The chart is an SVG, and an SVG with a viewBox has
+  an intrinsic ratio it will happily impose at that width. With the row definite the rig stretches
+  to exactly the window and the chart shrinks inside it (`min-height: 0`, with `overflow: hidden`
+  as the backstop). Measured at 1000, 700 and 500 px of window: the rig is the full height at each,
+  and it gets *wider* as the window shortens, since the desk keeps the space the phone gives up.
+
+**The device panel is NOT REBUILT while somebody is choosing a background.** It is rebuilt from
+scratch on every fix, and rebuilding it destroys the elements in it — including a `<select>`
+whose popup is open, which the browser then closes. At a fix a second that made the background
+unpickable: the list appeared, the next fix arrived, and it vanished before the pointer reached an
+option, which reads as the menu closing when you move the mouse over it. So the render is held
+while that control has focus — the same rule the editor follows for a field somebody is typing in,
+for the same reason. Held on **focus** rather than on a flag of our own, so it cannot stick: the
+moment focus goes anywhere else the panel resumes, and nothing has to remember to release it. The
+`change` handler blurs first, or the hold would freeze the panel on the very render meant to show
+what was just chosen.
+
+**THE DEVICE IS A PHONE ON THE DESK, not a column beside it.** It was the right-hand half of a
+two-column grid, which made it a panel of the page — and a panel is not what is being
+prototyped. What ships is a phone in a bracket, and a phone sits ON the chart the way it sits on
+a cockpit bulkhead: over the water, in the way of some of it, movable when it is in the way of
+the wrong part. Giving the rig the whole window also gives it back the quarter of the screen it
+was paying for a column that is now a floating object. There is a case round the screen — an
+earpiece slit, a lens, a home indicator — because the shape alone did not say *phone*, and a
+rounded box over a chart says *dialog*.
+
+> **It is dragged by the CASE and never by the screen, which is the whole reason there is a case
+> rather than a border.** The screen's own chart pans on a drag; a phone that also moved on one
+> would be two gestures fighting over a single pointer, and whichever won the other would be a
+> control that sometimes does nothing. The case settles it the way the real object does — you
+> pick a phone up by its edges — so a press that started anywhere inside the screen is not a
+> drag. Followed on the **document** like the chart's own pan, because a pointer leaves the case
+> the moment the phone is behind the finger rather than under it.
+>
+> **Clamped by its edges, not by its corner**: a strip of the case is always in the window on
+> every side, because a phone dragged just past the edge and released is a phone nobody can get
+> back and this page has no command to fetch it. It starts clear of the rig's own bar, which is
+> the one strip that must never be under it — those are the controls for the chart it is
+> sitting on.
+
+**The device panel is phone-SHAPED, not merely phone-wide** (9:19.5, written once as an
+`aspect-ratio`). It was 400 px against the full window height, which on a desktop monitor is
+1:2.5 — a panel that shape has room for things a phone has not, so anything laid out until it
+"fits" fits nothing. The *height* is what is capped, by the window or by what 400 px of width
+implies, and the width follows from the ratio, so the two can never disagree; on a short window
+the panel narrows instead of being cropped, which is the whole reason the type is in `cqi`. It
+carries a bottom border, because without one the panel's shape is invisible — the page behind is
+the same colour — so limiting it would change nothing anybody could see and the empty water below
+the last row would read as a layout fault.
 
 **Which side a fix is ON and which side it CONFIRMS are two questions, and they used to share
 one band.** `side()` is geometric and narrow — `SIDE_BAND_M`, half the system resolution — and
@@ -968,6 +1533,24 @@ same rule the editor's chart does — **the cursor says what the chart will do**
 order, orange for putting the boat down, two gestures that are one click apart and cannot be
 undone. It carries the range and bearing from the boat, since on a steering rig the question
 behind every click is "how far is that, and which way", and the chart can answer it for nothing.
+
+**The join screen asks the course question one level at a time, and remembers the boat.** Series,
+course and variant start **empty** and populate only as the level above them is answered; the
+button under them names what is still missing rather than sitting greyed out in silence. It used
+to default every level to the first thing in its list, so the screen opened with a complete course
+already selected — which reads as a suggestion, and a suggestion nobody made is how a boat ends up
+sailing yesterday's course on a race morning. Worse, "the first thing" is whatever the map
+happened to iterate first: not the club's main race, not the nearest, not the most recent.
+
+> **The club is the exception, and is remembered rather than defaulted.** A sail number, a boat
+> name and a club are facts about whoever is holding the phone, and asking for them again on every
+> join is asking somebody to re-type what has not changed; the series, course and variant are the
+> decision being made. `sessionStorage` for now — it lasts a session, which is what "the same boat
+> all afternoon" needs, and it does not quietly become a permanent setting on a shared phone. The
+> real home is whatever the Capacitor build uses, which is not built yet. Wrapped in a try, because
+> storage is not always there to be had and a join screen that threw rather than opening would be
+> the worst possible trade for remembering a sail number. A remembered club that is no longer on
+> offer falls back to unchosen, since a `<select>` whose value matches no option shows blank.
 
 **On join the boat is aimed THROUGH the first line, not at it.** Steering to the midpoint had it
 arrive and stop dead on the mark, which is both the one place it must not stop — on the line is
@@ -1386,6 +1969,17 @@ move/turn grips, no armed chart click.
 length, its sequence — rather than a disabled editor. A greyed-out field says "you may edit
 this later"; a snapshot is never editable by anybody.
 
+**The REVISION is shown wherever a snapshot is named** (`snapshotName`): in the list, in the
+breadcrumb, in the message after a capture, as well as in the form. The label is for reading and
+the hash is for checking, and only one of them is what a boat was handed — a label is
+`div-1/2027-06-06`, the design and the day, which is how somebody talks about a capture; the
+revision is the twelve hex characters a record carries, that `GET /api/courses/{revision}`
+answers to, and that the client prints in its own top bar. Comparing what a fleet is sailing
+against what the editor is showing means comparing *those*, and a list of labels made the one
+question somebody actually asks — *is that the one they have?* — unanswerable without clicking
+through to a form. Set smaller and dimmer than the label, because it is there to be held up
+against another one rather than read.
+
 The row's commands are what you can do *about* one, never *to* it:
 
 | | |
@@ -1645,7 +2239,7 @@ answered by asserting a number in code.
    `accuracyBandM: null` selects per-fix.
 3. ~~**Finite line endpoints in open water.**~~ **Answered, and now consumed:** one-metre
    resolution throughout, a hard edge, and the warning the rule is only defensible with.
-   See "One metre, everywhere". The prototype Mark screen reads `projectCog()` — the ring
+   See "One metre, everywhere". The Mark screen reads `projectCog()` — the ring
    where the COG cuts turns amber inside the margin and red past the end, and the status
    line says how many metres outside the boat will pass on the present course. What is
    untested is whether that is *loud enough* on a phone in glare, which is a question for
@@ -1668,29 +2262,46 @@ answered by asserting a number in code.
    publishes its results — but a write is somebody's race result, somebody's survey, the
    course a fleet will sail, or a whole season deleted. `sail-jinx` has a working Jetty
    OpenID setup to copy. **This is the blocker for deploying to the Pi.**
+
+   > **Narrowed, in [the dialog document](wiki/client-server-dialog.md) §7.1, to the half that can
+   > be solved: AUTHENTICATE AUTHORITY, TRUST DATA.** OpenID for race officers, and nothing at all
+   > for boats — because a boat's positions and instants are trusted by design, so a login would
+   > only put a name to an unverifiable claim, while publishing a course or abandoning a race is an
+   > act imposed on a fleet and *who did this* has an answer that matters. What that leaves
+   > unsolved and named rather than hidden is **impersonation**: any device can claim any sail
+   > number, and §1.1 trusts a boat about *itself*, not a third party about a boat.
 9. **Capacitor.** Not yet present. Background-geolocation behaviour, iOS Safari suspending
    the Geolocation API in the browser fallback, and plugin versions all shift; verify at
    build time rather than trusting the brief's §7.
-10. **Which gate side a boat took** is recorded by the client as well as the record now,
-    and still nothing uses it: the Mark screen's next-leg bearing is taken to the MEAN of
-    the next step's midpoints, so at a gate it points between the two sides rather than at
-    the one this boat is committed to.
+10. **Which gate side a boat took** is recorded by the client as well as the record, and
+    still nothing downstream uses it. On the Mark screen it now shows: each side of a gate
+    carries its own next-leg bearing, measured from **that side's** midpoint to the mean of
+    the next step's, so the two arrows say what the choice costs. What is still taken to the
+    mean is **DTW** on the course screen, which is deliberate — a leg into a gate is measured
+    to the point between its sides, so DTW and the published leg length stay one quantity.
 
 ## Not built yet
 
-Of the three screens in brief §3, the **Mark** screen exists as a prototype in
-`client.html` — all three states, all three orientations, the plot and the readouts — with a
-**course overview** behind it standing in for the Course screen. Neither is on a phone yet:
-there is no Capacitor wrapper, no offline tile cache, and no `navigator.geolocation`, because
-the fixes come from `boatsim.js`. **Live place** does not exist at all.
+Of the three screens in brief §3, the **Mark** screen is built — all three states, all four
+orientations, the plot and the readouts — with a **course overview** behind it standing in for
+the Course screen. Both run on a real phone's GNSS at `boat.html`; what is still missing there
+is the **Capacitor wrapper** and an **offline tile cache**, so a background is a live fetch and
+the browser may suspend the watch in the background. **Live place** does not exist at all.
 
-What the prototype stops short of, deliberately rather than by omission:
+What the client stops short of, deliberately rather than by omission:
 
-- **Nothing posts a `CourseRecord`.** The client holds everything one needs and closing the
-  loop is the next obvious step.
+- **Nothing posts a `CourseRecord`**, on either page. The client holds everything one needs and
+  closing the loop is the next obvious step.
 - **The Course screen has no other boats on it**, which is most of what the brief asks that
-  screen for. That needs a fleet feed, which needs the record POST first.
+  screen for. That needs a fleet feed, which needs the dialog in
+  [`wiki/client-server-dialog.md`](wiki/client-server-dialog.md) — where the three screens still
+  missing are specified: **Race progress** (the brief's Live place), the **channel** (one inbox
+  for chat, course changes and flags, acknowledged by envelope id), and **alerts**, which never
+  open over an approach and show as a banner until it ends.
 - **The handicap is carried, not applied.** The join screen collects a TCF and does nothing
   with it, because turning a TCF into a distance is open question 5.
 - **No orientation is remembered** between sessions, and nothing is cached across a reload:
-  a refresh is a fresh join.
+  a refresh is a fresh join. On a phone that is the sharper cost, since a browser reloading a
+  backgrounded tab throws away a joined course mid-race; the snapshot and the crossings so far
+  are what a real client would have to keep, and `sessionStorage` is where the boat's identity
+  already lives.

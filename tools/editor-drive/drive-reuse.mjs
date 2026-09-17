@@ -10,15 +10,13 @@
  * idempotent and the bug did not show. So this driver writes the template it needs: ad-hoc
  * geometry, repeated, in a series other than the one the editor has open.
  */
-import { $, H, ok, report, settle } from './dom.mjs';
+import { $, H, choose, chosenIn, ok, optionsOf, paneHtml, report, settle, unfold } from './dom.mjs';
 
 await import('../../client/www/editor.js');
 await settle(900);
 
-const list = (id) => $(id).querySelectorAll('.row');
 const variants = () => {
-  if (!$('rows').innerHTML.includes('list_variant')) H('crumb_variant:click')();
-  return list('list_variant');
+  return optionsOf('variant');
 };
 const get = async (p) => (await fetch(p)).json();
 
@@ -71,10 +69,10 @@ ok('...and the library offers it like any other', !!probe);
 
 H('tab-courses:click')();
 await settle();
-const was = new Set(list('list_course').map((r) => r.dataset.course));
+const was = new Set(optionsOf('course'));
 H('cmd_course_add:click')();
 await settle(900);
-const INTO = list('list_course').map((r) => r.dataset.course).find((c) => !was.has(c));
+const INTO = optionsOf('course').find((c) => !was.has(c));
 
 const btn = (k) => $('askChoices').querySelectorAll('button').find((b) => b.dataset.key === k);
 H('cmd_variant_template:click')();
@@ -88,12 +86,12 @@ for (const step of [`${probe.club}/${probe.series}`, probe.course, probe.variant
 await settle(900);
 ok('the probe expands into the open course', variants().length === 1);
 ok('...as a dated race, not as the shape it came from',
-  /^\d{8}-race-\d+$/.test(variants()[0].dataset.variant));
+  /^\d{8}-race-\d+$/.test(variants()[0]));
 
 /* ------------------------------------------------------------------------ one line per name */
 
 const after = await get(`/api/programmes/${here.club}/${here.series}`);
-const made = after.courses[INTO].variants[variants()[0].dataset.variant];
+const made = after.courses[INTO].variants[variants()[0]];
 const named = (made.sequence ?? []).flatMap((s) => (s.gate?.length ? s.gate : [s]))
   .map((a) => a.line).filter(Boolean);
 

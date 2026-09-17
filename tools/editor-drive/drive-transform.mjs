@@ -1,32 +1,31 @@
 /**
  * Sorted lists, and moving or turning a whole course from the chart.
  */
-import { $, H, ok, report, rows, settle } from './dom.mjs';
+import { $, H, choose, chosenIn, ok, optionsOf, paneHtml, report, settle, unfold } from './dom.mjs';
 
 await import('../../client/www/editor.js');
 await settle(900);
 
-const list = (id) => $(id).querySelectorAll('.row');
 const sorted = (v) => v.every((x, i) => i === 0 || v[i - 1].localeCompare(x) <= 0);
 
 /* ---------------------------------------------------------------- sorting */
 
 H('tab-courses:click')();
 await settle();
-ok('the course list is sorted', sorted(list('list_course').map((r) => r.dataset.course)));
+ok('the course list is sorted', sorted(optionsOf('course')));
 
-H('crumb_series:click')();
+unfold('series');
 await settle();
-ok('the series list is sorted', sorted(list('list_series').map((r) => r.dataset.series)));
-H('crumb_series:click')();
+ok('the series list is sorted', sorted(optionsOf('series')));
+unfold('series');
 await settle();
 
 H('tab-points:click')();
 await settle();
-ok('the points list is sorted', sorted(list('list_items').map((r) => r.dataset.id)));
+ok('the points list is sorted', sorted(optionsOf('items')));
 H('tab-lines:click')();
 await settle();
-ok('the lines list is sorted', sorted(list('list_items').map((r) => r.dataset.id)));
+ok('the lines list is sorted', sorted(optionsOf('items')));
 
 H('tab-courses:click')();
 await settle();
@@ -36,14 +35,13 @@ await settle();
 // only right half the time.
 const [programme] = await (await fetch('/api/programmes')).json();
 const KEY = `${programme.club}/${programme.series}`;
-const COURSE = list('list_course')[0].dataset.course;
-H(`${list('list_course')[0].id}:click`)();
+const COURSE = optionsOf('course')[0];
+choose('course', optionsOf('course')[0]);
 await settle();
-if (!$('rows').innerHTML.includes('list_variant')) { H('crumb_variant:click')(); await settle(); }
-ok('the variant list is sorted', sorted(list('list_variant').map((r) => r.dataset.variant)));
+ok('the variant list is sorted', sorted(optionsOf('variant')));
 
-const VARIANT = list('list_variant')[0].dataset.variant;
-H(`${list('list_variant')[0].id}:click`)();
+const VARIANT = optionsOf('variant')[0];
+choose('variant', optionsOf('variant')[0]);
 await settle(500);
 
 /* ------------------------------------------------------ the transform grips */

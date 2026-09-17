@@ -20,7 +20,7 @@
 import { ok, report } from './dom.mjs';
 import { BoatSim, bearingTo, offsetBy } from '../../client/www/boatsim.js';
 import { RaceClient } from '../../client/www/raceclient.js';
-import { crossingNormal } from '../../client/www/markscreen.js';
+import { crossingNormal, overview } from '../../client/www/markscreen.js';
 
 const json = async (path, options) => {
   const response = await fetch(path, options);
@@ -218,6 +218,19 @@ ok('nothing was rejected — a clean boat on a clean receiver should trouble not
 // network throwing on contact.
 ok('THE WHOLE COURSE WAS SAILED WITH THE NETWORK GONE — a boat is handed its course and '
   + 'then needs nobody', fixes > 0 && client.crossings.length >= expected.length);
+
+// AND THE BACKGROUND DOES NOT CHANGE THAT. Tiles are <image> elements, so the browser fetches
+// them on its own and nothing on the path from a fix to a drawn course touches the network —
+// asserted here, with the network still throwing, because a background that could block would
+// be the one thing that must never reach these screens.
+let drawn = null;
+try {
+  drawn = overview(client, { orientation: 'north', width: 400, height: 330, basemap: 'sea' });
+} catch (e) {
+  drawn = null;
+}
+ok('...and the course still draws with a tiled background chosen, network and all',
+  !!drawn && drawn.includes('<image') && drawn.includes('<svg class="plot"'));
 
 globalThis.fetch = realFetch;
 

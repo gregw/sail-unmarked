@@ -12,16 +12,14 @@
  * all, because fleets sailing to inconsistent instructions is a thing nobody on the water can
  * detect.
  */
-import { $, H, ok, report, settle } from './dom.mjs';
+import { $, H, choose, chosenIn, ok, optionsOf, paneHtml, report, settle, unfold } from './dom.mjs';
 
 await import('../../client/www/editor.js');
 await settle(900);
 
 const get = async (p) => (await fetch(p)).json();
-const list = (id) => $(id).querySelectorAll('.row');
 const variants = () => {
-  if (!$('rows').innerHTML.includes('list_variant')) H('crumb_variant:click')();
-  return list('list_variant');
+  return optionsOf('variant');
 };
 
 const [programme] = await get('/api/programmes');
@@ -33,23 +31,23 @@ await settle();
 
 // A course with more than one variant, or the whole point is missed.
 let COURSE = null;
-for (const row of list('list_course')) {
-  H(`${row.id}:click`)();
+for (const id of optionsOf('course')) {
+  choose('course', id);
   await settle(700);
-  if (variants().length > 1) { COURSE = row.dataset.course; break; }
+  if (variants().length > 1) { COURSE = id; break; }
 }
 if (!COURSE) {
-  COURSE = list('list_course')[0].dataset.course;
-  H(`${list('list_course')[0].id}:click`)();
+  COURSE = optionsOf('course')[0];
+  choose('course', optionsOf('course')[0]);
   await settle(700);
 }
-const VARIANTS = variants().map((r) => r.dataset.variant);
+const VARIANTS = variants();
 ok('the fixture has a course to work on', !!COURSE && VARIANTS.length > 0);
 
 /* ------------------------------------------------ the buttons live with the tickbox */
 
 // Selecting the course itself, not a variant — which is where the scope is the COURSE.
-H(`${list('list_course').find((r) => r.dataset.course === COURSE).id}:click`)();
+choose('course', COURSE);
 await settle(700);
 const form = () => $('courseForm').innerHTML || '';
 ok('both race-morning buttons sit with the public tickbox, where the scope is the course',
@@ -58,7 +56,7 @@ ok('both race-morning buttons sit with the public tickbox, where the scope is th
 
 // And the per-variant one is gone: it did one at a time, which is the thing that made a
 // course with several variants a list to walk.
-H(`${variants()[0].id}:click`)();
+choose('variant', variants()[0]);
 await settle(800);
 ok('the old per-variant Publish latest is gone', !$('rows').innerHTML.includes('cmd_publish"'));
 ok('...while Snapshot stays, since capturing ONE design is still a thing worth doing',
@@ -70,7 +68,7 @@ ok('...while Snapshot stays, since capturing ONE design is still a thing worth d
 // button that acts on it stayed greyed out. Both forms are guarded on identity — the guard
 // exists to keep the caret in whatever somebody is typing — so anything on them that depends on
 // state moving underneath has to be synced rather than baked into the markup once.
-H(`${list('list_course').find((r) => r.dataset.course === COURSE).id}:click`)();
+choose('course', COURSE);
 await settle(700);
 
 // Capture everything first, so the course is genuinely clean and the button genuinely off.
@@ -79,14 +77,14 @@ await settle(2500);
 const clean = !/Snapshot dirty \(\d+\)/.test(form());
 
 // Now dirty one variant by editing its sequence, exactly as somebody would.
-H(`${variants()[0].id}:click`)();
+choose('variant', variants()[0]);
 await settle(800);
 H('c_add:click')();
 await settle(1600);
 
 const rows = $('rows').innerHTML + $('list_variant').innerHTML;
 ok('editing a variant shows it dirty on its row', rows.includes('dirty'));
-H(`${list('list_course').find((r) => r.dataset.course === COURSE).id}:click`)();
+choose('course', COURSE);
 await settle(800);
 ok('...AND offers the button that acts on it — the state was right everywhere but the control',
   !$('courseForm').innerHTML.includes('id="c_snapshot_dirty" disabled')

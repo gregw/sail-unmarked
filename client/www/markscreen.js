@@ -28,14 +28,82 @@
  */
 
 import { LABEL, ROLE_COLOUR, TRIANGLE, arrowHead, forwardNormal, seats, track, triangle } from './coursedraw.js';
+import { BASEMAPS, MapView, mercX, mercY } from './geo.js';
+import { fromLocal } from './crossing.js';
 import { TRAIL_IN_VIEW, bearingLocal, clock } from './raceclient.js';
 
-/** The three orientations the brief specifies, in the order the selector offers them. */
+/**
+ * The orientations, in the order the selector offers them.
+ *
+ * The brief specifies three; <b>COG up</b> is the fourth and is the one every plotter has: the
+ * boat's own heading straight up, so what is ahead on the screen is what is ahead over the
+ * bow. It sits beside Leg up because the two are the course-referenced pair — and the
+ * difference between them is worth knowing, because it is the difference between where the
+ * boat is *going* and where it is *meant to be* going. On a beat, Leg up holds the rhumb line
+ * up and the boat points thirty or forty degrees off it, which is what shows the tack; COG up
+ * holds the boat up and swings the world on every tack instead.
+ *
+ * <b>It swings, and it is the only one that swings on the boat rather than on the course.</b>
+ * That is a real cost and the reason the brief left it out: a COG is noisy, and a display
+ * following it wanders. What makes it usable is that nothing here snaps — `Turner` eases the
+ * displayed bearing at `TURN_DEG_S`, which low-passes the jitter into a slow drift rather than
+ * a shake.
+ */
 export const ORIENTATIONS = {
   leg: { label: 'Leg up', turns: true },
+  cog: { label: 'COG up', turns: true },
   north: { label: 'North up', turns: false },
   perp: { label: 'Line perp', turns: true },
 };
+
+/**
+ * Which screen the sailor is looking at: the application's answer, or the sailor's.
+ *
+ * <b>AUTO is the default and is the design</b> — the sailor never has to ask for the Mark
+ * screen, because on a boat the hands are busy and the application knows where the line is
+ * while the person is looking at the water. But "never has to" is not "cannot": somebody
+ * setting up, checking the next leg on a long beat, or simply disagreeing with the rule has
+ * every right to pick, and a display that refused would be insisting it knows better about
+ * what somebody wants to look at, which is not a thing it can know.
+ *
+ * Forcing a screen does not disable the rule underneath — the hysteresis goes on tracking, so
+ * AUTO resumes with the right answer rather than with whatever was true when it was left.
+ */
+export const VIEWS = {
+  overview: { label: 'Course' },
+  mark: { label: 'Line' },
+  auto: { label: 'Auto' },
+};
+
+/**
+ * What acts on the chart, under the chart: zoom, fit, and what is drawn behind it.
+ *
+ * <b>Under it, and on the overview only.</b> Under, because these act on the picture above them
+ * and a control above a picture reads as a control over the whole screen. Only here, because
+ * the Mark screen has nothing to zoom — it is fitted to one line and holds still on purpose —
+ * and nothing to draw behind it, being offline-first by a rule that is not up for trading.
+ *
+ * <b>Fit says what it does and is lit while the picture is the screen's own.</b> A reset
+ * control that looks the same whether or not there is anything to reset leaves somebody
+ * pressing it to find out.
+ */
+export const chartBar = (options = {}) => {
+  const view = options.view;
+  const held = !!view?.manual;
+  return `<div class="chartbar">
+    <button data-zoom="out" title="Zoom out">&minus;</button>
+    <button data-zoom="in" title="Zoom in">+</button>
+    <button data-zoom="fit" class="${held ? 'on' : ''}"${held ? '' : ' disabled'}>Fit</button>
+    <select id="o_basemap" title="What is drawn behind the course">${Object.entries(BASEMAPS)
+      .map(([key, spec]) => `<option value="${key}"${key === (options.basemap ?? 'none') ? ' selected' : ''}>${esc(spec.label)}</option>`)
+      .join('')}</select>
+  </div>`;
+};
+
+/** The view selector, on both screens, because either one may be the one you want to leave. */
+export const viewBar = (mode) =>
+  `<div class="orient views">${Object.entries(VIEWS).map(([key, spec]) =>
+    `<button data-view="${key}" class="${key === mode ? 'on' : ''}">${esc(spec.label)}</button>`).join('')}</div>`;
 
 /** The three-way selector, on every screen that can be turned — which is both of them. */
 export const orientationBar = (orientation) =>
@@ -72,14 +140,60 @@ export function crossingNormal(prepared, required) {
  */
 export function upBearing(state, orientation) {
   if (orientation === 'north') return 0;
-  if (orientation === 'perp') {
-    const normal = crossingNormal(state.watched.prepared, state.watched.required);
-    return bearingOf(normal.x, normal.y);
-  }
+  if (orientation === 'perp') return perpUp(state);
+  // The boat's own heading up. Falling back to the leg rather than to north with no COG to
+  // hand, because a display that snapped to north the moment the receiver hiccupped would turn
+  // the world under somebody who had asked for it not to.
+  if (orientation === 'cog') return state.cogDeg ?? state.legUp ?? state.legBearing ?? 0;
   // The leg the boat is ON, not the one the arrow points at. Falling back to the COG rather
   // than to north at the finish of an open course, because a display that snapped to north at
   // the last mark would turn under the helm at the worst possible moment.
   return state.legUp ?? state.legBearing ?? state.cogDeg ?? 0;
+}
+
+/**
+ * What Line perp puts at the top: the crossing squared across the screen.
+ *
+ * <b>At a gate that is the perpendicular to the join between the two centres, not one side's
+ * own normal</b> — which is `RaceClient.gateOf`'s whole subject, and the reasoning is there.
+ * The short of it: where a gate's sides are parallel, either side of a centreline, their
+ * normals point outward in opposite directions, so squaring up to the side a boat happens to
+ * be watching turns the display ninety degrees off the approach and turns it the other way
+ * the moment the boat changes its mind. Where the sides are collinear the two answers
+ * coincide, so there is one rule rather than a special case.
+ *
+ * Falls back to the watched crossing's own normal, which is the answer for every step that
+ * is not a gate and for a gate whose centres cannot be resolved.
+ */
+export function perpUp(state) {
+  const gate = gateUp(state.gate);
+  if (gate != null) return gate;
+  const normal = crossingNormal(state.watched.prepared, state.watched.required);
+  return bearingOf(normal.x, normal.y);
+}
+
+/**
+ * The bearing a gate's axis is approached along: the perpendicular to the join between its
+ * centres, taken the way the leg into the gate runs.
+ *
+ * Null rather than a guess where there is no axis to take — one crossing, coincident centres,
+ * or no leg to fix the sign — so the caller falls back to the crossing normal rather than
+ * being handed a bearing that is right half the time.
+ */
+export function gateUp(gate) {
+  if (!gate || (gate.centres ?? []).length < 2 || gate.legInDeg == null) return null;
+  const [first, second] = gate.centres;
+  const join = { x: second.x - first.x, y: second.y - first.y };
+  const length = Math.hypot(join.x, join.y);
+  if (!length) return null;
+  const normal = { x: -join.y / length, y: join.x / length };
+  // A join has two perpendiculars and nothing in the geometry chooses between them. The leg
+  // into the gate does, and it is a fact about the course rather than about where the boat
+  // has got to — so the display does not swing through half a turn as the boat draws level.
+  const radians = (gate.legInDeg * Math.PI) / 180;
+  const into = { x: Math.sin(radians), y: Math.cos(radians) };
+  const sign = normal.x * into.x + normal.y * into.y >= 0 ? 1 : -1;
+  return bearingOf(normal.x * sign, normal.y * sign);
 }
 
 /**
@@ -115,6 +229,42 @@ export function projector(centre, up, scale, width, height) {
 export const MIN_SPAN_M = 40;
 
 /**
+ * How much of each axis the things that must be seen are fitted into.
+ *
+ * <b>The rest is deliberate empty water round the edge, and it is not decoration.</b> A boat,
+ * a triangle or a next-leg arrow sitting a few pixels off the border reads as something on its
+ * way out of the picture — and on a phone in a bracket the outermost pixels are the ones a
+ * thumb, a bezel reflection or a rounded corner take first. The elements that matter want room
+ * to be seen as being IN the plot rather than against its wall.
+ *
+ * Paired with `HOLD.edgeFraction`, which is what the buffer is worth keeping: the fit puts
+ * everything this far in, and the frame is given up once anything has drifted to within that
+ * fraction of the edge. The gap between the two is how far things may move before the picture
+ * is rebuilt, so raising the fit margin without raising the hold threshold would buy a better
+ * first frame and let it drift back to where it was.
+ */
+export const FIT_FRACTION = 0.7;
+
+/**
+ * How far along the COG the crossing point is allowed to pull the view, in line lengths.
+ *
+ * <b>A boat sailing nearly parallel to a line cuts it a very long way away, and at exactly
+ * parallel it never cuts it at all.</b> The cut is one of the things the frame is fitted
+ * around, so honouring its position at that angle zooms the plot out until the boat is a dot
+ * and the line a hair — for a crossing point nobody is steering at and will not reach. What
+ * the picture needs from the projection there is its direction, which a point a bounded
+ * distance along it carries just as well.
+ *
+ * Twice the line's own length, taken between its DEFINED points, because that is the scale on
+ * which a line is approached: inside it the cut is a real target and belongs in the frame,
+ * outside it the figure on the dashes is what says how far off the boat is pointing, and the
+ * ring is free to fall outside the picture. The ring and the dashes are always drawn where the
+ * cut really is — capping what is DRAWN would move the warning, which is the one thing on this
+ * screen that must not be moved.
+ */
+export const COG_FIT_CAP = 2;
+
+/**
  * The next-leg arrow, in pixels, and where it sits relative to the triangle.
  *
  * <b>`offset` is what keeps it off the triangle, whichever way it points.</b> The arrow is
@@ -135,18 +285,40 @@ export const ARROW = { shaft: 38, head: 11, width: 3.6, offset: 0.6 };
  * together as the view closes in, and the moment the boat is a third the width of the line is
  * a moment nobody has to read a number to understand.
  *
- * Ten metres and five are assumptions, and they are the assumptions until there is somewhere to
- * put a real length: no boat has declared one, and the line's width is really the accuracy band,
- * which varies with the sky and belongs to `crossing.js` rather than to a drawing.
+ * Ten metres is an assumption and will be until a boat declares a length. Three for the line is
+ * the accuracy band, which is what that width really is — it varies with the sky and belongs to
+ * `crossing.js` rather than to a drawing, and three metres is what a receiver reporting two or
+ * three metres actually gives you.
  *
- * Both are floored, because at four hundred metres a 10 m boat is ten pixels and would vanish,
- * and capped, because neither should ever swallow the plot.
+ * <b>IT WAS FIVE, AND FIVE IS WHY THE PICTURE LOOKED WRONG.</b> The glyph's beam is two thirds
+ * of its length, so a 10 m boat is drawn 6.7 m across — against a 5 m line that is a third
+ * wider than the line is thick, and a narrow dart a third wider than a bright band running the
+ * whole width of the plot does not read as the bigger object. At three the beam is over twice
+ * the line's thickness at every range, which is the proportion somebody looking at it expects
+ * from a 10 m boat and a line.
+ *
+ * <b>ONE CLAMP, NOT TWO, AND THIS IS THE IMPORTANT PART.</b> The bounds are floored because at
+ * four hundred metres a 10 m boat is ten pixels and would vanish, and capped because neither
+ * should ever swallow the plot — but the line's bounds are DERIVED from the boat's by the same
+ * ratio as their lengths, so the clamp can never put the two out of proportion. Asserting them
+ * independently is what broke it: the boat sat frozen on a 13 px floor from about 130 m out
+ * while the line went on scaling down to 3 px, so over the part of an approach that takes
+ * longest the line visibly thickened and the boat did not move at all. Their ratio drifted from
+ * 4.3:1 at four hundred metres to 2.4:1 at a hundred and seventy-five. Derived, it is exactly
+ * `boatM / lineM` at every scale, floored, capped and in between.
  */
+const BOAT_M = 10;
+const LINE_M = 3;
+const BOAT_PX = { min: 13, max: 90 };
+const PER_BOAT = LINE_M / BOAT_M;
+
 export const REAL = {
-  boatM: 10,
-  lineM: 5,
-  boatPx: { min: 13, max: 90 },
-  linePx: { min: 3, max: 46 },
+  boatM: BOAT_M,
+  lineM: LINE_M,
+  boatPx: BOAT_PX,
+  // Derived, never asserted — see above. `atScale` then yields `lineM * k` and `boatM * k` for
+  // one and the same clamped `k`, with no second number to keep in agreement.
+  linePx: { min: BOAT_PX.min * PER_BOAT, max: BOAT_PX.max * PER_BOAT },
 };
 
 /**
@@ -177,8 +349,76 @@ export function triangleFor(lineW) {
   return { height: TRIANGLE.height * k, half: TRIANGLE.half * k, scale: k };
 }
 
-/** The nominal length of the boat glyph's own path, in its own units. */
-const BOAT_PATH_PX = 27;
+/**
+ * The boat, as a hull seen from above rather than as an arrow.
+ *
+ * <b>An arrow says which way something is pointing and nothing else.</b> It was a dart, which
+ * on a chart reads as a cursor or a bearing marker — the two things this is not. What a sailor
+ * looking at a plot wants to recognise without deciding to is *a boat on the water, heading
+ * that way*, and a plan view gives that for the same pixels: a pointed bow, the beam carried
+ * aft of midships, and a transom that squares off the stern, which is what makes the forward
+ * end unmistakable from the after one at thirteen pixels. The mast is the disc; it is what says
+ * *sailing* boat, and it is the only fitting nothing else in this system knows anything about.
+ *
+ * <b>No boom, deliberately.</b> A boom is drawn at an angle, and an angle is a claim about
+ * where the wind is and which tack the boat is on — neither of which anything here knows. A
+ * spar drawn at a guess would be the one part of this picture that was made up.
+ *
+ * In its own units, 27 long, so `length` is what a caller scales against. The beam is 0.42 of
+ * that: beamier than a 10 m yacht really is (about 0.32) and narrower than the dart it replaces
+ * (0.67), because a hull drawn honestly narrow is a sliver at the sizes this is drawn at, and
+ * one drawn as wide as the dart is not a hull. See the note on `REAL` for what the beam is
+ * measured against.
+ *
+ * Origin at the middle of the hull, so the fix is where the boat is rather than where its
+ * quarter is, and rotation is about the same point.
+ */
+export const BOAT = {
+  length: 27,
+  // MEASURED off the path, not chosen: a cubic's widest point is not where its control points
+  // are, so the beam is whatever the curve actually reaches. `getBBox` in a browser gives
+  // 27.000 by 11.340 for the hull below, which is the 0.42 quoted above.
+  beam: 11.34,
+  // Bow, out to the beam just aft of midships, then in to the transom corner; the transom
+  // itself is the straight segment across the stern, and the port side mirrors it back.
+  hull: 'M0,-13.5 C2.6,-9.4 4.9,-5 5.65,0.5 C5.8,5.6 5.1,9.9 3.5,13.5 L-3.5,13.5'
+    + ' C-5.1,9.9 -5.8,5.6 -5.65,0.5 C-4.9,-5 -2.6,-9.4 0,-13.5 Z',
+  mast: { x: 0, y: -2.6, r: 1.6 },
+};
+
+/**
+ * The boat drawn at a given length in pixels, turned to a given heading on the screen.
+ *
+ * <b>One routine, because both charts draw this boat.</b> The device's plot draws it to
+ * scale — it is one of the two things on that screen whose real size is the point — and the
+ * rig draws it at a fixed size, since the rig is a desk and not a range. Two copies of the
+ * path would be two things to keep in agreement, and the one that fell behind would be
+ * whichever was edited second.
+ *
+ * `edge` is a pixel width whatever the scale, so it is divided back out: a dark hairline round
+ * the hull is what separates the boat from the line, the fixes and the tiles underneath, and a
+ * stroke that scaled with the glyph would be invisible at thirteen pixels and a black band at
+ * ninety.
+ */
+/**
+ * How long the boat is drawn on the course OVERVIEW, in pixels.
+ *
+ * Fixed, and smaller than the approach's floor: the overview is re-fitted to a whole course
+ * every frame, so a boat drawn to scale would be a pixel on a passage leg and a monster on a
+ * short windward/leeward. Size means range on the approach screen and nothing on this one.
+ */
+export const OVERVIEW_BOAT_PX = 20;
+
+export function boatArt(px, py, headingDeg, lengthPx, options = {}) {
+  const fill = options.fill ?? 'var(--ink)';
+  const edge = options.edge ?? 'var(--sea)';
+  const k = lengthPx / BOAT.length;
+  const back = (1.2 / k).toFixed(2);
+  return `<g transform="translate(${px.toFixed(1)},${py.toFixed(1)})`
+    + ` rotate(${headingDeg.toFixed(1)}) scale(${k.toFixed(3)})">`
+    + `<path d="${BOAT.hull}" fill="${fill}" stroke="${edge}" stroke-width="${back}"/>`
+    + `<circle cx="${BOAT.mast.x}" cy="${BOAT.mast.y}" r="${BOAT.mast.r}" fill="${edge}"/></g>`;
+}
 
 /** A real length in metres, as pixels at this scale, kept inside legible bounds. */
 export const atScale = (metres, scale, bounds) =>
@@ -206,11 +446,15 @@ export const HOLD = {
   /**
    * How close to the edge a component may get before the frame is rebuilt around it.
    *
-   * A hair inside the boundary rather than exactly on it. The rule is "still in the view",
-   * and waiting for something to be strictly outside means waiting until it has already
-   * vanished for a frame — which is the one moment somebody is looking hardest at it.
+   * <b>Well inside the boundary, not a hair inside it.</b> The rule was "still in the view",
+   * which waited until something had already vanished for a frame — the one moment somebody
+   * is looking hardest at it — and even once that was fixed it let the boat and the triangle
+   * drift to within a few pixels of the border before anything was done about it. This is the
+   * number that decides how close a key element ever actually gets, since the fit only decides
+   * where it starts: see `FIT_FRACTION`, which is the margin things are placed at, and keep
+   * this comfortably inside it or the frame is rebuilt the moment it is built.
    */
-  edgeFraction: 0.06,
+  edgeFraction: 0.1,
   /** How much closer in the view could usefully be before it is worth a jump. */
   scaleTolerance: 0.15,
 };
@@ -410,28 +654,73 @@ export function plot(state, options = {}) {
     y: prepared.port.y + alongUnit.y * distance,
   });
 
-  // WHAT MUST STAY IN VIEW. The boat, the point on the line it is about to cross, the triangle
-  // that says which way through, the arrow saying where the next leg goes, and the last few
-  // fixes behind the boat — enough to see that it is under way and which way it has come.
-  // Everything else was keeping the plot wide for no benefit: the line's ends, which on a
-  // quarter-mile start line are a long way from anything that matters, and the rest of the
-  // trail, which is history and can fall off the back.
+  // WHAT MUST STAY IN VIEW. The boat, the point on the line it is about to cross, THE LINE'S
+  // OWN MIDPOINT, the triangle that says which way through, the arrow saying where the next leg
+  // goes, and the last few fixes behind the boat — enough to see that it is under way and which
+  // way it has come. Everything else was keeping the plot wide for no benefit: the line's ENDS,
+  // which on a quarter-mile start line are a long way from anything that matters, and the rest
+  // of the trail, which is history and can fall off the back.
   const seatAlong = Math.max(0, Math.min(prepared.length, offset));
   const seat = at(seatAlong);
-  const cut = state.projection
-    ? (() => {
-      const radians = ((90 - state.cogDeg) * Math.PI) / 180;
-      return {
-        x: boat.x + Math.cos(radians) * state.projection.distanceM,
-        y: boat.y + Math.sin(radians) * state.projection.distanceM,
-      };
-    })()
+  // THE MIDPOINT IS WHAT BOUNDS THE ZOOM, and without it the plot closed in too far.
+  //
+  // The seat is the nearest point of the line to the boat, so as a boat closes, the boat and
+  // the seat converge — and a fit built on those two alone zooms in without limit, on a patch
+  // of water that no longer contains the mark. It is invisible in the straight-on case, where
+  // the seat IS the midpoint, and plain the moment a boat comes in off-centre: at the pin end
+  // of a long line the picture closed around the boat and left the mark the whole leg is
+  // measured to outside the frame.
+  //
+  // The midpoint because the midpoint is the mark: it is what the leg length is measured to,
+  // what DTW counts down to, and on an infinite end it is the handle somebody deliberately
+  // placed where the fleet crosses.
+  const mid = at(prepared.length / 2);
+  // AND ONE END OR THE OTHER, whichever is nearer.
+  //
+  // The midpoint alone says where the mark is and nothing about how much line there is. A plot
+  // showing a stroke running off both edges of the picture could be a fifty-metre line or a
+  // quarter-mile one, and the question a boat on an approach is actually asking — can I fetch
+  // the end I am heading for, or am I running out of line — cannot be read off it at all. One
+  // end in view gives the scale of the thing and, with the midpoint, which half the boat is on.
+  //
+  // The NEARER end, because "one or the other" is satisfied either way and the nearer one costs
+  // the least zoom — and is the one worth seeing, since it is the end a boat near that part of
+  // the line is at risk of running past. When the boat is already beyond an end this asks for
+  // nothing new: the seat is clamped to the extent, so it is that same end.
+  const ends = [at(0), at(prepared.length)];
+  const nearerEnd = ends[0] === ends[1] ? ends[0]
+    : (Math.hypot(ends[0].x - boat.x, ends[0].y - boat.y)
+      <= Math.hypot(ends[1].x - boat.x, ends[1].y - boat.y) ? ends[0] : ends[1]);
+  const alongCog = (distance) => {
+    const radians = ((90 - state.cogDeg) * Math.PI) / 180;
+    return {
+      x: boat.x + Math.cos(radians) * distance,
+      y: boat.y + Math.sin(radians) * distance,
+    };
+  };
+  const cut = state.projection ? alongCog(state.projection.distanceM) : null;
+  // THE CUT IS CAPPED FOR THE PURPOSE OF THE VIEW, and drawn where it really falls.
+  //
+  // A boat sailing nearly parallel to a line cuts it thousands of metres away, and at exactly
+  // parallel it never cuts it at all — so a fit that honoured the cut's position would zoom
+  // out until the boat was a dot and the line a hair, for a crossing point nobody is steering
+  // at. What the picture needs from the projection at that angle is its DIRECTION, and a point
+  // a bounded distance along the COG carries that just as well.
+  //
+  // Twice the line's own length, measured between its defined points, because that is the
+  // scale on which a line is approached: within it the cut is a real target and belongs in the
+  // frame, beyond it the number is what says how far off the boat is pointing and the ring can
+  // fall outside the picture. The cap is in the HOLD list as well as the fit, or a far cut
+  // would trip "leaving the view" on every frame and the plot would never hold still.
+  const cutForView = state.projection
+    ? alongCog(Math.min(state.projection.distanceM, COG_FIT_CAP * prepared.length))
     : null;
   // THREE dots, not the whole trail. At 5 Hz two minutes of track reaches back a quarter of
   // a mile, and fitting all of it is what kept the plot wide; three is the fewest that still
   // shows a direction rather than a pair of points.
   const recent = (state.trail ?? state.fixes ?? []).slice(-TRAIL_IN_VIEW);
-  const interesting = [boat, seat, ...(cut ? [cut] : []), ...recent];
+  const interesting = [boat, seat, mid, nearerEnd,
+    ...(cutForView ? [cutForView] : []), ...recent];
 
   const view = options.view ?? new PlotView();
   // The bearing WANTED is derived from the course; the bearing SHOWN chases it, so a boat
@@ -467,24 +756,35 @@ export function plot(state, options = {}) {
 
   /**
    * Where the next-leg mark sits and which way it runs, in pixels from the seat — for a
-   * triangle of a given height.
+   * triangle of a given height, off a given crossing normal, along a given leg.
    *
    * A function of the height rather than a constant, because the triangle is now sized against
    * the line, the line against the scale, and the scale is what the fit is solving for. The
    * same circularity the arrow already had, one level deeper, and answered the same way.
+   *
+   * Parameterised on the normal and the leg because BOTH SIDES OF A GATE get an arrow, and
+   * the two differ in both: each side's triangle points the way that side is crossed, and the
+   * leg out of it runs from that side's own midpoint. Drawing the watched side's arrow twice
+   * would say the choice cost nothing, which is the one thing a gate is not.
    */
-  const legGeom = (triangleHeight) => {
-    const length = arrowLength(grow);
+  const legGeom = (triangleHeight, normal, bearing, swell = 1) => {
+    const length = arrowLength(swell);
     const reach = triangleHeight + length * ARROW.offset;
-    const middle = { x: crossNormal.x * reach, y: crossNormal.y * reach };
-    if (state.legBearing == null) return { middle, dir: null, length };
-    const theta = ((state.legBearing - up) * Math.PI) / 180;
+    const middle = { x: normal.x * reach, y: normal.y * reach };
+    if (bearing == null) return { middle, dir: null, length };
+    const theta = ((bearing - up) * Math.PI) / 180;
     return { middle, dir: { x: Math.sin(theta), y: -Math.cos(theta) }, length };
   };
 
-  /** Both ends of the arrow, so the fit reserves room for it whichever way it points. */
+  /**
+   * Both ends of the arrow, so the fit reserves room for it whichever way it points.
+   *
+   * The FOCUSED side's arrow only. The other side of a gate is deliberately not in the fit,
+   * and nor is what hangs off it: showing it must never cost zoom from the side the boat is
+   * actually sailing at.
+   */
   const decorFor = (triangleHeight) => {
-    const leg = legGeom(triangleHeight);
+    const leg = legGeom(triangleHeight, crossNormal, state.legBearing, grow);
     const half = leg.length * 0.5;
     return leg.dir
       ? [
@@ -506,7 +806,7 @@ export function plot(state, options = {}) {
     const spanX = Math.max(MIN_SPAN_M, Math.max(...xs) - Math.min(...xs));
     const spanY = Math.max(MIN_SPAN_M, Math.max(...ys) - Math.min(...ys));
     return {
-      scale: Math.min((width * 0.82) / spanX, (height * 0.82) / spanY),
+      scale: Math.min((width * FIT_FRACTION) / spanX, (height * FIT_FRACTION) / spanY),
       centre: {
         x: (Math.max(...xs) + Math.min(...xs)) / 2,
         y: (Math.max(...ys) + Math.min(...ys)) / 2,
@@ -540,7 +840,10 @@ export function plot(state, options = {}) {
     centre: wantCentre,
     scale: wantScale,
     // Every one of them, not just the boat: the frame is worth holding only while all of
-    // them are still in it, and the crossing point leaves first when a boat bears away.
+    // them are still in it, and the crossing point leaves first when a boat bears away. The
+    // midpoint and the nearer end are in here too, or a frame held while the boat closed
+    // would lose them between rebuilds — which is the whole of what putting them in the fit
+    // is for.
     points: interesting,
     width,
     height,
@@ -558,11 +861,11 @@ export function plot(state, options = {}) {
   // cost of zooming out from the side the boat is actually sailing at. Drawing only one side
   // would say there is only one, and the choice is the boat's right up to the moment it
   // crosses.
-  for (const other of state.alternatives ?? []) {
-    out += crossingArt(other.prepared, other.required, {
-      to, scale, boat, focused: false, reach,
-    }).out;
-  }
+  const others = (state.alternatives ?? []).map((other) => ({
+    other,
+    art: crossingArt(other.prepared, other.required, { to, scale, boat, focused: false, reach }),
+  }));
+  for (const { art } of others) out += art.out;
 
   // THE LINE BEING CROSSED, at its real width, with its ends said honestly: a finite end is a
   // dot that can be overrun, an infinite end runs on because it cannot be.
@@ -581,44 +884,64 @@ export function plot(state, options = {}) {
   // finish of an open one. Crossing the second-last line still has a leg after it — the one
   // to the finish — and that leg has a bearing worth pointing at, so it gets an arrow like
   // any other. Only when nothing follows is there nothing to point at.
-  // Off the triangle that was actually drawn, at the scale actually held — so the arrow keeps
-  // its clearance whatever size the triangle came out.
-  const nextLeg = legGeom(art.triangleHeight);
-  const legAt = { x: seatPx.x + nextLeg.middle.x, y: seatPx.y + nextLeg.middle.y };
-  const legColour = state.state === 'crossed' ? 'var(--ok)' : 'var(--muted)';
-  if (!nextLeg.dir) {
-    out += `<text x="${legAt.x.toFixed(1)}" y="${(legAt.y + 10).toFixed(1)}" text-anchor="middle"`
-      + ` font-family="var(--disp)" font-size="${(30 * grow).toFixed(0)}" font-weight="700"`
-      + ` fill="${legColour}" style="paint-order:stroke;stroke:var(--sea);stroke-width:4px">F</text>`;
-  } else if (nextLeg.dir) {
+  const legMark = (leg, at, colour, style = {}) => {
+    const swell = style.swell ?? 1;
+    const opacity = style.opacity ?? 1;
+    const fade = opacity === 1 ? '' : ` opacity="${opacity}"`;
+    const legAt = { x: at.x + leg.middle.x, y: at.y + leg.middle.y };
+    if (!leg.dir) {
+      // The F is for the one place with nothing beyond it, and that is never a gate — a gate
+      // may be neither the first step nor the last — so an alternative with no leg out of it
+      // draws nothing rather than a second finish.
+      if (!style.finish) return '';
+      return `<text x="${legAt.x.toFixed(1)}" y="${(legAt.y + 10).toFixed(1)}" text-anchor="middle"`
+        + ` font-family="var(--disp)" font-size="${(30 * swell).toFixed(0)}" font-weight="700"`
+        + ` fill="${colour}"${fade} style="paint-order:stroke;stroke:var(--sea);stroke-width:4px">F</text>`;
+    }
     // THE DRAWN EXTENT IS EXACTLY `length`, tail to tip, and getting that wrong is what let
     // the arrow touch the triangle. `arrowHead` puts its point a further `size` BEYOND the
     // place it is given, so passing the intended tip as its anchor pushed the real tip a
     // head-length further out than the clearance allowed for — invisible at most bearings and
     // an overlap at the one that matters, a next leg doubling straight back down the last.
-    const half = nextLeg.length * 0.5;
-    const headSize = ARROW.head * grow;
+    const half = leg.length * 0.5;
+    const headSize = ARROW.head * swell;
     const along = (distance) => ({
-      x: legAt.x + nextLeg.dir.x * distance,
-      y: legAt.y + nextLeg.dir.y * distance,
+      x: legAt.x + leg.dir.x * distance,
+      y: legAt.y + leg.dir.y * distance,
     });
     const tail = along(-half);
     const anchor = along(half - headSize);      // so the head's point lands at +half
     const neck = along(half - headSize * 1.7);  // where the head's back corners are
-    out += `<line x1="${tail.x.toFixed(1)}" y1="${tail.y.toFixed(1)}" x2="${neck.x.toFixed(1)}" y2="${neck.y.toFixed(1)}"`
-      + ` stroke="${legColour}" stroke-width="${(ARROW.width * grow).toFixed(1)}" stroke-linecap="round"/>`;
-    out += `<polygon points="${arrowHead(anchor, (Math.atan2(nextLeg.dir.y, nextLeg.dir.x) * 180) / Math.PI, headSize)}" fill="${legColour}"/>`;
+    return `<line x1="${tail.x.toFixed(1)}" y1="${tail.y.toFixed(1)}" x2="${neck.x.toFixed(1)}" y2="${neck.y.toFixed(1)}"`
+      + ` stroke="${colour}" stroke-width="${(ARROW.width * swell).toFixed(1)}" stroke-linecap="round"${fade}/>`
+      + `<polygon points="${arrowHead(anchor, (Math.atan2(leg.dir.y, leg.dir.x) * 180) / Math.PI, headSize)}" fill="${colour}"${fade}/>`;
+  };
+
+  const boatPx = to(boat);
+
+  // BOTH SIDES OF A GATE GET AN ARROW AND BOTH GET A PERPENDICULAR, because those are the two
+  // things the choice is actually made on — how far off each line the boat is, and where each
+  // one leads. An arrow on the watched side alone said the other side had no leg out of it,
+  // and a single distance said the sides were the same distance away, which on a gate whose
+  // lines are parallel is nearly true and on one whose lines are collinear is not true at all.
+  // Subdued, and drawn before the focused pair, so what the readouts and the clock belong to
+  // is never in doubt: the comparison is offered, not asserted.
+  for (const { other, art: otherArt } of others) {
+    out += legMark(legGeom(otherArt.triangleHeight, otherArt.crossNormal, other.legBearing),
+      otherArt.seatPx, 'var(--muted)', { opacity: OTHER_SIDE.ink });
+    if (other.perpDistM != null)
+      out += perpArt(boatPx, to(otherArt.foot), other.perpDistM, false, { width, height }).svg;
   }
+
+  // Off the triangle that was actually drawn, at the scale actually held — so the arrow keeps
+  // its clearance whatever size the triangle came out.
+  out += legMark(legGeom(art.triangleHeight, crossNormal, state.legBearing, grow), seatPx,
+    state.state === 'crossed' ? 'var(--ok)' : 'var(--muted)', { swell: grow, finish: true });
 
   // THE PERPENDICULAR, thin and dashed, with the distance written along it.
   const footPx = to(art.foot);
-  const boatPx = to(boat);
-  out += `<line x1="${boatPx.x.toFixed(1)}" y1="${boatPx.y.toFixed(1)}" x2="${footPx.x.toFixed(1)}" y2="${footPx.y.toFixed(1)}" stroke="var(--muted)" stroke-width="1.4" stroke-dasharray="2,4"/>`;
-  // The number ON the line it measures, with no label. A cell somewhere else headed "Perp
-  // dist" makes a reader match a word to a picture; the figure sitting on the dashes IS the
-  // label, and needs no legend to be learned. Both readouts that describe a line on this plot
-  // are drawn this way, which is also what freed the space the time-to-line now uses.
-  out += onLine(boatPx, footPx, `${Math.round(Math.abs(state.perpDistM))} m`, 'var(--muted)');
+  const perp = perpArt(boatPx, footPx, state.perpDistM, true, { width, height });
+  out += perp.svg;
 
   // THE COG PROJECTION, with a ring where it cuts. The ring is the warning made visual:
   // when it sits outside the line's ends, the present course is running out past the pin,
@@ -629,7 +952,33 @@ export function plot(state, options = {}) {
       ? 'var(--warn)'
       : state.projection.warning === 'near-end' ? 'var(--toside)' : 'var(--line)';
     out += `<line x1="${boatPx.x.toFixed(1)}" y1="${boatPx.y.toFixed(1)}" x2="${hit.x.toFixed(1)}" y2="${hit.y.toFixed(1)}" stroke="var(--cog)" stroke-width="1.7" stroke-dasharray="7,5"/>`;
-    out += onLine(boatPx, hit, `${Math.round(state.projection.distanceM)} m`, 'var(--cog)');
+    // The other side of its own dashes from the perpendicular's figure, which is the same
+    // dashes whenever the boat is pointed square at the line.
+    // Clipped into the picture like the other side of a gate's figure, and for the same
+    // reason: past the cap the ring is off the plot, so the midpoint of these dashes can be
+    // too, and a figure nobody can see is not a warning.
+    const seen = clipToView(boatPx, hit, width, height, LINE_LABEL_PX);
+    const figure = onLine(seen.from, seen.to, `${Math.round(state.projection.distanceM)} m`,
+      'var(--cog)', { side: -1, fraction: 0.8 });
+    // NEVER TWO FIGURES ON TOP OF ONE ANOTHER, and this one is the one that gives way.
+    //
+    // Four fifths along, which is as far as it can usefully go: its own segment ends AT the
+    // line, and its offset is perpendicular to that segment — which near the line runs roughly
+    // ALONG the line, so pushing it further slides it down the line rather than away from it.
+    // Measured, the give-way rate falls 25 → 9 → 6 of 65 frames at 0.7 → 0.8 → 0.9, and by 0.8
+    // the figure is already touching the line it is measuring to. Moving it the other way, in
+    // towards the boat, is far worse: the two segments share that end, so 0.15–0.3 collide in
+    // 25 to 44 frames of the same 65.
+    //
+    //
+    // Opposite sides and different fractions along the dashes separate them over almost the
+    // whole approach, but not in the last thirty metres square on: there the segment is too
+    // short to pull them apart along, and they overlapped into "30 3m0 m". The geometry that
+    // squeezes them is exactly the geometry that makes this figure redundant — square on and
+    // close in, the distance along the COG IS the perpendicular distance, to the metre. So
+    // when the two would collide the perpendicular keeps its figure and this one does without,
+    // which loses nothing: the dashes and the ring still say where the present course cuts.
+    if (!boxesClash(perp.box, figure.box)) out += figure.svg;
     out += `<circle cx="${hit.x.toFixed(1)}" cy="${hit.y.toFixed(1)}" r="6.5" fill="none" stroke="${colour}" stroke-width="2"/>`;
   }
 
@@ -667,9 +1016,8 @@ export function plot(state, options = {}) {
   // THE BOAT, pointing along its COG. Turned by the COG less whatever is at the top, so
   // that at North up it points at its true bearing and at Leg up it points straight up
   // while the boat is on the leg.
-  const boatK = atScale(REAL.boatM, scale, REAL.boatPx) / BOAT_PATH_PX;
-  out += `<g transform="translate(${boatPx.x.toFixed(1)},${boatPx.y.toFixed(1)}) rotate(${(state.cogDeg - up).toFixed(1)}) scale(${boatK.toFixed(3)})">`
-    + `<path d="M0,-15 L9,12 L0,6 L-9,12 Z" fill="var(--ink)" stroke="var(--sea)" stroke-width="${(1.2 / boatK).toFixed(2)}"/></g>`;
+  out += boatArt(boatPx.x, boatPx.y, state.cogDeg - up,
+    atScale(REAL.boatM, scale, REAL.boatPx));
 
   out += northPointer(up, width);
 
@@ -784,18 +1132,164 @@ export function sizedTriangle(at, along, normal, size) {
  * follow the line: a rotated label is unreadable at exactly the angles where a boat is closing
  * a mark fastest.
  */
-export function onLine(from, to, text, colour) {
+export function onLine(from, to, text, colour, options = {}) {
+  const size = options.size ?? LINE_LABEL_PX;
+  const opacity = options.opacity ?? 1;
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const length = Math.hypot(dx, dy) || 1;
-  const away = { x: -dy / length, y: dx / length };
+  // WHICH SIDE of its own dashes a figure is offset to, and HOW FAR ALONG them it sits. Both
+  // figures on this plot run from the boat to somewhere on the line, so a boat pointed near
+  // square at the line has them within a pixel of each other: the perpendicular foot and the
+  // COG's cut are the same place.
+  //
+  // Opposite sides alone was not enough, and a screenshot said so: half a figure's height each
+  // way is 36 px between two readings 70 px wide, and they overlapped into "61 0m m". Nor is
+  // widening the offset the answer on its own — the two segments share the boat and diverge by
+  // only a few degrees, so both offsets point much the same way and widening moves the pair
+  // together. What separates them is sitting at different FRACTIONS along their own dashes, a
+  // fifth and four fifths, which pulls them apart ALONG the segment where the divergence is.
+  // Measured over every heading that still cuts the line ahead, at 150 m and at 60 m: the
+  // closest the two boxes come is 16 px of clear space, where before they overlapped by 27.
+  const side = options.side ?? 1;
+  const fraction = options.fraction ?? 0.5;
+  const away = { x: (-dy / length) * side, y: (dx / length) * side };
+  // Proportions rather than pixels throughout, so the smaller figure the other side of a gate
+  // gets is offset by the amount that figure needs and not by the amount the big one does. The
+  // baseline sits a third of the height down, which centres it on the offset.
   const at = {
-    x: (from.x + to.x) / 2 + away.x * (LINE_LABEL_PX * 0.5),
-    y: (from.y + to.y) / 2 + away.y * (LINE_LABEL_PX * 0.5),
+    x: from.x + dx * fraction + away.x * (size * 0.75),
+    y: from.y + dy * fraction + away.y * (size * 0.75),
   };
-  return `<text x="${at.x.toFixed(1)}" y="${(at.y + 12).toFixed(1)}" text-anchor="middle"`
-    + ` font-family="var(--mono)" font-size="${LINE_LABEL_PX}" fill="${colour}"`
+  const svg = `<text x="${at.x.toFixed(1)}" y="${(at.y + size / 3).toFixed(1)}" text-anchor="middle"`
+    + ` font-family="var(--mono)" font-size="${size}" fill="${colour}"`
+    + (opacity === 1 ? '' : ` opacity="${opacity}"`)
     + ` style="paint-order:stroke;stroke:var(--sea);stroke-width:6px">${esc(text)}</text>`;
+  return { svg, box: labelBox(at, text, size) };
+}
+
+/**
+ * Roughly where a figure written by `onLine` lands, as a box in plot pixels.
+ *
+ * <b>So that two of them can be told not to sit on top of each other.</b> It is an estimate —
+ * a real text box needs a DOM, and these are drawn in `node` as often as in a browser — but
+ * the type is monospaced, which is what makes an estimate good enough: measured against the
+ * fallback face, every character of `--mono` advances half its size, and the em box runs from
+ * about three quarters of the size above the baseline to a fifth below.
+ *
+ * One routine, used by the drawing AND by its spec, so the two cannot disagree about whether
+ * a pair of figures collide.
+ */
+export function labelBox(at, text, size) {
+  const halfWidth = (String(text).length * 0.5 * size) / 2;
+  const baseline = at.y + size / 3;
+  return {
+    x0: at.x - halfWidth,
+    x1: at.x + halfWidth,
+    y0: baseline - size * 0.75,
+    y1: baseline + size * 0.2,
+  };
+}
+
+/** Whether two label boxes would be drawn over one another. */
+export const boxesClash = (a, b) =>
+  !!a && !!b && a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+
+/**
+ * How the OTHER side of a gate is drawn, as fractions of the focused side.
+ *
+ * <b>Both sides get a perpendicular and both get a next-leg arrow, and they must not read as
+ * equal claims.</b> The point of showing the other side is comparison — this far off that
+ * line, that way afterwards, against this far off this one — and comparison needs both
+ * numbers on the screen. But two figures at the plot's full label size fight over the middle
+ * of the picture, and the screen would stop saying which line its state, its time and its
+ * fit belong to. So the other side keeps the same shapes at half the label and rather less
+ * ink, which is the same relation its triangle already has to the focused one: outlined
+ * rather than filled.
+ */
+export const OTHER_SIDE = { label: 0.5, label_opacity: 0.6, ink: 0.4 };
+
+/**
+ * The perpendicular from the boat to a line: the dashes, and the distance written along them.
+ *
+ * One routine for both sides of a gate, for the reason `crossingArt` is one routine — a
+ * subdued copy written separately is where a change to how this is drawn would quietly fail
+ * to reach the other side, and the reader would be comparing two numbers drawn to two rules
+ * without being told.
+ *
+ * The figure sits ON the dashes with no label, which is what freed the room the time to line
+ * now uses: a cell elsewhere headed "Perp dist" makes a reader match a word to a picture,
+ * where the figure on the line it measures needs no legend to be learned.
+ *
+ * <b>The figure is the LINE's colour, and the dashes stay muted.</b> Two big numbers share
+ * this plot and they were `--muted` and `--cog` — two cool greys a shade apart, which at a
+ * glance from a cockpit is one colour: nothing said which of them was the distance to the
+ * line and which was the distance along the COG. The perpendicular is about the line, so it
+ * takes the line's own cyan and is unmistakable beside the COG's grey. The dashes are a
+ * construction line rather than a virtual mark and keep the muted stroke they had — cyan
+ * there would put a second line on the water.
+ */
+export function perpArt(boatPx, footPx, metres, focused = true, view = {}) {
+  const ink = focused ? 1 : OTHER_SIDE.ink;
+  const size = focused ? LINE_LABEL_PX : LINE_LABEL_PX * OTHER_SIDE.label;
+  const out = `<line x1="${boatPx.x.toFixed(1)}" y1="${boatPx.y.toFixed(1)}"`
+    + ` x2="${footPx.x.toFixed(1)}" y2="${footPx.y.toFixed(1)}" stroke="var(--muted)"`
+    + ` stroke-width="1.4" stroke-dasharray="2,4" opacity="${ink}"/>`;
+  // ON THE PART OF THE DASHES THAT CAN BE SEEN. The other side of a gate is deliberately not
+  // in the fit, so its foot is routinely outside the plot — measured on a real gate the
+  // midpoint of those dashes landed at x=711 in a 400 px picture, which is a number nobody
+  // can read and a comparison nobody can make. Widening the fit to reach it is the one thing
+  // that must not happen, so the figure comes to the viewport instead of the viewport going
+  // to the figure. It stays on its own dashes, which is what makes it need no label.
+  const seen = view.width && view.height
+    ? clipToView(boatPx, footPx, view.width, view.height, size)
+    : { from: boatPx, to: footPx };
+  // AT THE CENTRE OF ITS OWN PERPENDICULAR, which is where it belongs: the figure measures
+  // that segment, so the middle of the segment is the one place on the plot that can only mean
+  // this number. It sat a fifth along, near the boat, which was a workaround for the COG's
+  // figure being in the way — and the wrong way round, since the workaround cost the primary
+  // number its natural place to protect the secondary one. The COG's figure sits four fifths
+  // along instead and gives way outright when even that collides; see the plot.
+  const figure = onLine(seen.from, seen.to, `${Math.round(Math.abs(metres))} m`, 'var(--line)',
+    focused ? {} : { size, opacity: OTHER_SIDE.label_opacity });
+  return { svg: out + figure.svg, box: figure.box };
+}
+
+/**
+ * The part of a segment that lies inside the plot, inset far enough for a figure written
+ * along it to be read.
+ *
+ * Liang-Barsky against the inset box, and the far end is the one that moves: the near end is
+ * the boat, which is always in view because the fit is built round it. Hands back the segment
+ * unchanged if it misses the box entirely, which cannot happen from the boat but is not worth
+ * being clever about.
+ */
+export function clipToView(from, to, width, height, inset = 0) {
+  // Room for the figure, not just for its anchor: it is centred, so it reaches out sideways
+  // about a character and a half of a five-character reading either way, and down by a third
+  // of its height. Generous rather than measured — a text metric would need a DOM.
+  const pad = { x: Math.min(inset * 1.6, width / 3), y: Math.min(inset, height / 3) };
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  let t0 = 0;
+  let t1 = 1;
+  for (const [p, q] of [
+    [-dx, from.x - pad.x],
+    [dx, width - pad.x - from.x],
+    [-dy, from.y - pad.y],
+    [dy, height - pad.y - from.y],
+  ]) {
+    if (p === 0) {
+      if (q < 0) return { from, to };     // parallel to this edge and outside it
+      continue;
+    }
+    const r = q / p;
+    if (p < 0) t0 = Math.max(t0, r);
+    else t1 = Math.min(t1, r);
+  }
+  if (t0 > t1) return { from, to };
+  const at = (t) => ({ x: from.x + dx * t, y: from.y + dy * t });
+  return { from: at(t0), to: at(t1) };
 }
 
 /**
@@ -917,6 +1411,7 @@ export function markScreen(state, options = {}) {
       <strong class="disp">MARK ${esc(state.step.letter)}</strong>
       <span class="mono muted">${state.step.index + 1} / ${state.of}${state.lap > 1 ? ` &middot; lap ${state.lap}` : ''}</span>
     </div>
+    ${viewBar(options.viewMode ?? 'auto')}
     ${orientationBar(orientation)}
     <div class="leg ${arrow.cls}">
       <svg viewBox="0 0 22 22" width="22" height="22"><polygon points="11,2 19,20 11,15 3,20" fill="currentColor"/></svg>
@@ -986,9 +1481,19 @@ export function waypointRow(waypoint) {
  */
 export function overviewUp(client, orientation) {
   if (orientation === 'north') return 0;
+  // Asked for before the live step, because it is the one orientation that does not depend on
+  // there being a mark ahead: at the finish of an open course there is no step and the boat is
+  // still pointing somewhere.
+  if (orientation === 'cog') return client.fix?.cogDeg ?? 0;
   const step = client.live();
   if (!step) return 0;
   if (orientation === 'perp') {
+    // The same rule the approach screen squares up by, reached through the same routine: at a
+    // gate the perpendicular to the join between the centres, and a single crossing's own
+    // normal everywhere else. Taking `crossings[0]` alone was picking one side of a gate by
+    // its position in the file, which on a parallel gate is a ninety-degree coin toss.
+    const gate = gateUp(client.gateOf(step));
+    if (gate != null) return gate;
     const normal = crossingNormal(step.crossings[0].prepared, step.crossings[0].required);
     return bearingOf(normal.x, normal.y);
   }
@@ -1018,6 +1523,115 @@ export function northPointer(up, width) {
     + `<path d="M0,-11 L5,6 L0,2 L-5,6 Z" fill="var(--muted)"/>`
     + `<text x="0" y="17" text-anchor="middle" font-family="var(--mono)" font-size="9"`
     + ` fill="var(--muted)" transform="rotate(${up.toFixed(1)})">N</text></g>`;
+}
+
+/**
+ * How far the overview may be zoomed by hand, as a multiple of the fit.
+ *
+ * The fit is the picture the screen exists to give — the whole course — so the range is about
+ * being able to look INTO it and back out a little, not about replacing it. Out to a quarter
+ * because seeing the course small against its surroundings is a real thing to want with a
+ * basemap behind; in to sixteen because past that the overview is a Mark screen without the
+ * detail a Mark screen has.
+ */
+export const OVERVIEW_ZOOM = { min: 0.25, max: 16, step: 1.5 };
+
+/** How much of the basemap is let through — see `basemapArt` for why it is so little. */
+export const BASEMAP_INK = 0.32;
+
+/**
+ * What the sailor has done to the overview by hand: zoomed it, or moved it.
+ *
+ * <b>The overview re-fits every frame, and that is right until somebody takes hold of it.</b>
+ * Seeing the whole course is what the screen is for, and a held frame would let a boat sail off
+ * the edge of its own course — but a picture that re-fits while you are dragging it is a picture
+ * you cannot drag. So the moment anything is zoomed or panned the fit is ANCHORED: the centre
+ * and scale of the frame at that moment are kept, and the hand-controls work from those. Fit
+ * gives it back.
+ *
+ * The pan is held in screen PIXELS rather than metres, because that is what a drag is: the
+ * chart should follow the finger by the distance the finger moved, whatever the display is
+ * turned to and however far it is zoomed in.
+ */
+export class OverviewView {
+  constructor() {
+    this.zoom = 1;
+    this.pan = { x: 0, y: 0 };
+    this.anchor = null;
+  }
+
+  /** True once the picture is the sailor's rather than the fit's. */
+  get manual() {
+    return this.zoom !== 1 || this.pan.x !== 0 || this.pan.y !== 0;
+  }
+
+  zoomBy(factor) {
+    this.zoom = Math.max(OVERVIEW_ZOOM.min, Math.min(OVERVIEW_ZOOM.max, this.zoom * factor));
+    return this;
+  }
+
+  panByPx(dx, dy) {
+    this.pan = { x: this.pan.x + dx, y: this.pan.y + dy };
+    return this;
+  }
+
+  /** Back to the fit, which is the screen's own answer. */
+  reset() {
+    this.zoom = 1;
+    this.pan = { x: 0, y: 0 };
+    this.anchor = null;
+    return this;
+  }
+
+  /**
+   * The frame to work from: the live fit while nothing has been touched, and the fit as it was
+   * when something first was, once something has.
+   */
+  base(centre, scale) {
+    if (!this.manual) {
+      this.anchor = null;
+      return { centre, scale };
+    }
+    this.anchor ??= { centre, scale };
+    return this.anchor;
+  }
+}
+
+/**
+ * The basemap behind the course, drawn north-up and turned with the rest of the world.
+ *
+ * <b>Tiles are `<image>` elements and nothing waits for them.</b> The browser fetches them on
+ * its own, so a dead network costs a blank background and nothing else — no await, no `fetch`,
+ * nothing on the path between a fix arriving and the course being drawn. That is the property
+ * that lets this exist at all on a screen whose whole claim is that it works with the server
+ * switched off, and `drive-client` holds it to it with `fetch` replaced by a thrower.
+ *
+ * Drawn on a SQUARE the size of the viewport's diagonal, because the picture is rotated and a
+ * viewport-sized patch of tiles would leave the corners bare at every angle but north-up. The
+ * rotation is `-up` about the middle, which is the inverse of what `projector` does to the
+ * world — the derivation is there.
+ *
+ * The Mark screen deliberately gets none of this. It is offline-first and non-negotiable, and
+ * at its scale — a couple of pixels to the metre — every tile server in the world is out of
+ * zoom levels and would hand back a blur to sail by.
+ */
+export function basemapArt(basemap, centre, origin, scale, width, height, up) {
+  const spec = BASEMAPS[basemap];
+  if (!spec || spec.layers.length === 0 || !origin) return '';
+  const reach = Math.ceil(Math.hypot(width, height));
+  const at = fromLocal(origin, centre);
+  const view = new MapView(reach, reach);
+  view.center = { wx: mercX(at.longitude), wy: mercY(at.latitude) };
+  view.atPxPerM(scale);
+  // DIMMED HARD, and that is not a nicety. Every tile server worth using draws for a white
+  // screen — the Esri ocean base is a pale chart and OSM is paler — and these screens are dark
+  // because they are read in glare and at dusk. Laid on at full strength the background becomes
+  // the brightest thing on the plot and the course, which is the only thing on it that matters,
+  // is a thin cyan line over a bright page. At this opacity the sea colour behind shows through
+  // and the tiles become what they are for: the shape of the land, under the course.
+  return `<g transform="translate(${((width - reach) / 2).toFixed(1)},${((height - reach) / 2).toFixed(1)})"`
+    + ` opacity="${BASEMAP_INK}"><g transform="rotate(${(-up).toFixed(1)},${reach / 2},${reach / 2})">`
+    + `${view.tileLayer(basemap)}</g></g>`;
 }
 
 /**
@@ -1056,13 +1670,30 @@ export function overview(client, options = {}) {
   const ys = turned.map((p) => p.y);
   const spanX = Math.max(80, Math.max(...xs) - Math.min(...xs));
   const spanY = Math.max(80, Math.max(...ys) - Math.min(...ys));
-  const scale = Math.min((width * 0.84) / spanX, (height * 0.84) / spanY);
+  const fitScale = Math.min((width * 0.84) / spanX, (height * 0.84) / spanY);
   // The centre of the extent, taken back out of rotated space so the projector applies the
   // rotation itself rather than the two of them doing half each.
   const midX = (Math.max(...xs) + Math.min(...xs)) / 2;
   const midY = (Math.max(...ys) + Math.min(...ys)) / 2;
-  const centre = { x: midX * cos + midY * sin, y: midY * cos - midX * sin };
+  const fitCentre = { x: midX * cos + midY * sin, y: midY * cos - midX * sin };
+
+  // WHAT THE SAILOR HAS DONE TO THE PICTURE, on top of the fit. Untouched, this is the fit
+  // exactly as it was before there were any controls; see `OverviewView`.
+  const view = options.view ?? new OverviewView();
+  const held = view.base(fitCentre, fitScale);
+  const scale = held.scale * view.zoom;
+  // The pan is in screen pixels, so it is applied in ROTATED space and taken back out again —
+  // the same there-and-back the extent's centre does just above. Moving the picture right by P
+  // pixels is moving the centre LEFT by P/scale, which is where the signs come from.
+  const centre = (!view.pan.x && !view.pan.y) ? held.centre : (() => {
+    const u = (held.centre.x * cos - held.centre.y * sin) - view.pan.x / scale;
+    const v = (held.centre.y * cos + held.centre.x * sin) + view.pan.y / scale;
+    return { x: u * cos + v * sin, y: v * cos - u * sin };
+  })();
   const to = projector(centre, up, scale, width, height);
+
+  // THE BACKGROUND FIRST, so every line, triangle and letter of the course draws over it.
+  const background = basemapArt(options.basemap, centre, client.origin, scale, width, height, up);
 
   // How many crossings each line carries, so the ones that repeat can be seated along it
   // in course order rather than stacked. The leeward line of a windward/leeward is the
@@ -1091,11 +1722,20 @@ export function overview(client, options = {}) {
     });
   }
 
-  let out = '';
+  let out = background;
   for (const [, uses] of byLine) {
     const a = to(uses[0].crossing.prepared.port);
     const b = to(uses[0].crossing.prepared.starboard);
-    out += `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" stroke="var(--line)" stroke-width="2" opacity="0.75"/>`;
+    // THE LINE THE BOAT IS HEADING FOR IS DRAWN LIKE THE TRIANGLE ON IT. The live crossing's
+    // triangle has always been green while every other was blue or grey, and the line under it
+    // was the same blue as all the rest — so the one thing on the picture worth finding was
+    // marked on a shape a few pixels across and not on the hundred-metre stroke it sits on.
+    // A line may carry several crossings (the leeward line is start, mark 2 and finish), and it
+    // counts as live while ANY of them is: it is the same piece of water either way.
+    const live = uses.some(({ step }) => step.index === client.at && !client.finished);
+    out += `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}"`
+      + ` stroke="${live ? ROLE_COLOUR.start : 'var(--line)'}" stroke-width="${live ? 3.5 : 2}"`
+      + ` opacity="${live ? 1 : 0.75}"/>`;
   }
 
   const steps = client.steps.map((step) => ({
@@ -1120,10 +1760,28 @@ export function overview(client, options = {}) {
 
   if (client.point) {
     const px = to(client.point);
+    // THE COG, RUN OUT AS FAR AS THE PICTURE GOES. On the approach screen the projection stops
+    // where it cuts the line, because there the question is where on THAT line it lands. Here
+    // the question is the other one — what is the boat pointing at — and the answer is only
+    // legible if the line reaches whatever it is pointing at: the next mark, the far end of a
+    // gate, the shore. Run to the viewport's diagonal so it leaves the picture whichever way
+    // it runs, and clipped by the viewBox rather than by arithmetic.
+    //
+    // Forward only. A line drawn through the boat would show a back bearing nobody asked for,
+    // and on a course where the boat has just turned it would point at the mark behind.
+    if (client.fix?.cogDeg != null) {
+      const theta = ((client.fix.cogDeg - up) * Math.PI) / 180;
+      const far = Math.hypot(width, height);
+      const end = { x: px.x + Math.sin(theta) * far, y: px.y - Math.cos(theta) * far };
+      out += `<line x1="${px.x.toFixed(1)}" y1="${px.y.toFixed(1)}"`
+        + ` x2="${end.x.toFixed(1)}" y2="${end.y.toFixed(1)}" stroke="var(--cog)"`
+        + ` stroke-width="1.2" stroke-dasharray="7,6" opacity="0.65"/>`;
+    }
     // Turned by its COG less whatever is at the top, so the boat points its true way round
-    // at North up and straight up the leg at Leg up.
-    out += `<g transform="translate(${px.x.toFixed(1)},${px.y.toFixed(1)}) rotate(${((client.fix?.cogDeg ?? 0) - up).toFixed(1)})">`
-      + `<path d="M0,-11 L7,9 L0,4.5 L-7,9 Z" fill="var(--ink)" stroke="var(--sea)" stroke-width="1"/></g>`;
+    // at North up and straight up the leg at Leg up. The same hull the approach draws, at a
+    // fixed size: an overview is fitted to a whole course, so a boat to scale would be a
+    // pixel on a long passage leg and a monster on a short windward/leeward.
+    out += boatArt(px.x, px.y, (client.fix?.cogDeg ?? 0) - up, OVERVIEW_BOAT_PX);
   }
 
   out += northPointer(up, width);
@@ -1136,8 +1794,15 @@ export function overview(client, options = {}) {
  * <b>Nothing at all until it has started</b>, because before that there is no elapsed time to
  * show and a zero would be a claim. Once the start line is behind, the instant it was crossed
  * and a clock running from it; once the finish is behind, both instants and a total that has
- * stopped moving — which is the moment the number turns from a reading into a result, so it is
- * marked as one.
+ * stopped moving — which is the moment the number turns from a reading into a result.
+ *
+ * <b>That moment is marked by the COLOUR, not by the label.</b> The label said
+ * "Elapsed — final", written with an `&mdash;` and then put through `esc` like every other
+ * label — which escaped the ampersand and printed the entity, so the screen read
+ * "ELAPSED &MDASH; FINAL". The right fix is not to escape it less: a label is text, `esc` is
+ * correct, and a label that has to carry markup is a label saying too much. `.readout.done`
+ * already turns the whole row green when the clock has stopped, which says *result* at a
+ * glance and in the place somebody is already looking — the number itself.
  *
  * The instants come off the interpolated crossings rather than off the fixes that confirmed
  * them. That is the entire reason the crossing detector interpolates, and showing a fix time
@@ -1154,7 +1819,7 @@ export function timingRow(client, now = Date.now()) {
   return `<div class="readout${done ? ' done' : ''}">
     ${cell('Started', hhmmss(client.startAt))}
     ${done ? cell('Finished', hhmmss(client.finishAt)) : ''}
-    ${cell(done ? 'Elapsed &mdash; final' : 'Elapsed', clock(client.elapsed(now)))}
+    ${cell('Elapsed', clock(client.elapsed(now)))}
   </div>`;
 }
 
@@ -1192,8 +1857,10 @@ export function overviewPanel(client, options = {}) {
       <strong class="disp">${esc(client.snapshot.name ?? client.snapshot.course)}</strong>
       <span class="mono muted">${esc(client.snapshot.revision)}</span>
     </div>
+    ${viewBar(options.viewMode ?? 'auto')}
     ${orientationBar(options.orientation ?? 'north')}
     ${overview(client, options)}
+    ${chartBar(options)}
     ${waypointRow(waypoint)}
     <!--
       BTW and DTW get a line to themselves, at twice the size. They are what the course screen
@@ -1203,7 +1870,14 @@ export function overviewPanel(client, options = {}) {
       looking at rather than glancing at.
     -->
     <div class="steer${stale ? ' stale' : ''}">
-      <div><div class="label">BTW</div><div class="value">${deg(waypoint?.bearingDeg)}<span class="unit">°</span></div></div>
+      <!--
+        THE DEGREE SIGN IS PART OF THE NUMBER, not a unit beside it. A unit is set small, and a
+        small ring shares its baseline with the digits — beside a figure this size it sits in
+        the bottom third and reads as a decimal point, which turns a bearing into a fraction.
+        At the digits' own size it lands where the type designer put it. "nm" and "m" stay
+        units, because that is what they are.
+      -->
+      <div><div class="label">BTW</div><div class="value">${deg(waypoint?.bearingDeg)}&deg;</div></div>
       <div><div class="label">DTW</div><div class="value">${range.value}<span class="unit">${range.unit}</span></div></div>
     </div>
     ${timingRow(client, now)}
