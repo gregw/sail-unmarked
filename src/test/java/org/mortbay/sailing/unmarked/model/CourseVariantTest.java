@@ -25,7 +25,13 @@ public class CourseVariantTest
         // which is the property worth pinning.
         List<CourseStep> sequence = new java.util.ArrayList<>();
         for (int i = 0; i < steps; i++)
-            sequence.add(new CourseStep("line-" + i, Direction.FORWARD, null, null, false, null));
+        {
+            // A cycle's first step is marked as an entry point, which is what an author does:
+            // a cycle with none cannot be joined and says so in `problems`. Everything else
+            // here is about lettering and legs, so the flag is set where it costs nothing.
+            boolean entry = closed && i == 0;
+            sequence.add(new CourseStep("line-" + i, Direction.FORWARD, null, null, entry, null));
+        }
         return new CourseVariant("v", null, false, closed, null, null, sequence, null);
     }
 
@@ -171,6 +177,28 @@ public class CourseVariantTest
         assertThat(doubled.problems("course 'c'", square(), Map.of()),
             org.hamcrest.Matchers.hasItem(
                 "course 'c' leg into 2 measures zero; two steps share a reference point"));
+    }
+
+    @Test
+    public void aCycleWithNoEntryPointCannotBeJoinedAndSaysSo()
+    {
+        // The only thing that says where a lap may BEGIN on a cycle is this flag — and because
+        // the line that begins a lap is the line that ends it, with none set there is nothing
+        // to start the clock on and nothing to finish against. Reported rather than thrown,
+        // like every other problem, and enough to keep the variant out of a snapshot.
+        List<CourseStep> sequence = new java.util.ArrayList<>();
+        for (int i = 0; i < 3; i++)
+            sequence.add(new CourseStep("line-" + i, Direction.FORWARD, null, null, false, null));
+        CourseVariant nowhere = new CourseVariant("v", null, false, true, null, null, sequence, null);
+
+        assertThat(nowhere.problems("course 'c'", square(), Map.of()),
+            org.hamcrest.Matchers.hasItem("course 'c' is a cycle with no entry point:"
+                + " mark at least one line a boat may begin and end a lap at"));
+
+        // An OPEN course has a start and a finish by position, so the flag means nothing there
+        // and its absence is not a problem.
+        CourseVariant open = new CourseVariant("v", null, false, false, null, null, sequence, null);
+        assertThat(open.problems("course 'c'", square(), Map.of()), is(List.of()));
     }
 
     @Test

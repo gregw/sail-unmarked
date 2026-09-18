@@ -23,7 +23,7 @@
  */
 
 import {
-  OVERVIEW_ZOOM, OverviewView, PlotView, Turner, esc, markScreen, overviewPanel,
+  OVERVIEW_ZOOM, OverviewView, PlotView, Turner, esc, markScreen, overviewPanel, viewBar,
 } from './markscreen.js';
 import { RaceClient } from './raceclient.js';
 import { Dialog } from './dialog.js';
@@ -259,12 +259,24 @@ export class Device {
     const alert = this.dialog.alert;
     const approaching = mark != null;
 
+    /*
+     * CHAT AND PLACE CARRY THE VIEW BAR TOO, and leaving it off trapped a boat on them.
+     *
+     * The Mark screen and the overview each emit their own — they have an orientation bar to
+     * put it beside — so it was easy to believe every screen had one. These two have no chart
+     * and no orientation, so nothing drew the selector and there was no way off them but a
+     * reload, which on the water costs the joined race. The rule the selector exists for is
+     * the rule that was broken: it is on EVERY screen, because any one of them may be the one
+     * you want to leave.
+     */
+    const bars = viewBar(this.client.viewMode, shared);
+
     let screen;
     if (mark) screen = markScreen(mark, { ...shared, view: this.plotView })
       + (alert ? alertBanner(alert) : '');
-    else if (wanted === 'chat') screen = chatPanel(this.dialog, { ...shared });
+    else if (wanted === 'chat') screen = chatPanel(this.dialog, { ...shared, bars });
     else if (wanted === 'place') screen = placePanel(this.dialog,
-      { ...shared, division: this.division });
+      { ...shared, bars, division: this.division });
     else screen = overviewPanel(this.client, {
       ...shared, turner: this.courseTurn, view: this.overview, basemap: this.basemap,
     });

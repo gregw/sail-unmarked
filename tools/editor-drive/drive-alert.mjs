@@ -187,6 +187,15 @@ ok('the channel holds everything that arrived, state messages among the chat',
 ok('...and offers the safety three, set apart from the racing ones',
   device().includes('data-say="Man overboard"') && device().includes('canned safety'));
 
+/*
+ * A WAY OFF THIS SCREEN, which is the one thing it did not have. The selector is on every
+ * screen because any one of them may be the one you want to leave — and Chat and Place are the
+ * two that draw no chart of their own, so nothing emitted the bar for them and a boat that
+ * looked at the channel was stuck there until it reloaded, losing the race it had joined.
+ */
+ok('...and carries the view selector, because a screen you cannot leave is a trap',
+  device().includes('data-view="overview"') && device().includes('data-view="mark"'));
+
 const button = $('device').querySelectorAll('[data-say]').find((b) => b.dataset.say === 'Retiring');
 button.fire('click', {});
 await settle(1600);
@@ -201,6 +210,8 @@ ok('one tap says what a sailor actually says, because typing at a tiller is host
 mod.__state.client.setViewMode('place');
 await settle(1200);
 ok('the Place screen is the corrected-time ladder', device().includes('PLACE'));
+ok('...and it too carries the view selector, for the same reason',
+  device().includes('data-view="overview"') && device().includes('data-view="mark"'));
 ok('...and says how old the fleet feed is rather than going blank when it stops',
   /class="mono (muted|warn)">(no fleet yet|\d+ s ago)/.test(device()));
 

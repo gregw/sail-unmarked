@@ -85,12 +85,52 @@ body {
 .gnss button { margin-top: 8px; }
 
 .awake { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; }
+
+/*
+  THE BACK GESTURE IS ONE PIXEL FROM EVERYTHING ELSE ON A PHONE, and leaving costs the race:
+  nothing is cached across a reload, so a boat that backs out mid-afternoon comes back to the
+  join screen with the course, the crossings and the clock gone. Hence a question — over the
+  page rather than inside the device, because the device is rebuilt from scratch every second
+  and anything drawn into it would blink out between the gesture and the answer.
+*/
+.leaving {
+  position: fixed; inset: 0; z-index: 10;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(14, 26, 38, 0.86); padding: 24px;
+}
+.leaving[hidden] { display: none; }
+.leaving .box {
+  background: var(--panel); border: 2px solid var(--warn); border-radius: 8px;
+  padding: 14px; width: 100%; max-width: 380px;
+}
+.leaving .kind {
+  font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--warn);
+}
+.leaving .text { font-size: 17px; margin: 6px 0 12px; }
+.leaving .row { display: flex; gap: 8px; }
+.leaving .row button { flex: 1; }
 </style>
 </head>
 <body>
 
 <div class="hand">
   <div class="device" id="device"></div>
+</div>
+
+<!--
+  Asked only while a course is being sailed. On the join screen there is nothing to lose, and a
+  page that argued about being left would be the kind of page people close for good.
+-->
+<div class="leaving" id="leaving" hidden>
+  <div class="box">
+    <div class="kind mono">Leave the race?</div>
+    <div class="text">The course, the crossings so far and the clock are held on this phone.
+      Nothing is kept across a reload, so leaving now loses them.</div>
+    <div class="row">
+      <button class="plain" id="leave_stay">Keep racing</button>
+      <button class="go" id="leave_go">Leave</button>
+    </div>
+  </div>
 </div>
 
 <script type="module" src="boat.js"></script>

@@ -160,7 +160,9 @@ function renderOverlay() {
       if (!raw) continue;
       const [ax, ay] = view.toPx(raw.port);
       const [bx, by] = view.toPx(raw.starboard);
-      const live = steps.some((s) => s.index === client.at && !client.finished);
+      // Every entry line of a cycle is live before the start, because the boat may begin at
+      // any of them — the same question the device's own overview asks. See `isLive`.
+      const live = steps.some((s) => client.isLive(s.index));
       out += `<line x1="${ax.toFixed(1)}" y1="${ay.toFixed(1)}" x2="${bx.toFixed(1)}" y2="${by.toFixed(1)}"`
         + ` stroke="${live ? 'var(--ok)' : 'var(--line)'}" stroke-width="${live ? 4 : 2.5}" stroke-linecap="round" opacity="${live ? 1 : 0.7}"/>`;
       for (const [px, py] of [[ax, ay], [bx, by]])

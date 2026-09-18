@@ -153,6 +153,81 @@ function onFix(fix) {
   refreshGnss(first);
 }
 
+/* ============================================================== leaving by accident */
+
+/**
+ * THE BACK GESTURE, AND WHY IT HAS TO BE INTERCEPTED.
+ *
+ * On a phone the back gesture is an edge swipe or a button a thumb rests on, and this page is
+ * held in a bracket and tapped in a hurry. Leaving is not a small cost: <b>nothing is cached
+ * across a reload</b>, so a boat that backs out mid-race comes back to the join screen with the
+ * course, the crossings so far and the running clock all gone. That is the one action on this
+ * page that is both easy to do by accident and impossible to undo.
+ *
+ * <b>Two mechanisms, because one gesture is not the only way out.</b> `beforeunload` covers a
+ * reload, a closed tab and a typed address, and is the browser's own dialog — we do not get to
+ * word it. The back gesture is not an unload at all within one document, so it is caught as a
+ * `popstate` against a sentinel entry pushed when the boat joins: the entry is pushed again
+ * immediately, which puts the history back where it was, and the question is asked in the
+ * page's own words.
+ *
+ * <b>Only while sailing.</b> On the join screen there is nothing to lose, and a page that
+ * argued about being left would be one people close for good. So the guard is armed by
+ * `onJoin` and disarmed by `onLeave` — the same two hooks the wake lock uses, for the same
+ * reason: they are the moments the page's promises change.
+ */
+class LeaveGuard {
+  constructor(host) {
+    this.host = host;
+    this.armed = false;
+    window.addEventListener('beforeunload', (event) => {
+      if (!this.armed) return undefined;
+      // The only two lines a browser honours. The text is the browser's; ours is in the modal.
+      event.preventDefault();
+      event.returnValue = '';
+      return '';
+    });
+    window.addEventListener('popstate', () => {
+      if (!this.armed) return;
+      // Put the sentinel back BEFORE asking. The browser has already moved off it, so without
+      // this a second back gesture while the question is up would leave with no question at
+      // all — which is exactly the accident being guarded against.
+      this.push();
+      this.ask(true);
+    });
+    // Shut to begin with, said here as well as in the markup: the page declares it `hidden`,
+    // and a guard that only ever opened it would depend on that attribute never being lost.
+    this.ask(false);
+    el('leave_stay')?.addEventListener('click', () => this.ask(false));
+    el('leave_go')?.addEventListener('click', () => {
+      this.ask(false);
+      this.armed = false;
+      // Past the sentinel AND past this page's own entry, which is where the gesture was
+      // trying to go. With nothing behind this page — opened from a link or typed in — there
+      // is nowhere to send them and the browser does nothing, which is the honest outcome:
+      // the question is answered and the boat is still racing.
+      window.history.go(-2);
+    });
+  }
+
+  push() {
+    window.history.pushState({ unmarked: 'racing' }, '');
+  }
+
+  arm(on) {
+    if (on === this.armed) return;
+    this.armed = on;
+    if (on) this.push();
+    else this.ask(false);
+  }
+
+  ask(show) {
+    if (this.host) this.host.hidden = !show;
+  }
+}
+
+const leaving = new LeaveGuard(el('leaving'));
+
 /* ====================================================================== the device */
 
 const device = new Device(el('device'), {
@@ -179,9 +254,11 @@ const device = new Device(el('device'), {
     // is yes for a reason the browser will accept: a wake lock is refused unless the page is
     // visible, and it is granted off the back of somebody pressing something.
     awake.want(true);
+    leaving.arm(true);
   },
   onLeave: () => {
     awake.want(false);
+    leaving.arm(false);
     // The watch is left running. The permission is already given and a boat that has just
     // finished one course usually starts another; tearing the watch down would mean a cold
     // start over again the second time.
@@ -232,4 +309,4 @@ setInterval(() => {
 }, HEARTBEAT_MS);
 
 /** Exposed for the headless driver only; nothing in the page reads it. */
-export const __boat = { device, receiver, awake, state };
+export const __boat = { device, receiver, awake, state, leaving };

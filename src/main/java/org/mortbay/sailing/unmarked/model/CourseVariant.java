@@ -223,6 +223,21 @@ public record CourseVariant(
         if (sequence.size() < 2)
             problems.add(where + " needs at least a start and a finish");
 
+        /*
+         * A CYCLE WITH NO ENTRY POINT CANNOT BE JOINED, and saying so here is what stops it
+         * being discovered on the water. An open course has a start and a finish by position;
+         * a cycle has neither of its own, so the only thing that says where a lap may begin —
+         * and therefore where it ends, the same line being crossed twice — is this flag. With
+         * none set there is no line to start the clock on and nothing to finish against, so
+         * the variant is incomplete in exactly the sense the lifecycle means: it will not
+         * snapshot, and nothing can be published from it.
+         */
+        if (closed && entryPoints().isEmpty())
+        {
+            problems.add(where + " is a cycle with no entry point: mark at least one line"
+                + " a boat may begin and end a lap at");
+        }
+
         // Ad-hoc geometry gets the same checks the club's does. It is not surveyed by
         // anybody and is the more likely of the two to be half-finished.
         points.forEach((id, point) ->

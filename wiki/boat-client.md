@@ -82,6 +82,14 @@ while that holds, and it is the kind of thing that decays one convenient field a
   API is missing on some browsers and *dropped* every time the page is hidden, so it is re-taken on
   `visibilitychange`. Shown as a button because it is a promise the page cannot always keep.
 
+**The back gesture is guarded, because leaving costs the race.** Nothing is cached across a reload, so a
+boat that backs out mid-afternoon comes back to the join screen with the course, the crossings and the
+clock gone — and on a phone the gesture is an edge swipe away from everything else. Two mechanisms,
+because one gesture is not the only way out: `beforeunload` for a reload or a closed tab, and a sentinel
+history entry pushed on joining so the back gesture arrives as a `popstate` that can be answered in the
+page's own words. Armed by `onJoin` and disarmed by `onLeave`, like the wake lock: on the join screen
+there is nothing to lose, and a page that argued about being left would be one people close for good.
+
 **And a HEARTBEAT**, because the one state a screen cannot be prompted into reporting is the absence of
 fixes. The device redraws on every fix; when they stop, the most important thing on the screen changes,
 so `boat.js` redraws once a second regardless. It is also what counts the elapsed clock up between
@@ -111,6 +119,11 @@ infinite extension. The two are the same number for a line the fleet meets squar
 the leg — the shape a gate's half-infinite sides take — breaks it. Nothing about scoring changes: the
 extent test still runs out without limit.
 
+**The selector is on EVERY screen**, because any one of them may be the one you want to leave. The Mark
+screen and the overview emit it themselves; Chat and Place have no chart and no orientation of their own,
+so the device passes it in — leaving it off made those two screens a trap with no way off but a reload,
+which on the water costs the joined race.
+
 **The sailor can also overrule it** (`VIEWS`, `RaceClient.setViewMode`). AUTO is the default and is the
 design, but *never has to* is not *cannot*. **Forcing does not switch the rule off** — the hysteresis goes
 on tracking underneath, so AUTO resumes with the answer for where the boat is *now*. It lives on the
@@ -122,8 +135,16 @@ back.
 windward/leeward the leeward line is the start, mark 2 and the finish — one line, three steps, each with
 its own detector — so a boat crossing it on the way to the first windward mark cannot latch a finish
 twenty minutes early. Both sides of a **gate** get a detector and both see every fix; the first to latch
-is the side the boat took, and which it was is recorded because the next leg's bearing depends on it. On a
-**cycle** the detectors are rebuilt at each wrap.
+is the side the boat took, and which it was is recorded because the next leg's bearing depends on it.
+
+**A cycle's start is a CHOICE, and `live()` answers with it.** Before the start the live "step" is not a
+step at all but every entry line at once (`startChoice`), which is what puts them all on the plot as
+alternatives, all of them lit on the overview (`isLive`), and each with its own next-leg arrow — the
+candidates lead down different legs, so `next()` is asked per crossing exactly as it is for a gate. The
+first to latch is where the lap begins: that step becomes the boat's `entryIndex`, the clock runs from
+that interpolated instant, and the sequence is walked from there as a ring. Coming back to it is the
+**finish** (`atFinish`) — lettered F, with nothing beyond it — and crossing it completes the run. One
+lap, bounded by one line crossed twice; a second lap is a second join.
 
 ---
 

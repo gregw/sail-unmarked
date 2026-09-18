@@ -174,6 +174,19 @@ globalThis.window = {
   innerWidth: 1400,
   innerHeight: 900,
   addEventListener(t, fn) { handlers.set(`window:${t}`, fn); },
+  /*
+   * A HISTORY WITH A STACK, because the phone guards the back gesture with a sentinel entry:
+   * it pushes one on joining, catches the `popstate` the gesture fires and pushes it again so
+   * the next gesture is caught too. A no-op stub would let all of that "pass" while proving
+   * none of it — the sentinel is the whole mechanism, so the count of entries and the argument
+   * to `go` are what a driver has to be able to read.
+   */
+  history: {
+    pushed: [],
+    went: null,
+    pushState(state) { this.pushed.push(state); },
+    go(n) { this.went = n; },
+  },
 };
 Object.defineProperty(globalThis, 'navigator', { value: {}, configurable: true });
 globalThis.ResizeObserver = class { observe() {} disconnect() {} };

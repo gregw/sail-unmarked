@@ -231,20 +231,66 @@ export function run(check) {
   ], { closed: true });
 
   const cycle = fresh(CYCLE);
-  sail(cycle, { e: 0, n: -120 }, { e: 0, n: 120 });
-  sail(cycle, { e: 0, n: 120 }, { e: 0, n: 420 });
-  check('a cycle comes round to step 0 rather than finishing',
-    cycle.at === 0 && !cycle.finished);
-  check('...counting the lap', cycle.lap === 2);
+  // A CYCLE IS NOT SAILING ANYWHERE UNTIL IT HAS STARTED, and what it offers first is the
+  // choice of lines a lap may be begun at — the entry points, all of them live at once.
+  check('before the start a cycle offers its entry lines, not a step',
+    cycle.starting && cycle.live().crossings.length === 1 && cycle.live().letter === 'S');
+  // Approaching the first entry line without reaching it: the screen calls the choice S,
+  // because on a cycle no step is the start until a boat makes one of them its own.
+  sail(cycle, { e: 0, n: -200 }, { e: 0, n: -120 });
+  check('...and the screen calls the choice S, because the boat has not started yet',
+    cycle.starting && cycle.markState().letter === 'S');
 
-  // The second lap must be able to latch the same lines again. A detector latches once and
-  // stands, which is right within a lap and wrong across them — so they are rebuilt.
+  sail(cycle, { e: 0, n: -120 }, { e: 0, n: 120 });
+  check('crossing one of them begins the lap there',
+    !cycle.starting && cycle.entryIndex === 0 && cycle.at === 1);
+  check('...and the clock runs from that crossing', cycle.startAt instanceof Date);
+
+  sail(cycle, { e: 0, n: 120 }, { e: 0, n: 420 });
+  // THE LINE THAT BEGAN THE LAP IS THE LINE THAT ENDS IT, which is the model's own rule and
+  // is what lets a lap be bounded by one crossing twice rather than by two different ones.
+  check('coming round, the live step is the line it started on', cycle.at === 0);
+  check('...which is now the FINISH, with nothing beyond it',
+    cycle.atFinish() && cycle.next() === null);
+  check('...and the screen letters it F, which is the one thing about it that has changed',
+    cycle.markState().letter === 'F');
+
   sail(cycle, { e: 0, n: 420 }, { e: 0, n: -120 });
   sail(cycle, { e: 0, n: -120 }, { e: 0, n: 120 });
-  check('...and a line crossed last lap latches again this lap',
-    cycle.crossings.filter((c) => c.letter === '0').length === 2);
-  check('...tagged with the lap it belongs to',
-    cycle.crossings.filter((c) => c.lap === 2).length >= 1);
+  check('crossing it again finishes the run', cycle.finished && cycle.complete());
+  check('...with the clock stopped on the interpolated instant',
+    cycle.finishAt instanceof Date
+    && cycle.finishAt.getTime() === cycle.crossings[cycle.crossings.length - 1].time.getTime());
+  // Roles are positional in the record too: first crossing began the run, last ended it, and
+  // on a cycle they are the same step — which is exactly what the sequence says happened.
+  check('...and the record names that one line at both ends of the run',
+    cycle.crossings[0].step === 0 && cycle.crossings[cycle.crossings.length - 1].step === 0);
+
+  /* ------------------------------------------- a cycle that may be started in two places */
+
+  const TWO_WAY = snapshot([
+    { letter: '0', entry: true, crossings: [line('south', 0)] },
+    { letter: '1', entry: true, crossings: [line('north', 300)] },
+  ], { closed: true });
+
+  const either = fresh(TWO_WAY);
+  check('with two entry points, both lines are live before the start',
+    either.live().crossings.length === 2
+    && either.isLive(0) && either.isLive(1));
+  // Starting at the SECOND one, which is the case the old client could not sail at all: it
+  // began every cycle at step 0 whatever the author had marked.
+  sail(either, { e: 0, n: 120 }, { e: 0, n: 420 });
+  check('...and the boat begins at whichever it crosses first',
+    either.entryIndex === 1 && either.at === 0);
+  check('...leaving the other simply abandoned, like the far side of a gate',
+    either.crossings.length === 1 && either.crossings[0].line === 'north');
+  sail(either, { e: 0, n: 420 }, { e: 0, n: -120 });
+  sail(either, { e: 0, n: -120 }, { e: 0, n: 120 });
+  check('...and the lap runs from there back to there, not to step 0',
+    either.atFinish() && either.at === 1);
+  sail(either, { e: 0, n: 120 }, { e: 0, n: 420 });
+  check('...finishing on the line it started on', either.finished
+    && either.crossings[either.crossings.length - 1].line === 'north');
 
   /* ------------------------------------------------------------ quality control */
 
@@ -733,16 +779,20 @@ export function run(check) {
   check('...which is the two crossings apart, to the interpolated instant',
     total === timed.crossings[2].time.getTime() - timed.crossings[0].time.getTime());
 
-  // On a cycle each lap restarts it, which is what makes the number a lap time.
+  // A CYCLE'S CLOCK IS A LAP TIME, and it runs from the entry crossing to the same line coming
+  // round again — one lap, bounded by one line crossed twice. It is a lap time because of where
+  // it starts, not because it restarts: a second lap is a second join.
   const lapped = fresh(CYCLE);
   sail(lapped, { e: 0, n: -120 }, { e: 0, n: 120 });
-  const firstLap = lapped.startAt;
+  const began = lapped.startAt;
   sail(lapped, { e: 0, n: 120 }, { e: 0, n: 420 });
   sail(lapped, { e: 0, n: 420 }, { e: 0, n: -120 });
   sail(lapped, { e: 0, n: -120 }, { e: 0, n: 120 });
-  check('a cycle restarts the clock each lap, so the number is a lap time',
-    lapped.lap === 2 && lapped.startAt.getTime() > firstLap.getTime());
-  check('...and never finishes, because a lap has no finish of its own', !lapped.complete());
+  check('a cycle times the lap from the line it started on to that same line',
+    lapped.complete() && lapped.startAt.getTime() === began.getTime());
+  check('...and the elapsed is the two crossings apart, to the interpolated instant',
+    lapped.elapsed(lapped.finishAt.getTime() + 999999)
+      === lapped.crossings[lapped.crossings.length - 1].time.getTime() - began.getTime());
 
   /* ------------------------------------------------------------------ the clock */
 

@@ -1423,8 +1423,14 @@ export function markScreen(state, options = {}) {
       <span class="mono">${esc(hhmmss(state.time))}</span>
       <span class="mono muted">GPS ${state.satellites ?? '—'} SV</span>
       <span class="sp"></span>
-      <strong class="disp">MARK ${esc(state.step.letter)}</strong>
-      <span class="mono muted">${state.step.index + 1} / ${state.of}${state.lap > 1 ? ` &middot; lap ${state.lap}` : ''}</span>
+      <strong class="disp">MARK ${esc(state.letter ?? state.step.letter)}</strong>
+      <!--
+        A cycle's start is a CHOICE of lines rather than a position in the sequence, so there
+        is no "3 of 12" to print for it — the boat is at none of them yet. It says "start"
+        instead, which is what the screen is for at that moment.
+      -->
+      <span class="mono muted">${state.step.index < 0 ? 'start'
+        : `${state.step.index + 1} / ${state.of}`}${state.lap > 1 ? ` &middot; lap ${state.lap}` : ''}</span>
     </div>
     ${viewBar(options.viewMode ?? 'auto', options)}
     ${orientationBar(orientation)}
@@ -1475,6 +1481,13 @@ export function waypointRow(waypoint) {
     <span class="letter">${esc(waypoint.letter)}</span>
     <span class="name mono">${esc(waypoint.lines.join('  /  '))}</span>
     ${waypoint.gate ? '<span class="mono muted gate">gate</span>' : ''}
+    <!--
+      A CYCLE MAY BE STARTED AT ANY OF ITS ENTRY LINES, and the row names the one being
+      steered for rather than all of them: four scoped ids would not fit, and the others are
+      drawn on the plot as alternatives anyway. What it must not do is say nothing about the
+      choice, or a boat heading for one line would think it was the only one.
+    -->
+    ${waypoint.starts > 1 ? `<span class="mono muted gate">1 of ${waypoint.starts} starts</span>` : ''}
   </div>`;
 }
 
@@ -1747,7 +1760,7 @@ export function overview(client, options = {}) {
     // marked on a shape a few pixels across and not on the hundred-metre stroke it sits on.
     // A line may carry several crossings (the leeward line is start, mark 2 and finish), and it
     // counts as live while ANY of them is: it is the same piece of water either way.
-    const live = uses.some(({ step }) => step.index === client.at && !client.finished);
+    const live = uses.some(({ step }) => client.isLive(step.index));
     out += `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}"`
       + ` stroke="${live ? ROLE_COLOUR.start : 'var(--line)'}" stroke-width="${live ? 3.5 : 2}"`
       + ` opacity="${live ? 1 : 0.75}"/>`;
@@ -1763,7 +1776,10 @@ export function overview(client, options = {}) {
 
   client.steps.forEach((step) => {
     const done = client.crossings.some((c) => c.step === step.index && c.lap === client.lap);
-    const live = step.index === client.at && !client.finished;
+    // BEFORE A CYCLE'S START EVERY ENTRY LINE IS LIVE, because the boat may begin at any of
+    // them — marking one would be the picture making a choice the boat has not made. See
+    // `RaceClient.isLive`.
+    const live = client.isLive(step.index);
     for (const crossing of step.crossings) {
       const shape = placed.get(`${step.index}:${crossing.line}`);
       if (!shape) continue;
@@ -1900,9 +1916,17 @@ export function overviewPanel(client, options = {}) {
     <p class="status${client.complete() ? ' crossed' : ''}">${client.finished
       ? `Finished ${esc(hhmmss(client.finishAt))} in ${clock(client.elapsed(now))}, `
         + `${client.crossings.length} crossings latched.`
-      : step
-        ? `Sailing to mark ${esc(step.letter)}${client.snapshot.closed ? `, lap ${client.lap}` : ''}. The Mark screen comes up on its own.`
-        : 'Waiting for a fix.'}</p>
+      : client.starting
+        // A CYCLE IS STARTED AT WHICHEVER ENTRY LINE THE BOAT CROSSES FIRST, so the sentence
+        // says what the boat is being offered rather than naming a mark it is "sailing to".
+        // The lines themselves are marked on the picture above it, all of them.
+        ? `Start at any of the ${client.entries.length} marked lines. The clock runs from the`
+          + ' one you cross, and that same line finishes the lap.'
+        : step
+          ? `Sailing to mark ${esc(client.atFinish() ? 'F' : step.letter)}${client.atFinish()
+            ? ' — the line you started on, which finishes the lap'
+            : client.snapshot.closed ? `, lap ${client.lap}` : ''}. The Mark screen comes up on its own.`
+          : 'Waiting for a fix.'}</p>
     ${client.crossings.length === 0 ? '' : `<ul class="crossings mono">${client.crossings.slice().reverse().map((c) =>
       `<li><span class="ok">&check;</span> ${esc(c.letter)} &middot; ${esc(c.line)} &middot; ${esc(hhmmss(c.time))}${c.lap > 1 ? ` &middot; lap ${c.lap}` : ''}</li>`).join('')}</ul>`}`;
 }

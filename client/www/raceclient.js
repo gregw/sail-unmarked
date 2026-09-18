@@ -238,6 +238,44 @@ export class RaceClient {
       })),
     }));
 
+    /*
+     * WHERE A LAP MAY BEGIN, WHICH ON A CYCLE IS NOT ONE PLACE.
+     *
+     * An open course starts at its first step by position and there is nothing to choose. A
+     * cycle has no start of its own — a boat begins and ends wherever it joined — so the
+     * author names the lines a lap may be begun at (`entry`, the editor's ↻), and a boat
+     * begins at whichever of them it crosses first. Before that crossing all of them are
+     * live, as ALTERNATIVES in exactly the sense a gate's sides are: several lines offered,
+     * the first to latch is the one taken, the rest are abandoned.
+     *
+     * <b>And the line that began the lap is the line that ends it</b> — that is the model's
+     * own rule (`CourseStep`: a line crossed to begin a lap must be crossed again, in the
+     * same sense, to end it), and it is what lets a lap be bounded by one crossing twice
+     * rather than by two different ones that scoring would have to choose between. So the
+     * boat's entry step is remembered, the sequence is walked from there, and coming back to
+     * it is the finish.
+     *
+     * A cycle with NO entry point cannot be joined at all, and the server refuses to
+     * snapshot one (`CourseVariant.problems`). The empty case here is therefore an archive
+     * from a build that did not check, and it falls back to beginning at step 0, which is
+     * what this did before there was a choice.
+     */
+    for (const step of this.steps) {
+      for (const crossing of step.crossings) crossing.stepIndex = step.index;
+    }
+    this.entries = this.snapshot.closed ? this.steps.filter((step) => step.entry) : [];
+    this.entryIndex = null;
+    this.starting = this.entries.length > 0;
+    this.startChoice = this.starting
+      ? {
+        index: -1,
+        letter: 'S',
+        entry: true,
+        legNm: null,
+        crossings: this.entries.flatMap((step) => step.crossings),
+      }
+      : null;
+
     this.at = 0;
     this.lap = 1;
     this.finished = false;
@@ -285,14 +323,62 @@ export class RaceClient {
     }
   }
 
-  /** The step the boat is working on, or null once an open course is complete. */
+  /**
+   * The step the boat is working on, or null once the course is complete.
+   *
+   * Before a cycle's start that is the CHOICE of entry lines rather than any one of them —
+   * a step-shaped thing holding every candidate crossing, so the screens, the detectors and
+   * the plot all go on asking the same questions of it that they ask of a gate.
+   */
   live() {
-    return this.finished ? null : (this.steps[this.at] ?? null);
+    if (this.finished) return null;
+    if (this.starting) return this.startChoice;
+    return this.steps[this.at] ?? null;
   }
 
-  /** The step after the live one, wrapping on a cycle. What the top arrow points at. */
-  next() {
+  /**
+   * Is this step one the boat is working on? Several of them are, before a cycle's start.
+   *
+   * Asked by the overview, which marks the live line in the live triangle's colour: before
+   * the start every entry line is a line the boat may begin at, and marking only one of them
+   * would be the picture making a choice the boat has not made.
+   */
+  isLive(index) {
+    if (this.finished) return false;
+    if (this.starting) return this.entries.some((step) => step.index === index);
+    return index === this.at;
+  }
+
+  /**
+   * The live step is the entry line coming round again — this boat's finish.
+   *
+   * <b>The same line, said differently.</b> It began the lap and it ends it, so once the boat
+   * is round there is nothing beyond it: no next leg, and the letter is F like the finish of
+   * any other course. Which is the whole of what "a cycle has no finish of its own" means —
+   * it has the one the boat gave it.
+   */
+  atFinish() {
+    return !!this.snapshot.closed && !this.starting && !this.finished
+      && this.entryIndex != null && this.at === this.entryIndex;
+  }
+
+  /**
+   * The step after the live one, wrapping on a cycle. What the top arrow points at.
+   *
+   * <b>Before a cycle's start it depends which line you take</b>, so it is asked per
+   * crossing: each candidate start line leads somewhere different, and a single answer would
+   * draw every candidate's arrow down the same leg. That is the same reason each side of a
+   * gate carries its own next-leg bearing — the arrow is what says what the choice costs.
+   *
+   * Null at the finish, which is the one place with nothing beyond it.
+   */
+  next(crossing = null) {
     if (this.finished) return null;
+    if (this.starting) {
+      const from = crossing?.stepIndex;
+      return from == null ? null : (this.steps[(from + 1) % this.steps.length] ?? null);
+    }
+    if (this.atFinish()) return null;
     const after = this.at + 1;
     if (after < this.steps.length) return this.steps[after];
     return this.snapshot.closed ? this.steps[0] : null;
@@ -355,18 +441,37 @@ export class RaceClient {
     // different picture, at a different scale, with the crossing ringed in a frame it did not
     // happen in. The dwell exists to let somebody look at the crossing; it has to still be
     // there to look at.
-    this.crossed = { step, crossing: took };
+    /*
+     * WHICH STEP WAS JUST CROSSED. Before a cycle's start the live "step" is the choice of
+     * entry lines, and what the boat actually crossed is the one those candidate crossings
+     * came from — so the dwell, the plot and the record all name that, not the choice. The
+     * others are abandoned the way a gate's other side is: the boat cannot begin twice.
+     */
+    const wasStarting = this.starting;
+    const crossedStep = wasStarting ? (this.steps[took.stepIndex] ?? step) : step;
+    if (wasStarting) {
+      this.starting = false;
+      this.entryIndex = took.stepIndex;
+      this.at = took.stepIndex;
+    }
+    this.crossed = { step: crossedStep, crossing: took };
     // THE RACE CLOCK STARTS WHEN THE BOAT CROSSES, and that is a commitment rather than a
     // convenience: there is nothing in this system to fire a gun, so every start is self-timed
     // and elapsed has to run from the crossing of the first line, never from when the app was
     // opened. On a cycle each lap restarts it, which is what makes the number a lap time.
-    if (step.index === 0) {
+    if (wasStarting || (!this.snapshot.closed && step.index === 0)) {
       this.startAt = latched.time;
       this.finishAt = null;
     }
+    /*
+     * ROLES ARE POSITIONAL IN THE RECORD TOO, and that is why nothing here says "start" or
+     * "finish". On a cycle the entry step appears twice — first crossing began the run, last
+     * ended it — exactly as an open course's leeward line appears three times under three
+     * different steps. A stored role could disagree with the order; the order cannot.
+     */
     this.crossings.push({
-      step: step.index,
-      letter: step.letter,
+      step: crossedStep.index,
+      letter: crossedStep.letter,
       lap: this.lap,
       line: took.line,
       cross: took.required,
@@ -376,10 +481,12 @@ export class RaceClient {
       confirmAfter: latched.confirmAfter,
       // Which side of a gate the boat took. Recorded because the next leg's bearing
       // depends on it — the one place a boat's own choice changes what it is shown.
-      gateSide: step.crossings.length > 1 ? took.line : null,
+      // Which side of a GATE was taken — asked of the step actually crossed, not of the live
+      // one, or a cycle's choice of entry lines would be recorded as a gate it is not.
+      gateSide: crossedStep.crossings.length > 1 ? took.line : null,
     });
     this.dwellUntil = fix.time.getTime() + this.approach.dwellMs;
-    this.advance();
+    this.advance(wasStarting);
     // Taken from the CROSSING, not from the fix that confirmed it: the interpolated instant is
     // the whole point, and an elapsed time built from the confirming fix would be late by up to
     // the fix interval at both ends.
@@ -427,16 +534,31 @@ export class RaceClient {
   }
 
   /**
-   * Move to the next step, or round again, or stop.
+   * Move to the next step, or stop.
    *
-   * A cycle has no finish of its own — a boat begins and ends a lap wherever it joined —
-   * so it never becomes `finished` here. It simply comes round to step 0 with the lap
-   * counter advanced and fresh detectors, and stops when the sailor stops it.
+   * <b>A cycle walks from the entry line the boat took, and finishes when it comes back to
+   * it.</b> The sequence is a ring: from the entry step it runs on, wraps at the end of the
+   * array, and the next time that same step comes up it is the finish — one lap, bounded by
+   * one line crossed twice, which is the rule the model states and the only one that makes a
+   * lap's elapsed time a quantity two boats can be compared on when they began at different
+   * marks. A second lap is a second join, deliberately: this is where a run ends and a record
+   * is complete.
+   *
+   * `started` says this call is the one that follows the entry crossing itself, which is the
+   * one time the boat arrives at its entry step without having finished anything.
    */
-  advance() {
-    if (this.at + 1 < this.steps.length) {
+  advance(started = false) {
+    if (this.snapshot.closed && this.entryIndex != null) {
+      if (!started && this.at === this.entryIndex) {
+        this.finished = true;
+        return;
+      }
+      this.at = (this.at + 1) % this.steps.length;
+    } else if (this.at + 1 < this.steps.length) {
       this.at += 1;
     } else if (this.snapshot.closed) {
+      // An archive with no entry point at all: it laps as it always did, because there is
+      // no line nominated to end on. See the constructor.
       this.at = 0;
       this.lap += 1;
     } else {
@@ -475,6 +597,33 @@ export class RaceClient {
   waypoint() {
     const step = this.live();
     if (!step) return null;
+    /*
+     * BEFORE A CYCLE'S START IT IS THE LINE THE BOAT IS HEADING FOR, not the mean of the
+     * candidates. The mean is the right answer for a GATE — two lines a boat-length apart,
+     * with the leg measured to the point between them — and the wrong one for a circuit's
+     * entry lines, which are scattered round a harbour: the point between four of them is
+     * open water nobody is sailing to, and a DTW counting down to it would be a number
+     * describing no leg at all.
+     */
+    if (this.starting) {
+      const watched = this.watching() ?? step.crossings[0];
+      if (!watched?.midpoint) return null;
+      const to = toLocal(this.origin, watched.midpoint);
+      return {
+        to,
+        lines: [watched.line],
+        letter: step.letter,
+        // How many lines this lap may be begun at, so the row can say the choice is there.
+        // Named rather than counted in the drawing: which lines those are is this object's
+        // question, and a screen counting them would be a second place that could be wrong.
+        starts: step.crossings.length,
+        gate: false,
+        bearingDeg: this.point ? bearingLocal(this.point, to) : null,
+        distanceM: this.point
+          ? resolve(Math.hypot(to.x - this.point.x, to.y - this.point.y))
+          : null,
+      };
+    }
     const mids = step.crossings
       .map((crossing) => crossing.midpoint)
       .filter(Boolean)
@@ -947,7 +1096,9 @@ export class RaceClient {
     // Where the next leg goes, from the midpoint of the live step to the midpoint of the
     // one after it. Null at the finish of an open course, where there is no next leg —
     // and the arrow says FINISH rather than pointing at nothing.
-    const after = dwelling ? this.live() : this.next();
+    // Asked of the crossing being watched, because before a cycle's start each candidate
+    // entry line leads down a different leg — see `next`.
+    const after = dwelling ? this.live() : this.next(watched);
     let legBearing = null;
     if (after && watched.midpoint) {
       const from = toLocal(this.origin, watched.midpoint);
@@ -973,6 +1124,16 @@ export class RaceClient {
     return {
       step,
       watched,
+      /*
+       * THE LETTER THE SCREEN SHOWS, which on a cycle is not the step's own.
+       *
+       * A cycle's steps are numbered from zero and none of them is S or F, because the course
+       * has no start and no finish — the BOAT does. So before the start the screen says S over
+       * the choice of entry lines, and when that same line comes round again it says F, which
+       * is the one thing about it that has changed. Every other course hands back the step's
+       * own letter, which already is S and F where it should be.
+       */
+      letter: this.starting ? 'S' : (this.atFinish() && !dwelling ? 'F' : step.letter),
       state: latched ? 'crossed' : status.state,
       perpDistM: status.perpDistM,
       confirmed: status.confirmed ?? 0,
@@ -1025,13 +1186,19 @@ export class RaceClient {
             : signedDistanceM(crossing.prepared, this.point),
           legBearing: after && crossing.midpoint
             ? (() => {
-              const to = this.midOf(after);
+              // Each alternative's own next step, for the same reason.
+              const to = this.midOf(this.starting ? this.next(crossing) : after);
               return to ? bearingLocal(toLocal(this.origin, crossing.midpoint), to) : null;
             })()
             : null,
         })),
       // The gate's own axis, for the orientation that squares up to a line. See `gateOf`.
-      gate: this.gateOf(step),
+      // A cycle's start choice is NOT a gate — its lines are scattered round a circuit rather
+      // than set either side of one leg — so there is no axis for Line perp to square up to,
+      // and asking for one would point the display at the mean of four marks nobody is sailing
+      // between. It falls back to the watched line's own normal, which is the right answer for
+      // a boat about to cross that line.
+      gate: this.starting ? null : this.gateOf(step),
       relocations: this.relocations,
     };
   }

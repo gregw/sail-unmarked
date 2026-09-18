@@ -236,6 +236,35 @@ ok('the screen is asked to stay awake on joining, and says honestly whether it w
   device().includes('id="awake"')
   && device().includes(mod.__boat.awake.held ? 'Screen stays on' : 'Let screen sleep'));
 
+/* ------------------------------------------------------- the back gesture, guarded */
+
+// NOTHING IS CACHED ACROSS A RELOAD, so leaving costs the course, the crossings and the clock
+// — and on a phone the back gesture is an edge swipe away from everything else. The guard is
+// armed by the same hook the wake lock uses, because joining is when the page's promises change.
+const hist = window.history;
+ok('joining pushes a sentinel history entry, which is what the back gesture lands on',
+  mod.__boat.leaving.armed && hist.pushed.length === 1);
+ok('...and nothing is asked before there is a race to lose', $('leaving').hidden);
+
+H('window:popstate')({});
+ok('a back gesture while racing ASKS rather than leaving', !$('leaving').hidden);
+// Pushed again BEFORE the question is asked: the browser has already moved off the sentinel,
+// so without this a second gesture would leave with no question at all.
+ok('...and puts the sentinel back, so the next gesture is caught too', hist.pushed.length === 2);
+
+$('leave_stay').fire('click', {});
+ok('keeping racing closes the question and stays', $('leaving').hidden && mod.__boat.leaving.armed);
+
+H('window:popstate')({});
+$('leave_go').fire('click', {});
+// Past the sentinel AND past the page's own entry, which is where the gesture was going.
+ok('answering LEAVE goes back past the sentinel, which is where the gesture meant to go',
+  hist.went === -2 && $('leaving').hidden && !mod.__boat.leaving.armed);
+
+// Re-armed by hand, because the page is still on the course: the assertion above disarmed the
+// guard without the device having left, and what follows is about leaving properly.
+mod.__boat.leaving.arm(true);
+
 /* ---------------------------------------------------- sailing, on derived numbers */
 
 const client = mod.__boat.device.client;
@@ -309,6 +338,10 @@ ok('with the fixes stopped, the screen says so and counts — a dead receiver is
 $('leave').fire('click', {});
 await settle(400);
 ok('leaving the course comes back to the join screen', /<div class="join">/.test(device()));
+// On the join screen there is nothing to lose, and a page that argued about being left would
+// be one people close for good.
+ok('...and stops guarding the back gesture, there being nothing left to lose',
+  !mod.__boat.leaving.armed && $('leaving').hidden);
 // The watch is left running on purpose: the permission is already given, and a boat that has
 // just finished one course usually starts another. Tearing it down would mean a cold start.
 ok('...and keeps the watch, since a cold start over again would be a cost for nothing',

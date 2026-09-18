@@ -74,6 +74,26 @@ It has no start and no finish of its own — a boat begins and ends wherever it 
 would claim something untrue about it. **A leg is named by the step it runs INTO**, so numbering
 from zero keeps the leg into step 1 called leg 1 on a cycle exactly as on an open course.
 
+### Entry points: where a lap may begin, and therefore where it ends
+
+`entry` marks a step a boat may begin a lap at. It means nothing on an open course, which has one
+start and one finish by position.
+
+**The line crossed to begin a lap must be crossed again, in the same sense, to end it.** So an
+entry point is a start and a finish at once, and a lap is bounded by the same crossing twice rather
+than by two different ones. That puts the burden on course design — a cycle wants lines a boat
+passes once per lap — and takes it off the scoring, which would otherwise have to decide which of
+several crossings closed the loop.
+
+A cycle may name **several**, and a boat begins at whichever it crosses first: before the start
+they are all live, as alternatives in the same sense a gate's sides are. What the boat did with
+that choice needs no field in the record — **roles are positional there too**: the first crossing
+began the run and the last ended it, and on a cycle they name the same step.
+
+> **A cycle with NO entry point is reported as a problem** and cannot be snapshotted, so it can
+> never be published or joined. There is otherwise nothing to start the clock on and nothing to
+> finish against — a boat would be handed a ring of marks and no way to say it had sailed it.
+
 ---
 
 ## Leg length, and the handle
