@@ -154,6 +154,9 @@ courses:
         notes: >
           From snapshot sprints-1/race-1/2026-09-14T06:19:01.
         lines:
+          windward:
+            port:      {latitude: -33.816960, longitude: 151.277261}
+            starboard: {latitude: -33.818038, longitude: 151.278616}
           leeward:
             port:      {latitude: -33.819350, longitude: 151.273230}
             starboard: {latitude: -33.820634, longitude: 151.274732}
@@ -163,9 +166,6 @@ courses:
           gate-right:
             port:      {latitude: -33.821595, longitude: 151.272669}
             starboard: {latitude: -33.822170, longitude: 151.271945}
-          windward:
-            port:      {latitude: -33.816960, longitude: 151.277261}
-            starboard: {latitude: -33.818038, longitude: 151.278616}
         sequence:
           - {line: leeward, cross: forward}
           - {line: windward, cross: forward}
@@ -182,6 +182,9 @@ courses:
         notes: >
           From snapshot sprints-1/race-4/2026-09-14T06:21:49.
         lines:
+          windward:
+            port:      {latitude: -33.816960, longitude: 151.277261}
+            starboard: {latitude: -33.818038, longitude: 151.278616}
           leeward:
             port:      {latitude: -33.819889, longitude: 151.272457}
             starboard: {latitude: -33.821173, longitude: 151.273950}
@@ -191,9 +194,6 @@ courses:
           gate-right:
             port:      {latitude: -33.821595, longitude: 151.272669}
             starboard: {latitude: -33.822170, longitude: 151.271945}
-          windward:
-            port:      {latitude: -33.816960, longitude: 151.277261}
-            starboard: {latitude: -33.818038, longitude: 151.278616}
         sequence:
           - {line: leeward, cross: forward}
           - {line: windward, cross: forward}
@@ -222,3 +222,11 @@ courses:
               Either side.
           - {line: windward-4, cross: forward}
           - {line: leeward-4, cross: reverse}
+
+races:
+  20260918-race-1:
+    name: Race 1
+    date: 2026-09-18
+    format: fleet
+    divisions:
+      open: {course: sprints-1, variant: race-1}

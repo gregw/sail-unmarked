@@ -150,7 +150,7 @@ const mk = (id) => ({
   },
 });
 
-const tabs = ['points', 'lines', 'courses'].map((t) => {
+const tabs = ['points', 'lines', 'courses', 'races'].map((t) => {
   const e = mk(`tab-${t}`);
   e.dataset.tab = t;
   return e;

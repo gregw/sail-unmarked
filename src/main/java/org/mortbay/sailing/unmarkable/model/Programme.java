@@ -40,6 +40,7 @@ public record Programme(
     @JsonProperty("points") Map<String, NamedPoint> points,
     @JsonProperty("lines") Map<String, Line> lines,
     @JsonProperty("courses") Map<String, Course> courses,
+    @JsonProperty("races") Map<String, Race> races,
     @JsonProperty("notes") String notes)
 {
     public Programme
@@ -64,6 +65,8 @@ public record Programme(
             new Line(id, l.name(), l.port(), l.starboard(), l.notes()));
         courses = keyById(courses, Course::id, (c, id) ->
             new Course(id, c.name(), c.notes(), c.isPublic(), c.variants()));
+        races = keyById(races, Race::id, (r, id) ->
+            new Race(id, r.name(), r.date(), r.format(), r.divisions(), r.next(), r.notes()));
     }
 
     /**
@@ -132,6 +135,15 @@ public record Programme(
         {
             add(problems, Ids.problem("course", id, Ids.PLAIN));
             problems.addAll(course.problems(lines, points));
+        });
+        races.forEach((id, race) -> problems.addAll(race.problems(courses)));
+        // A chain that names a race which is not here is worth saying out loud: it is the one
+        // thing in a race definition that reaches OUTSIDE the race, and a boat that finishes
+        // would find the chain simply not firing, with nothing anywhere saying why.
+        races.forEach((id, race) ->
+        {
+            if (race.next() != null && !races.containsKey(race.next()))
+                problems.add("race '" + id + "' is followed by unknown race '" + race.next() + "'");
         });
         return problems;
     }

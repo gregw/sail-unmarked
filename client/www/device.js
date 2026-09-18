@@ -26,6 +26,8 @@ import {
   OVERVIEW_ZOOM, OverviewView, PlotView, Turner, esc, markScreen, overviewPanel,
 } from './markscreen.js';
 import { RaceClient } from './raceclient.js';
+import { Dialog } from './dialog.js';
+import { alertBanner, alertModal, chatPanel, placePanel, startRow } from './screens.js';
 
 /**
  * The plot's own coordinate space, which is not the panel's width in pixels.
@@ -55,6 +57,15 @@ export const PLOT = { width: 400, height: 330 };
  * — and a join screen that threw rather than opening would be the worst possible trade for
  * remembering a sail number.
  */
+/**
+ * "No race — just sail a course", which is an ANSWER rather than the absence of one.
+ *
+ * The empty option on every other level means *not yet chosen*; this one means *there is nobody
+ * running a race on this*, which is a thing somebody means and is what this system did before
+ * there were committees (§8.2). Two different facts need two different values.
+ */
+export const NO_RACE = '__course';
+
 export const REMEMBERED = 'unmarkable.join';
 
 export function recall() {
@@ -116,6 +127,26 @@ export class Device {
     // different things and arrive at a new leg at different moments, so one shared bearing
     // would have each of them jumping whenever the other one moved.
     this.courseTurn = new Turner();
+
+    /*
+     * THE CONVERSATION, and it is allowed to be absent.
+     *
+     * Nothing on the path from a fix to a latch goes through it: the boat detects and times its
+     * own crossings with no network, and everything here is either something it tells the fleet
+     * or something the committee tells it. So the dialog is constructed, it may never connect,
+     * and the screens say which state they are in rather than pretending.
+     *
+     * `onChange` rather than the device polling it: a message can arrive between fixes — a flag
+     * does not wait for the boat to move — and a screen that only redrew on a fix would show an
+     * abandonment whenever the next fix happened to turn up.
+     */
+    this.dialog = new Dialog({ onChange: () => this.render() });
+    // Whether a new channel entry has been allowed to take the screen yet. Auto's one new
+    // clause fires once per entry: bringing the channel up again every render would make it
+    // impossible to look at anything else (§9.5).
+    this.offered = 0;
+    // `Place` is a screen you go to, so which half of the fleet it shows is a setting on it.
+    this.division = false;
   }
 
   /* ======================================================== what can be joined */
@@ -133,7 +164,46 @@ export class Device {
     } catch (error) {
       this.message = `Could not read the public courses: ${error.message}`;
     }
+    await this.loadRaces();
     return this.courses;
+  }
+
+  /**
+   * THE RACES EACH SERIES HAS TODAY, because a boat joins a RACE where there is one.
+   *
+   * A course can be joined without a race behind it — that is the whole of §8.2 and it is what
+   * this system did before there were committees — but where a club is running one, joining the
+   * course and hoping to be matched to the race is the wrong way round: it works only while one
+   * division sails one course, and it leaves the boat unable to say which division it is in.
+   *
+   * <b>Today's races only.</b> A race defined for next Saturday is not something a boat can join
+   * this afternoon, and offering it would be offering a mistake. Where a series has races but
+   * none today, the screen says so rather than showing an empty list, because *no races* and *no
+   * races today* are different facts and only the second is worth acting on.
+   *
+   * Read over REST like everything else the join screen needs: it is online by definition, and
+   * these are cacheable reads that work before there is a session (§8.1).
+   */
+  async loadRaces() {
+    this.races = {};
+    const series = [...new Set(this.courses.map((c) => `${c.club}/${c.series}`))];
+    await Promise.all(series.map(async (key) => {
+      try {
+        const held = await (await fetch(`/api/races/${key}`)).json();
+        this.races[key] = Object.entries(held ?? {})
+          .map(([id, race]) => ({ id, ...race }));
+      } catch {
+        // No races, or an older server with no such endpoint. Either way the screen falls back
+        // to choosing a course, which is what it did before there were races at all.
+        this.races[key] = [];
+      }
+    }));
+    return this.races;
+  }
+
+  /** Today in the boat's own reckoning, which is the day a race is offered on. */
+  static today() {
+    return new Date().toLocaleDateString('en-CA');
   }
 
   /* ============================================================== the screens */
@@ -160,23 +230,94 @@ export class Device {
     if (chooser && document.activeElement === chooser) return undefined;
 
     const now = Date.now();
+    /*
+     * AUTO'S ONE NEW CLAUSE, and the test is the one that already exists: if the Line screen
+     * would be taken, chat does not take it (§9.5). Offered once per entry rather than while
+     * there is an unread one, or a boat with something unread could never look at its course.
+     */
+    const news = this.dialog.live && this.dialog.channel.length > this.offered;
+    const wanted = this.client.view(now, { channel: news });
+    if (news && wanted === 'chat') this.offered = this.dialog.channel.length;
+
     // FORCING the Mark screen can ask for a state there is none of — no fix yet, no surveyed
     // mark — and the honest answer then is the overview, not a blank. So the state is asked
     // for and the screen follows what came back rather than what was requested.
-    const mark = this.client.view(now) === 'mark' ? this.client.markState(now) : null;
+    const mark = wanted === 'mark' ? this.client.markState(now) : null;
     const shared = {
       orientation: this.orientation, viewMode: this.client.viewMode, ...PLOT, now,
+      // A screen with nothing behind it is not offered: Chat and Place are absent from the
+      // selector unless there is a race to have a channel (§8.2).
+      channel: this.dialog.live, unread: this.dialog.unread,
     };
-    this.host.innerHTML = (mark
-      ? markScreen(mark, { ...shared, view: this.plotView })
-      : overviewPanel(this.client, {
-        ...shared, turner: this.courseTurn, view: this.overview, basemap: this.basemap,
-      })) + this.bottomRow();
+
+    /*
+     * NOTHING INTERRUPTS AN APPROACH (§9.3). While the Mark screen has the display the alert
+     * shows as a banner and the modal waits — a sailor thirty metres off a line at nine knots
+     * is doing the one thing on this boat that cannot be interrupted, and a dialog over the plot
+     * at that moment is worse than any news it could be carrying.
+     */
+    const alert = this.dialog.alert;
+    const approaching = mark != null;
+
+    let screen;
+    if (mark) screen = markScreen(mark, { ...shared, view: this.plotView })
+      + (alert ? alertBanner(alert) : '');
+    else if (wanted === 'chat') screen = chatPanel(this.dialog, { ...shared });
+    else if (wanted === 'place') screen = placePanel(this.dialog,
+      { ...shared, division: this.division });
+    else screen = overviewPanel(this.client, {
+      ...shared, turner: this.courseTurn, view: this.overview, basemap: this.basemap,
+    });
+
+    this.host.innerHTML = startRow(this.dialog, now)
+      + screen
+      + this.bottomRow()
+      + (alert && !approaching ? alertModal(alert) : '');
     this.wireOrientation();
     this.wireViews();
     this.wireChart();
+    this.wireChannel();
     this.wireBottom();
+    // Being on the channel screen IS reading it — and NOT notified, because this is a render
+    // and `changed()` is a request for one.
+    if (wanted === 'chat') this.dialog.markRead(false);
     return undefined;
+  }
+
+  /**
+   * The channel's own controls: what a boat says, and the one gesture that acknowledges.
+   *
+   * <b>Dismissing the alert IS the acknowledgement</b> (§9.3) — one gesture, not two. A dialog
+   * offering *Dismiss* and a separate *Acknowledge* would be asking somebody at a tiller to
+   * agree that they had read a thing they had just closed.
+   */
+  wireChannel() {
+    this.el('alertOk')?.addEventListener('click', () => {
+      this.dialog.ack(this.dialog.alert?.id, this.dialog.alert?.type);
+      this.render();
+    });
+    for (const button of this.host.querySelectorAll('[data-say]')) {
+      button.addEventListener('click', () => {
+        this.dialog.say(button.dataset.say);
+        this.render();
+      });
+    }
+    for (const button of this.host.querySelectorAll('[data-place]')) {
+      button.addEventListener('click', () => {
+        this.division = button.dataset.place === 'mine';
+        this.render();
+      });
+    }
+    this.el('sayGo')?.addEventListener('click', () => {
+      const field = this.el('sayText');
+      if (this.dialog.say(field?.value)) {
+        if (field) field.value = '';
+        this.render();
+      }
+    });
+    // The log is read bottom-up like every other log on the water, so it opens at the bottom.
+    const log = this.el('chatLog');
+    if (log) log.scrollTop = log.scrollHeight;
   }
 
   el(id) {
@@ -198,6 +339,9 @@ export class Device {
   leave() {
     this.client = null;
     this.snapshot = null;
+    // Goodbye on the wire as well, so the fleet list stops showing a boat that has gone home.
+    // Not awaited: leaving is a thing that has happened, not a request.
+    this.dialog.leave().catch(() => null);
     this.hooks.onLeave?.();
     this.renderJoin();
   }
@@ -206,12 +350,21 @@ export class Device {
     return `
       <div class="deck">
         ${this.hooks.extras?.() ?? ''}
+        ${this.dialog.live && !this.dialog.outcome
+          // RETIRING IS NEVER INFERRED (§8.6): a boat retires because a sailor pressed retire,
+          // and the software does not work it out from a boat that stopped reporting.
+          ? '<button class="plain" id="retire">Retire</button>' : ''}
         <button class="plain" id="leave">Leave course</button>
       </div>`;
   }
 
   wireBottom() {
     this.el('leave')?.addEventListener('click', () => this.leave());
+    this.el('retire')?.addEventListener('click', () => {
+      this.dialog.retire('retired');
+      this.dialog.outcome = 'retired';
+      this.render();
+    });
     this.hooks.wireExtras?.();
   }
 
@@ -332,13 +485,50 @@ export class Device {
     const series = club
       ? [...new Set(this.courses.filter((c) => c.club === club).map((c) => c.series))] : [];
     const chosenSeries = series.includes(this.boat.series) ? this.boat.series : '';
-    const courses = chosenSeries
+    /*
+     * A BOAT JOINS A RACE WHERE THERE IS ONE, and a course only where there is not.
+     *
+     * Joining the course and letting the server work out which race that is works only while
+     * one division sails one course, and it leaves the boat unable to say which division it is
+     * in — which is the gap `ask` exists for (§8.2). Naming the race and the division closes it
+     * from the other end, and costs one selector.
+     *
+     * `NO_RACE` is a real answer rather than an absent one, which is why it is a value and not
+     * the empty placeholder: *I am sailing this course with nobody running a race on it* is a
+     * thing somebody means, and it is what this system did before there were committees.
+     */
+    const today = Device.today();
+    const all = (this.races?.[`${club}/${chosenSeries}`] ?? []);
+    const racesToday = all.filter((race) => race.date === today);
+    const chosenRace = racesToday.find((r) => r.id === this.boat.race) ?? null;
+    const courseOnly = this.boat.race === NO_RACE || racesToday.length === 0;
+
+    // A race's divisions, each already naming what it sails — so choosing one chooses the
+    // course and the variant, and the boat never picks geometry it was not entered for.
+    const divisions = Object.entries(chosenRace?.divisions ?? {})
+      .map(([name, division]) => ({ name, ...division }));
+    const chosenDivision = divisions.find((d) => d.name === this.boat.division) ?? null;
+
+    // What the race says this division sails, crossed with what is actually published: a
+    // division naming a course nobody published is a race nobody can join, and saying so here
+    // is better than a refusal after the button.
+    const raceCourse = chosenDivision
+      ? this.courses.find((c) => c.club === club && c.series === chosenSeries
+        && c.course === chosenDivision.course) ?? null
+      : null;
+    const racePublished = raceCourse?.published?.find((p) => !chosenDivision.variant
+      || p.variant === chosenDivision.variant) ?? null;
+
+    const courses = chosenSeries && courseOnly
       ? this.courses.filter((c) => c.club === club && c.series === chosenSeries) : [];
     const chosenCourse = courses.find((c) => c.course === this.boat.course) ?? null;
     const variants = chosenCourse?.published ?? [];
     const chosenVariant = variants.find((v) => v.variant === this.boat.variant) ?? null;
     const blocked = this.hooks.blocked?.() ?? null;
-    const ready = !!(club && chosenSeries && chosenCourse && chosenVariant) && !blocked;
+
+    const ready = !!(club && chosenSeries && !blocked
+      && (courseOnly ? (chosenCourse && chosenVariant) : (chosenRace && chosenDivision
+        && racePublished)));
 
     /**
      * A level's options, headed by the question itself.
@@ -366,7 +556,7 @@ export class Device {
             <input id="j_name" value="${esc(this.boat.name)}" placeholder="Bombora"></div>
         </div>
 
-        <h2>Course</h2>
+        <h2>What you are sailing</h2>
         ${this.courses.length === 0 ? `<p class="muted" style="font-size:13px">
           Nothing to join. A course appears here once it is ticked <strong>public</strong>
           and has a published snapshot &mdash; both, because what a boat is handed is a
@@ -378,16 +568,56 @@ export class Device {
           <select id="j_series"${club ? '' : ' disabled'}>${level(
             series.map((v) => ({ value: v, label: v })), chosenSeries,
             'Choose a series', 'Choose a club first')}</select>
-          <label for="j_course">Course</label>
-          <select id="j_course"${chosenSeries ? '' : ' disabled'}>${level(courses.map((c) =>
-            ({ value: c.course, label: c.name && c.name !== c.course ? `${c.name} (${c.course})` : c.course })),
-            chosenCourse?.course, 'Choose a course', 'Choose a series first')}</select>
-          <label for="j_variant">Variant</label>
-          <select id="j_variant"${chosenCourse ? '' : ' disabled'}>${level(variants.map((v) =>
-            ({ value: v.variant, label: `${v.name ?? v.variant}${v.lengthNm == null ? '' : ` — ${v.lengthNm.toFixed(2)} nm`}${v.closed ? ', cycle' : ''}` })),
-            chosenVariant?.variant, 'Choose a variant', 'Choose a course first')}</select>
-          ${chosenVariant ? `<p class="muted mono" style="font-size:11px; margin-top:6px">
-            revision ${esc(chosenVariant.revision)} &middot; ${chosenVariant.steps ?? '?'} marks</p>` : ''}
+
+          <!--
+            THE RACE COMES FIRST WHERE THERE IS ONE. Joining a course and letting the server
+            work out which race that is works only while one division sails one course, and it
+            leaves the boat unable to say which division it is in. Naming the race and then the
+            division settles both, and the course follows from the division rather than being
+            picked again — a boat does not choose the geometry it was entered for.
+          -->
+          ${racesToday.length === 0 ? `${all.length && chosenSeries
+            ? `<p class="muted" style="font-size:11.5px; margin-top:8px">This series has
+                ${all.length} race${all.length === 1 ? '' : 's'} defined, none today
+                (${esc(today)}) &mdash; so there is a course to sail and nobody running a race
+                on it.</p>` : ''}` : `
+            <label for="j_race">Race</label>
+            <select id="j_race"${chosenSeries ? '' : ' disabled'}>${level([
+              ...racesToday.map((r) => ({
+                value: r.id,
+                label: `${r.name ?? r.id}${r.format ? ` — ${r.format}` : ''}`,
+              })),
+              // A REAL ANSWER, not an absent one: "nobody is running a race on this" is a thing
+              // somebody means, and it is what this system did before there were committees.
+              { value: NO_RACE, label: 'No race — just sail a course' },
+            ], this.boat.race, 'Choose a race', 'Choose a series first')}</select>
+            ${chosenRace ? `
+              <label for="j_division">Division</label>
+              <select id="j_division">${level(divisions.map((d) => ({
+                value: d.name,
+                label: `${d.name} — ${d.course}${d.variant ? `/${d.variant}` : ''}`,
+              })), chosenDivision?.name, 'Choose a division', 'This race has no divisions')}</select>
+              ${chosenDivision && !racePublished ? `<p class="warn" style="font-size:11.5px">
+                Nothing is published for ${esc(chosenDivision.course)}${chosenDivision.variant
+                  ? `/${esc(chosenDivision.variant)}` : ''}, so this division has no course to
+                hand you yet. The club publishes it from the editor.</p>` : ''}
+              ${racePublished ? `<p class="muted mono" style="font-size:11px; margin-top:6px">
+                ${esc(chosenDivision.course)}${chosenDivision.variant
+                  ? `/${esc(chosenDivision.variant)}` : ''}
+                &middot; revision ${esc(racePublished.revision)}
+                &middot; ${racePublished.steps ?? '?'} marks</p>` : ''}` : ''}`}
+
+          ${!courseOnly ? '' : `
+            <label for="j_course">Course</label>
+            <select id="j_course"${chosenSeries ? '' : ' disabled'}>${level(courses.map((c) =>
+              ({ value: c.course, label: c.name && c.name !== c.course ? `${c.name} (${c.course})` : c.course })),
+              chosenCourse?.course, 'Choose a course', 'Choose a series first')}</select>
+            <label for="j_variant">Variant</label>
+            <select id="j_variant"${chosenCourse ? '' : ' disabled'}>${level(variants.map((v) =>
+              ({ value: v.variant, label: `${v.name ?? v.variant}${v.lengthNm == null ? '' : ` — ${v.lengthNm.toFixed(2)} nm`}${v.closed ? ', cycle' : ''}` })),
+              chosenVariant?.variant, 'Choose a variant', 'Choose a course first')}</select>
+            ${chosenVariant ? `<p class="muted mono" style="font-size:11px; margin-top:6px">
+              revision ${esc(chosenVariant.revision)} &middot; ${chosenVariant.steps ?? '?'} marks</p>` : ''}`}
 
           <h2>How you are sailing</h2>
           <label for="j_mode">This counts as</label>
@@ -419,7 +649,10 @@ export class Device {
             : blocked ? blocked
               : !club ? 'Choose a club'
                 : !chosenSeries ? 'Choose a series'
-                  : !chosenCourse ? 'Choose a course' : 'Choose a variant')}</button>`}
+                  : !courseOnly ? (!chosenRace ? 'Choose a race'
+                    : !chosenDivision ? 'Choose a division'
+                      : 'That division has no published course')
+                    : !chosenCourse ? 'Choose a course' : 'Choose a variant')}</button>`}
         ${this.message ? `<p class="warn" style="font-size:12.5px; margin-top:10px">${esc(this.message)}</p>` : ''}
       </div>`;
 
@@ -444,15 +677,27 @@ export class Device {
       if (field === 'club') remember(this.boat);
       this.renderJoin();
     });
-    redraw('club', 'series', 'course', 'variant');
-    redraw('series', 'course', 'variant');
+    redraw('club', 'series', 'race', 'division', 'course', 'variant');
+    redraw('series', 'race', 'division', 'course', 'variant');
+    // Choosing a race drops the division under it, and any course chosen while there was no
+    // race to have one: the two paths are alternatives, not layers.
+    redraw('race', 'division', 'course', 'variant');
+    redraw('division');
     redraw('course', 'variant');
     redraw('variant');
 
     // Guarded as well as disabled: `disabled` is a property of a rendered button, and this
     // handler is the thing that would be asked to join a course nobody has finished choosing.
     this.el('j_go')?.addEventListener('click', () => {
-      if (ready) this.join(club, chosenSeries, chosenCourse.course, chosenVariant.variant);
+      if (!ready) return;
+      // A RACE JOIN NAMES THE RACE AND THE DIVISION; the course comes from the division rather
+      // than from a second question, because it is not a second decision.
+      if (courseOnly) {
+        this.join(club, chosenSeries, chosenCourse.course, chosenVariant.variant);
+      } else {
+        this.join(club, chosenSeries, chosenDivision.course, chosenDivision.variant
+          ?? racePublished.variant, { race: chosenRace.id, division: chosenDivision.name });
+      }
     });
 
     // Whatever the page put in `note()` has just been rebuilt with everything else, so its
@@ -470,15 +715,49 @@ export class Device {
    * published rather than whatever the editor currently holds. After it returns, the server
    * can be switched off and nothing on this page will notice.
    */
-  async join(club, series, course, variant) {
+  async join(club, series, course, variant, entered = {}) {
     this.message = null;
     if (!course || !variant) return;
+    const request = {
+      sailNo: this.boat.sail, name: this.boat.name, club, series, course, variant,
+      tcf: Number(this.boat.tcf) > 0 ? Number(this.boat.tcf) : null,
+      // NAMED where the sailor named them, absent where they did not. The server still finds a
+      // race from the course and the day for a client that says nothing — which is what an
+      // older client does, and §5 rule 1 is why that goes on working.
+      ...(entered.race ? { race: entered.race } : {}),
+      ...(entered.division ? { division: entered.division } : {}),
+    };
+    try {
+      /*
+       * OVER THE DIALOG, which is what §8.2 specifies — and the one message answers both
+       * questions: it hands back the snapshot to sail AND says whether there is a race behind
+       * it. A join with no race gets no channel, no fleet and no fixes, and the absence of
+       * `fixSeconds` is how the boat is told.
+       */
+      const joined = await this.dialog.join(request);
+      this.snapshot = joined.course;
+      this.dialog.revision = joined.revision ?? this.snapshot?.revision ?? null;
+      this.start();
+      return;
+    } catch (error) {
+      this.message = `Could not join: ${error.message}`;
+    }
+    /*
+     * AND IF THERE IS NO CONVERSATION TO BE HAD, SAIL ANYWAY.
+     *
+     * The REST join is the "query and sail" path (§8.2) and it is what a server too old to
+     * hold a dialog offers. Falling back to it is the whole architecture in one gesture: the
+     * conversation is the optional half, so failing to have one must cost the channel and
+     * nothing else. The message above stays on the screen, because a boat sailing without a
+     * committee should know that is what it is doing.
+     */
     try {
       const response = await fetch(
         `/api/join/${encodeURIComponent(club)}/${encodeURIComponent(series)}/${encodeURIComponent(course)}`
         + `?variant=${encodeURIComponent(variant)}`, { method: 'POST' });
       if (!response.ok) throw new Error(`${response.status} ${(await response.text()).slice(0, 200)}`);
       this.snapshot = await response.json();
+      this.message = `${this.message} — sailing the course with no race behind it.`;
       this.start();
     } catch (error) {
       this.message = `Could not join: ${error.message}`;
@@ -516,6 +795,32 @@ export class Device {
   feed(fix) {
     if (!this.client) return null;
     const verdict = this.client.accept(fix);
+
+    /*
+     * AND THEN TELL THE FLEET — which is a side effect of the fix having been accepted, never a
+     * step on the way to accepting it. Ordered deliberately: the client has already decided
+     * everything that matters by the time anything is queued for the server, so a dialog that
+     * throws, blocks or is simply absent cannot reach the decision.
+     *
+     * Only ACCEPTED fixes are reported. A fix the quality gate refused is not a position, and
+     * putting one on a fleet screen would draw a boat where it never was.
+     */
+    if (verdict.accepted && !verdict.relocated) this.dialog.report(fix);
+    if (verdict.latched) {
+      const step = verdict.step;
+      this.dialog.crossing(verdict.latched, {
+        step: step?.index,
+        lap: this.client.lap,
+        letter: step?.letter,
+        finish: this.client.finished,
+        revision: this.client.snapshot?.revision,
+        confirmFixes: this.client.confirmFixes,
+      });
+      // THE ARTEFACT, once there is one. The live crossings were advisory; this is the file a
+      // protest could be argued from, and it is posted the moment the course is complete rather
+      // than being left for somebody to remember (§8.3).
+      if (this.client.finished) this.dialog.record(this.client.record?.() ?? null);
+    }
     this.render();
     return verdict;
   }

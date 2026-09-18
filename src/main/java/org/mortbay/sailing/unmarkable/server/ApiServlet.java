@@ -18,14 +18,18 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.mortbay.sailing.unmarkable.config.AuthConfig;
 import org.mortbay.sailing.unmarkable.config.UnmarkableConfig;
 import org.mortbay.sailing.unmarkable.course.ProgrammeLibrary;
 import org.mortbay.sailing.unmarkable.course.ProgrammeWriter;
+import org.mortbay.sailing.unmarkable.dialog.Dialog;
+import org.mortbay.sailing.unmarkable.dialog.Envelope;
 import org.mortbay.sailing.unmarkable.model.Course;
 import org.mortbay.sailing.unmarkable.model.CourseVariant;
 import org.mortbay.sailing.unmarkable.model.Line;
 import org.mortbay.sailing.unmarkable.model.NamedPoint;
 import org.mortbay.sailing.unmarkable.model.Programme;
+import org.mortbay.sailing.unmarkable.model.Race;
 import org.mortbay.sailing.unmarkable.model.CourseRecord;
 import org.mortbay.sailing.unmarkable.model.CourseSnapshot;
 import org.mortbay.sailing.unmarkable.store.CourseLedger;
@@ -100,15 +104,19 @@ public class ApiServlet extends HttpServlet
     private final ProgrammeLibrary programmes;
     private final JsonStore store;
     private final CourseLedger ledger;
+    private final Dialog dialog;
+    private final AuthConfig auth;
     private final String version;
 
     public ApiServlet(UnmarkableConfig config, ProgrammeLibrary programmes,
-        JsonStore store, CourseLedger ledger, String version)
+        JsonStore store, CourseLedger ledger, Dialog dialog, AuthConfig auth, String version)
     {
+        this.auth = auth;
         this.config = config;
         this.programmes = programmes;
         this.store = store;
         this.ledger = ledger;
+        this.dialog = dialog;
         this.version = version;
     }
 
@@ -120,11 +128,23 @@ public class ApiServlet extends HttpServlet
         {
             if (path.length == 1 && path[0].equals("config"))
             {
-                send(resp, Map.of(
-                    "version", version,
-                    "site", config.site(),
-                    "programmeErrors", programmes.loadErrors(),
-                    "storeErrors", store.loadErrors()));
+                // WHO IS SIGNED IN RIDES ON THE CONFIG a page already fetches, rather than on an
+                // endpoint of its own: it is one more fact about this server as this browser
+                // sees it, and a second round trip to learn a name nobody is deciding anything
+                // from would be a second thing to keep in step.
+                SignedIn who = SignedIn.of(req, auth);
+                Map<String, Object> body = new LinkedHashMap<>();
+                body.put("version", version);
+                body.put("site", config.site());
+                body.put("programmeErrors", programmes.loadErrors());
+                body.put("storeErrors", store.loadErrors());
+                body.put("auth", Map.of(
+                    "required", auth != null && auth.enabled(),
+                    "signedIn", who.isSignedIn(),
+                    "email", who.email() == null ? "" : who.email(),
+                    "name", who.name() == null ? "" : who.name(),
+                    "logout", AuthFilter.LOGOUT_PATH));
+                send(resp, body);
                 return;
             }
             if (path.length == 1 && path[0].equals("programmes"))
@@ -145,6 +165,31 @@ public class ApiServlet extends HttpServlet
             if (path.length == 1 && path[0].equals("log"))
             {
                 send(resp, publicLog(limit(req, 200)));
+                return;
+            }
+            // WHAT IS HAPPENING IN ONE RACE: the fleet table, the channel, the start states and
+            // the acknowledgement coverage. Read by the race screen, which is a laptop on a desk
+            // polling a page — see Dialog.Room.conduct for why that is not the dialog itself.
+            if (path.length == 4 && path[0].equals("conduct"))
+            {
+                Dialog.Room room = dialog.room(path[1], path[2], path[3]).orElse(null);
+                if (room == null)
+                {
+                    resp.sendError(404, "No such race");
+                    return;
+                }
+                send(resp, room.conduct());
+                return;
+            }
+            if (path.length == 3 && path[0].equals("races"))
+            {
+                Programme programme = programmes.programme(path[1], path[2]).orElse(null);
+                if (programme == null)
+                {
+                    resp.sendError(404, "No such programme");
+                    return;
+                }
+                send(resp, programme.races());
                 return;
             }
             if (path.length == 3 && path[0].equals("programmes"))
@@ -254,7 +299,8 @@ public class ApiServlet extends HttpServlet
             .orElse(Map.of());
         try
         {
-            programmes.save(path[1], path[2], update.points(), update.lines(), update.courses(), update.forWriter());
+            programmes.save(path[1], path[2], update.points(), update.lines(), update.courses(),
+                update.races(), update.forWriter());
         }
         catch (IOException e)
         {
@@ -307,6 +353,11 @@ public class ApiServlet extends HttpServlet
             publish(req, resp, path[1], path[2]);
             return;
         }
+        if (path.length == 4 && path[0].equals("conduct"))
+        {
+            conduct(req, resp, path[1], path[2], path[3]);
+            return;
+        }
         if (path.length != 1 || !path[0].equals("records"))
         {
             resp.sendError(404);
@@ -330,7 +381,7 @@ public class ApiServlet extends HttpServlet
         }
         try
         {
-            store.save(record);
+            store.save(record, zoneOf(record.club(), record.series()));
         }
         catch (IllegalArgumentException e)
         {
@@ -539,6 +590,59 @@ public class ApiServlet extends HttpServlet
      * location for it.
      */
     /**
+     * THE COMMITTEE PUBLISHES: a start, a flag, a course, a message, an outcome.
+     *
+     * <p>One endpoint taking one envelope, because they are one act as far as the protocol is
+     * concerned — a thing that becomes a division's state and writes its receipt into the
+     * channel (§9.4). The screen decides which of them to offer and confirms it; what arrives
+     * here is already a decision somebody made.
+     *
+     * <p><b>There is no GO here, and there cannot be</b> (§1.2, §12.3). The server keeps no
+     * clock, so a start is not triggered but SCHEDULED as an absolute instant — and the
+     * arithmetic that turned "in five minutes" into that instant was done in the operator's
+     * browser against the operator's own clock.
+     *
+     * <p>TODO: gated by {@code configWrites} like the other writes, and that is not the answer.
+     * Abandoning a race is the most consequential act in this system and the one that most
+     * obviously wants a name attached to it — which is §7.1's "authenticate authority, trust
+     * data", and open question 8.
+     */
+    private void conduct(HttpServletRequest req, HttpServletResponse resp, String club,
+        String series, String raceId) throws IOException
+    {
+        if (!config.server().configWrites())
+        {
+            resp.sendError(403, "Config writes are disabled (server.configWrites)");
+            return;
+        }
+        Dialog.Room room = dialog.room(club, series, raceId).orElse(null);
+        if (room == null)
+        {
+            resp.sendError(404, "No such race");
+            return;
+        }
+        Envelope message;
+        try
+        {
+            message = MAPPER.readValue(req.getInputStream(), Envelope.class);
+        }
+        catch (Exception e)
+        {
+            resp.sendError(400, "Unreadable message: " + e.getMessage());
+            return;
+        }
+        if (message.type() == null || message.type().isBlank())
+        {
+            resp.sendError(400, "A message with no type is not a message");
+            return;
+        }
+        Envelope sent = dialog.publish(room, message);
+        LOG.info("{} published {} to {} boat(s) of {}/{}/{}", club, sent.type(),
+            room.boats().size(), club, series, raceId);
+        send(resp, Map.of("published", true, "id", sent.id(), "at", sent.at()));
+    }
+
+    /**
      * A boat takes a course to sail.
      *
      * <p>This is the one write a boat makes before the start, and it exists so that the
@@ -550,6 +654,21 @@ public class ApiServlet extends HttpServlet
      * the record afterwards — a boat that joins and never sails leaves no trace beyond a
      * design that was worth keeping anyway.
      */
+    /**
+     * The club's own timezone, which is the zone a race DAY is counted in.
+     *
+     * <p>Taken from the programme file, where a club declares it once. A record for a series
+     * that no longer exists — retired between the sailing and the submitting — falls back to
+     * null, which the store reports rather than filing quietly under the wrong day.
+     */
+    java.time.ZoneId zoneOf(String club, String series)
+    {
+        return programmes.programme(club, series)
+            .map(Programme::timezone)
+            .map(java.time.ZoneId::of)
+            .orElse(null);
+    }
+
     private void join(HttpServletResponse resp, String club, String series, String courseId,
         String variantId) throws IOException
     {
@@ -1053,11 +1172,13 @@ public class ApiServlet extends HttpServlet
         @JsonProperty("points") Map<String, NamedPoint> points,
         @JsonProperty("lines") Map<String, Line> lines,
         @JsonProperty("courses") Map<String, Course> courses,
+        @JsonProperty("races") Map<String, Race> races,
         @JsonProperty("renames") List<Rename> renames)
     {
         public PointsUpdate
         {
             courses = (courses == null) ? null : new LinkedHashMap<>(courses);
+            races = (races == null) ? null : new LinkedHashMap<>(races);
             // Null means "leave that block alone", which is different from an empty map
             // meaning "this programme now has none". The editor sends both blocks when a
             // line edit created a point, and one when it did not.

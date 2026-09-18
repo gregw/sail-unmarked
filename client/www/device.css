@@ -22,6 +22,9 @@
   min-height: 0;
   background: var(--sea);
   overflow-y: auto;
+  /* So an alert can cover THIS screen and nothing else. A modal that covered the page would
+     cover the rig it is sitting on, which is a desk and not a phone. */
+  position: relative;
 }
 
 .device .bar {
@@ -173,3 +176,117 @@ button.plain {
 }
 button.plain:hover { border-color: var(--line); }
 button.plain.on { border-color: var(--ok); color: var(--ok); }
+
+/* ===================================================== what the dialog adds (§§9.1–9.3) */
+
+/*
+ * THE START, above every screen while there is one to count to. It is the one thing on this
+ * device that is about a moment rather than a place, and in the five minutes it matters it is
+ * the only thing anybody is looking at — so it is not on a screen you have to choose.
+ */
+.start {
+  display: flex; align-items: baseline; gap: 2cqi;
+  padding: 5px 3cqi; border-bottom: 1px solid var(--panel2);
+  background: var(--panel); color: var(--muted);
+}
+.start .what {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase;
+}
+.start .value { font-family: var(--disp); font-size: min(9cqi, 36px); font-weight: 700; line-height: 1; }
+.start .said { font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.start.warning { color: var(--toside); }
+.start.warning .value { color: var(--toside); }
+.start.racing { color: var(--ok); }
+.start.racing .value { color: var(--ok); }
+.start.postponed, .start.abandoned { color: var(--warn); }
+
+/* The unread count rides on the Chat button: the one thing about the channel worth knowing
+   from another screen. */
+.orient.views .unread {
+  background: var(--ok); color: var(--sea); border-radius: 7px;
+  padding: 0 4px; font-size: 9px;
+}
+
+/* ------------------------------------------------------------------ the channel (§9.2) */
+
+.log { flex: 1; min-height: 120px; overflow-y: auto; padding: 4px 0; }
+.log .said { padding: 4px 12px; border-left: 3px solid transparent; }
+.log .said .who {
+  display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--muted);
+}
+.log .said .who .from { font-weight: 600; color: var(--ink); }
+.log .said .who .kind { letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.7; }
+.log .said .text { font-size: 14px; }
+.log .said.unseen { border-left-color: var(--toside); }
+.log .said .badge {
+  background: var(--toside); color: var(--sea); border-radius: 3px;
+  padding: 0 4px; font-family: var(--mono); font-size: 9px;
+}
+/*
+ * THE SAFETY THREE ARE NOT RACING MESSAGES and must not look like racing messages. They are on
+ * the channel because it is the radio, and this is what a radio is for when the racing stops
+ * mattering — so one must be impossible to scroll past.
+ */
+.log .said.safety { border-left-color: var(--warn); background: rgba(255, 95, 86, 0.08); }
+
+.canned { display: flex; flex-wrap: wrap; gap: 5px; padding: 6px 12px 0; }
+.canned.safety { padding-top: 4px; border-top: 1px dashed var(--panel2); margin-top: 4px; }
+.canned.safety button { border-color: var(--warn); color: var(--warn); }
+.compose { display: flex; gap: 6px; padding: 8px 12px 12px; }
+.compose input {
+  flex: 1; min-width: 0; background: var(--panel2); color: var(--ink);
+  border: 1px solid var(--panel2); border-radius: 4px; padding: 6px 8px; font-size: 14px;
+}
+.compose input:focus { outline: none; border-color: var(--line); }
+
+/* -------------------------------------------------------------- race progress (§9.1) */
+
+.ladder { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ladder th {
+  text-align: left; font-family: var(--mono); font-size: 9px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--muted); font-weight: 400; padding: 4px 6px;
+  border-bottom: 1px solid var(--panel2);
+}
+.ladder td { padding: 3px 6px; border-bottom: 1px solid rgba(23, 41, 58, 0.5); }
+.ladder td.place { color: var(--muted); }
+.ladder tr.me td { background: var(--panel); }
+.ladder tr.me td.place { color: var(--line); font-weight: 700; }
+/* A boat whose last fix is old is drawn faded — the same rule the boat's own staleness
+   follows, and the reason this screen ages rather than blanks. */
+.ladder tr.stale td { opacity: 0.45; }
+
+/* --------------------------------------------------------------- alerts (§9.3) */
+
+/*
+ * A course change or a flag changes what the boat is doing, so it interrupts — and dismissing
+ * it IS the acknowledgement the server is waiting for. One gesture, not two.
+ */
+.alert {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(14, 26, 38, 0.82); padding: 8cqi; z-index: 5;
+}
+.alert .box {
+  background: var(--panel); border: 2px solid var(--toside); border-radius: 8px;
+  padding: 14px; width: 100%;
+}
+.alert .kind {
+  font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--toside);
+}
+.alert .text { font-size: 17px; margin: 6px 0; }
+.alert .when { font-size: 10.5px; color: var(--muted); }
+
+/*
+ * NOTHING INTERRUPTS AN APPROACH. While the Mark screen has the display the news shows as this
+ * strip and the modal waits: a sailor thirty metres off a line at nine knots is doing the one
+ * thing on this boat that cannot be interrupted, and a dialog over the plot at that moment is
+ * worse than any news it could be carrying. It is not a quiet failure — it says what arrived
+ * and it stays until it is read.
+ */
+.banner {
+  display: flex; align-items: baseline; gap: 6px;
+  margin: 0 12px 8px; padding: 5px 8px;
+  border-left: 3px solid var(--toside); background: var(--panel); font-size: 12.5px;
+}
+.banner .kind { font-size: 9px; letter-spacing: 0.14em; color: var(--toside); }
+.banner .text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.banner .after { font-size: 9px; color: var(--muted); }

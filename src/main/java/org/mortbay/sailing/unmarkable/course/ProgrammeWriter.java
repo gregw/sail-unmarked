@@ -15,6 +15,7 @@ import org.mortbay.sailing.unmarkable.model.Ids;
 import org.mortbay.sailing.unmarkable.model.Line;
 import org.mortbay.sailing.unmarkable.model.LineEnd;
 import org.mortbay.sailing.unmarkable.model.NamedPoint;
+import org.mortbay.sailing.unmarkable.model.Race;
 
 /**
  * Writes the {@code points:} block back into a programme file, leaving every other byte
@@ -91,6 +92,13 @@ public final class ProgrammeWriter
         Map<String, Line> lines, Map<String, Course> courses,
         java.util.List<Rename> renames) throws IOException
     {
+        write(file, points, lines, courses, null, renames);
+    }
+
+    public static void write(Path file, Map<String, NamedPoint> points,
+        Map<String, Line> lines, Map<String, Course> courses, Map<String, Race> races,
+        java.util.List<Rename> renames) throws IOException
+    {
         String original = Files.readString(file, StandardCharsets.UTF_8);
         for (Rename rename : renames)
             original = renameReference(original, referenceKey(rename.kind()), rename.from(), rename.to());
@@ -101,6 +109,8 @@ public final class ProgrammeWriter
             updated = splice(updated, "lines", emitLines(lines));
         if (courses != null)
             updated = splice(updated, "courses", emitCourses(courses));
+        if (races != null)
+            updated = spliceOrAppend(updated, "races", emitRaces(races));
 
         Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
         Files.writeString(tmp, updated, StandardCharsets.UTF_8);
@@ -171,6 +181,78 @@ public final class ProgrammeWriter
             if (i < lines.length - 1)
                 out.append('\n');
         }
+        return out.toString();
+    }
+
+    /**
+     * Splice a block in, or append it if the file has never had one.
+     *
+     * <p>{@code races:} is the first section added to this format after clubs had files, so
+     * every existing file is missing it — and {@link #splice} is deliberately strict about a
+     * block it cannot find, because for points, lines and courses a missing block means the
+     * file is not what we think it is. Here it means the file is simply older than the feature,
+     * which is the ordinary case and not an error.
+     *
+     * <p>Appended at the END, after everything else, so nothing already in the file moves: a
+     * section inserted in the middle would show up as a diff against every line below it.
+     */
+    static String spliceOrAppend(String yaml, String name, String block) throws IOException
+    {
+        for (String line : yaml.split("\n", -1))
+        {
+            if (line.startsWith(name + ":"))
+                return splice(yaml, name, block);
+        }
+        String body = yaml.endsWith("\n") ? yaml : yaml + "\n";
+        return body + "\n" + block;
+    }
+
+    /**
+     * The {@code races:} block.
+     *
+     * <p>A race is small and flat — a date, a format, and a course per division — so it is
+     * written as plainly as it reads. The inline map per division is the same shape the
+     * sequence's steps use, for the same reason: one line per thing that is one thing.
+     */
+    static String emitRaces(Map<String, Race> races)
+    {
+        StringBuilder out = new StringBuilder("races:\n");
+        if (races.isEmpty())
+        {
+            // An empty MAP, never a bare key: a key with nothing under it reads back as null,
+            // and null is indistinguishable from absent — which is how a deleted section
+            // quietly comes back to life. The courses block learned this the hard way.
+            return "races: {}\n";
+        }
+        races.forEach((id, race) ->
+        {
+            out.append("  ").append(key(id)).append(":\n");
+            if (race.name() != null && !race.name().isBlank())
+                out.append("    name: ").append(scalar(race.name())).append('\n');
+            if (race.date() != null)
+                out.append("    date: ").append(race.date()).append('\n');
+            if (race.format() != null && !race.format().isBlank())
+                out.append("    format: ").append(scalar(race.format())).append('\n');
+            if (race.next() != null && !race.next().isBlank())
+                out.append("    next: ").append(scalar(race.next())).append('\n');
+            out.append("    divisions:\n");
+            if (race.divisions().isEmpty())
+            {
+                out.setLength(out.length() - "    divisions:\n".length());
+                out.append("    divisions: {}\n");
+            }
+            race.divisions().forEach((name, division) ->
+            {
+                out.append("      ").append(key(name)).append(": {");
+                out.append("course: ").append(scalar(division.course()));
+                if (division.variant() != null && !division.variant().isBlank())
+                    out.append(", variant: ").append(scalar(division.variant()));
+                if (division.start() != null && !division.start().isBlank())
+                    out.append(", start: ").append(scalar(division.start()));
+                out.append("}\n");
+            });
+            notes(out, race.notes(), 4);
+        });
         return out.toString();
     }
 

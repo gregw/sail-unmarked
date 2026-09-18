@@ -21,8 +21,10 @@ The brief is **provisional by its own declaration** and parts of it are explicit
 unverified. Where this file and the brief disagree, this file is later — the YAML schema
 in brief §6 in particular has been superseded, see below.
 
-[`wiki/client-server-dialog.md`](wiki/client-server-dialog.md) is the third, and is
-**provisional**: what a boat and the server say to each other once there is a live race to run.
+[`wiki/client-server-dialog.md`](wiki/client-server-dialog.md) is the third, and is **decided
+and substantially built** — see "The client–server dialog, as built" below for what exists and
+what is deliberately still a TODO. It is what a boat and the server say to each other once there
+is a live race to run.
 For the formats that need one the server acts *in part* as the race committee — start sequences,
 postponement, divisions, a fleet feed — while never scoring and never recording: it keeps no
 clock, publishes an absolute start time, and every countdown, elapsed time and crossing instant
@@ -93,10 +95,10 @@ No database, no framework, no outbound HTTP client. Port **8083** (8081 is saili
 ```bash
 mvn exec:java                              # serves http://localhost:8083/ from ./data
 mvn exec:java -Dunmarkable-data=/path/to/data
-mvn test                                   # 109 Java tests + 673 JS assertions
+mvn test                                   # 124 Java tests + 722 JS assertions
 node tools/run-js-tests.mjs                # just the JavaScript specs
-tools/editor-drive/run.sh                  # the editor and both clients, driven against
-                                           # a live server
+tools/editor-drive/run.sh                  # the editor, both clients, the race screen and
+                                           # the whole conversation, against a live server (412) (412)
 ```
 
 ---
@@ -107,8 +109,11 @@ tools/editor-drive/run.sh                  # the editor and both clients, driven
 unmarkable/
   wiki/                                 the brief, the lifecycle note and their SVGs
   data/config/config.yaml               site + listener. Small on purpose.
-  data/config/clubs/<club>/<series>.yaml points, lines and courses. See below.
-  data/store/                           race records (GITIGNORED — real people's tracks)
+  data/config/clubs/<club>/<series>.yaml points, lines, courses and races. See below.
+  data/config/auth.yaml                 the login (GITIGNORED — holds a client secret);
+                                        auth.yaml.example beside it shows the shape
+  data/store/records/                   race records (GITIGNORED — real people's tracks)
+  data/store/conduct/                   what happened in each race: the channel, the flags
   etc/unmarkable.service                systemd unit for the Pi
   etc/install.sh                        installs it; safe to re-run for an upgrade
   client/www/                           THE CLIENT. Capacitor webDir, and packaged as
@@ -120,6 +125,10 @@ unmarkable/
                                         imported by both pages below
     boat.html / boat.js                 THE REAL CLIENT — the device, fed by this phone
     receiver.js                         navigator.geolocation as a fix. What ships
+    dialog.js                           >>> the boat's half of the client-server conversation
+    screens.js                          the channel, race progress, the alerts and the start row
+    schema.js / schemas/*.v1.json       the wire's schemas, and a validator small enough to ship
+    race.html / race.js                 RUNNING a race: the committee's screen
     client.html / client.js             THE TEST RIG, with the device sitting on its chart
     raceclient.js                       what a boat holds while sailing: live step, screen
     markscreen.js                       the Mark screen and the course overview, per brief §5
@@ -129,15 +138,18 @@ unmarkable/
   tools/editor-drive/                   the editor, driven headlessly against a live server
   src/main/java/org/mortbay/sailing/unmarkable/
     model/                              records: Position, NamedPoint, LineEnd, Line,
-                                        CourseStep, CourseVariant, Course, Programme, Fix,
-                                        CrossingEvent, CourseRecord, CourseSnapshot, Geo
+                                        CourseStep, CourseVariant, Course, Programme, Race,
+                                        Fix, CrossingEvent, CourseRecord, CourseSnapshot, Geo
+    dialog/                             Envelope, Dialog (sessions, rooms, standings), Schemas
     course/ProgrammeLibrary.java        loads and validates the club/series files
     store/JsonStore.java                atomic writes, journal, defensive load
     store/CourseLedger.java             snapshots taken and publications live, one JSON
                                         document per club — see the lifecycle below
     model/Ids.java                      what may be used as an id, in one place
-    server/                             UnmarkableServer, ApiServlet, StaticResourceServlet
-    config/UnmarkableConfig.java
+    server/                             UnmarkableServer, ApiServlet, DialogServlet,
+                                        StaticResourceServlet, and the login:
+                                        UnmarkableSecurityHandler, AuthFilter, SignedIn
+    config/                             UnmarkableConfig, AuthConfig
 ```
 
 ### Where the logic that decides a race lives
@@ -647,13 +659,12 @@ with a 409 naming what is published** unless forced — deleting a programme boa
 join is a decision, not a keystroke. The 409 carries a JSON body rather than an HTML error
 page, because the editor has to name those courses in the dialog it asks with.
 
-> **Writes are unauthenticated.** `PUT /api/programmes/{club}/{series}` rewrites a config
-> file on disk, `POST`/`DELETE /api/programmes...` create and retire whole series, the two
-> `/api/lifecycle/...` posts decide what a fleet is handed, and
-> `POST /api/records` accepts anyone's race result. All but the last are gated by
-> `server.configWrites` (default **true**, with a loud startup warning); the POST is not
-> gated at all. All need a login before this is reachable from anywhere but a desk —
-> sail-jinx has a working Jetty OpenID setup to copy.
+> **The writes that impose on a fleet are behind a login now** — see "Signing in" below. What
+> is deliberately still open is everything a BOAT does: `POST /api/records`, `POST /api/join`
+> and the whole of `/api/dialog`. That is not a gap left for later; it is §7.1's *authenticate
+> authority, trust data*, and it is why the asymmetry is the design. `server.configWrites`
+> stays as the second lock: a club that has not set a login up can still turn the config writes
+> off entirely.
 
 **Four chart backgrounds — `none`, `OSM`, `chart`, `sea` — offered by a selector built from
 `BASEMAPS` so the labels and order live in one place**, least ink first. `chart` and `sea` share
@@ -1622,6 +1633,476 @@ at, since otherwise it has "arrived" and would sit.
 
 ---
 
+## Signing in
+
+**Lifted from sail-jinx, which has this working**, and narrowed to what this system asks of it:
+`AuthConfig`, `SignedIn`, `AuthFilter`, a `SecurityHandler`, and Jetty's OpenID Connect. The
+shape of `auth.yaml` is deliberately the same, so a club running both registers one OAuth client
+and learns one file.
+
+### What is behind it, and what must never be
+
+**AUTHENTICATE AUTHORITY, TRUST DATA** — the dialog document §7.1, made mechanical in
+`UnmarkableSecurityHandler.getConstraint`:
+
+| | |
+|---|---|
+| **Needs a sign-in** | `editor.html`, `race.html`, and every non-GET on `/api/programmes`, `/api/lifecycle`, `/api/conduct` |
+| **Open to everybody** | every GET, `POST /api/join`, `POST /api/records`, and the whole of `/api/dialog` |
+
+**The second row is the one to be careful with.** A login that keeps the wrong people out is
+easy to write and easy to check; a login that also quietly keeps a FLEET out — by sitting in
+front of the dialog — would look exactly like a working login until a race day, when every boat
+meets an HTML sign-in page where it expected its envelopes. `AuthIntegrationTest` asserts the
+open half as deliberately as the closed one.
+
+**Boats are never authenticated, and that is not a stage on the way to authenticating them.** A
+boat's positions and instants are trusted by construction, so a login there would put a name to
+a claim nothing can check; an officer's acts are decisions imposed on a fleet, and *who did
+this* has an answer that matters.
+
+**Reads stay open**, because a club publishes its racing — the courses, the log of what was
+handed to whom, the results. A read behind a login is a club publishing to itself.
+
+### A constraint, not a check in a servlet
+
+The login happens **by itself**: asking for `editor.html` while signed out sends the browser
+through the provider and back to the editor. A servlet that returned 403 would need a sign-in
+button somebody had to find, and an API call that got one would have nowhere to send them.
+
+The same choice is why the constraint is by **method as well as path**. The same prefix serves
+reads and writes — `GET /api/programmes/...` is how any client learns what a club races, and
+`PUT` to that path rewrites the file — so a URL pattern alone cannot say *unless it is a GET*.
+
+### The loopback bypass, and why it is off by default
+
+`allowLoopback: true` treats a request from this machine as an officer's, which is what a laptop
+you are sitting at wants. **It is opt-in, and that is the important half: behind a reverse proxy
+every request in the world arrives from 127.0.0.1.** A bypass left on would hand the editor to
+the internet on the first club that put nginx in front of this, silently. sail-jinx learned that
+one the same way.
+
+It is read off the **connection**, never off `X-Forwarded-For`, which is whatever the client
+said it was — a bypass that believed a header would be no bypass at all.
+
+### What a login needs that the login cannot provide
+
+Three things, each in `AuthFilter` because each was earned in sail-jinx:
+
+- **An error page.** With none, Jetty answers a failed callback with a bare 403, and every way
+  the dance can fail looks identical from the browser — a stale client secret, an expired code,
+  a session lost to a restart, a tab left open over lunch. The reason is in the query; this
+  renders it and logs it, because whoever can fix it is reading the journal on the Pi.
+- **A way out.** Signing out has to work for an account that is **not** allowed in: the ordinary
+  cause of a refusal is a browser with two accounts that picked the wrong one, and an error page
+  with no exit leaves clearing cookies by hand.
+- **The domain check.** Jetty's authenticator establishes that the provider knows who you are —
+  *any* account of theirs. `allowedDomain` is what narrows that to a club, checked against the
+  `hd` claim that came back rather than the hint on the request, which is only a hint to an
+  account chooser.
+
+> **`allowedDomain` is blank by default, and that is a real setting rather than a placeholder.**
+> Any account the provider will vouch for may use the editor, which is what a prototype being
+> tested by a handful of people wants. Naming a domain narrows it to a club's Workspace.
+
+> **A second tier is deliberately absent.** Some accounts may abandon a race and others only
+> watch is a sensible thing to want and nothing enforces it today — and a field that nothing
+> enforces reads as a promise. sail-jinx has an `admins` list because it has two tiers to
+> separate; this has one.
+
+### Installing it
+
+`etc/install.sh` is sail-jinx's, step for step, because a club running both should not have to
+learn two deployments: same system user, same `/opt` and `/var/lib` split, same
+seed-but-never-overwrite rule, same restart-only-if-it-was-running. `git pull && sudo
+etc/install.sh` is the upgrade.
+
+**The login adds three things to it**, each of which exists because of how this goes wrong:
+
+- **`auth.yaml.example` is seeded; `auth.yaml` never is.** A file that turned the login on with
+  somebody else's client id would be worse than no file — the club would be locked out of its
+  own editor by a stranger's OAuth registration.
+- **`auth.yaml` is forced to mode 600 on every run**, because it holds a client secret and an
+  upgrade must not quietly loosen a mode somebody set by hand.
+- **The last thing printed is the thing not done.** With no `auth.yaml` the script ends by
+  saying the editor and the race screen are open to anything that can reach the Pi, and gives
+  the four commands to fix it — including the two that are easy to get wrong: the server needs
+  a route at *start-up* once a login is configured, and `allowLoopback` must stay false behind
+  a reverse proxy. An install that ends with "complete" and says nothing else invites somebody
+  to believe it is ready for a club night.
+
+> **Verified in a sandbox, not on this machine.** The paths were redirected to a temp root and
+> the root-only commands stubbed, then both paths were run: a first install seeds the config,
+> the club files and the example, creates no `auth.yaml`, and keeps `data/` out of `/opt`; an
+> upgrade leaves an edited club file and an edited `config.yaml` alone and tightens `auth.yaml`
+> to 600. The restart branch was driven both ways — the service coming back, and not coming
+> back, where the script must exit non-zero and say which journal to read.
+
+### Offline, and tested that way
+
+`AuthIntegrationTest` starts a **stub issuer** — a discovery document and an unsigned id token —
+and completes a whole sign-in with no network and no real secret: Jetty's `JwtDecoder`
+base64-decodes the token and checks the issuer, audience and expiry, never a signature. That is
+what makes the constraint testable rather than merely asserted.
+
+> One thing the stub taught immediately: it minted `hd: myc.org.au` for every account, so the
+> domain check passed for an `example.com` address and the test proved nothing. **A stub has to
+> tell the truth about the thing under test** — the `hd` claim follows the address now.
+
+**Sessions are in memory** and go when the process does, so a restart signs the officer out.
+Nothing a boat is doing is affected, because no boat has a session here at all.
+
+**Discovery is the one outbound call this server makes**, at start-up, to find the provider's
+endpoints and keys. A server with authentication on therefore needs the network to start —
+worth knowing before switching it on for a Pi on a committee boat.
+
+---
+
+## The client–server dialog, as built
+
+[`wiki/client-server-dialog.md`](wiki/client-server-dialog.md) is the design and is the place to
+read *why*. What follows is what exists, and the rules a change has to respect.
+
+**The conversation is the OPTIONAL half of this application, and every line of it is arranged to
+stay that way.** Nothing in `dialog.js`, `Dialog.java` or `DialogServlet.java` is on the path
+from a fix to a latch: `device.feed()` gives the fix to the client, the client decides
+everything that matters, and only *then* is anything queued for the server. So a poll that
+throws sets `connected` false and queues what was going to be said, and a boat goes on rounding
+its marks and timing them to the metre. `drive-client.mjs` still takes the network away and
+sails a whole course with it gone, which is the claim made mechanical.
+
+### Definition is configuration; conduct is a record of an afternoon
+
+| | Where | Why |
+|---|---|---|
+| **Race definition** — name, date, format, `division → course/variant`, the next race | the series YAML (`Race`, `races:`) | it is authored ahead of time, it diffs, and it is part of the file a club could hand to another club whole |
+| **Conduct** — who joined, the channel, flags raised, positions, acknowledgements | `data/store/conduct/{club}/{series}/{race}.json` | it is a record of an afternoon involving real people, which is what that gitignored directory is for |
+
+Keeping that line is what stops a programme file filling up with a Saturday. `ProgrammeWriter`
+gained `spliceOrAppend` for it: `races:` is the first section added to this format since clubs
+had files, so every existing file is missing it — and a *missing* block means something
+different there from what it means for points, lines and courses, where it would mean the file
+is not what we think it is.
+
+**The editor has a fourth tab, `Races`**, and it edits exactly that definition: an id and a long
+name, a date, a format, **which race this one FOLLOWS**, and one row per division naming a course
+and a variant. `selectRace` also selects that race's first division's design, so the chart shows
+the water the race is on rather than every line the club owns.
+
+> **THE FORM ASKS WHAT A RACE FOLLOWS; THE FILE STORES WHAT IT IS FOLLOWED BY.** That is not a
+> contradiction, it is the order races are actually made in: when you create race two, race
+> three does not exist, so *followed by* is a question whose answer cannot be given — the only
+> races on offer are the ones before this one. *Follows* can always be answered at the moment of
+> asking, and it writes the same single link from the other end. The model keeps `next` on the
+> race before, because that is what the server reads when a boat stops racing and has to be told
+> where it is entered; the form derives *follows* from it and writes it back the other way.
+>
+> Two offers are withheld and both say why: a race that **already leads into another** (choosing
+> it would fork the chain, and a boat that stopped racing would be entered for two races at
+> once), and any race **this one already leads to**, however far down (a chain that ate its own
+> tail would enter a boat in a loop it never leaves).
+
+> **Leaving a division's variant unsaid means "the course's only sailable design"**, which the
+> server resolves at join time — and that is an answer only where the course has one. So the
+> empty option says which case the chosen course is in: it **names** the design where there is
+> one, and says **how many there are to pick from** where there are several. `Race.problems`
+> reports the second case too, because a division naming no variant of a course with two hands a
+> boat nothing, and without that it would be discovered by a sailor trying to join. Two guards in it are worth
+knowing: **a race another race names as its `next` is refused deletion** (named, not cascaded,
+like every other delete here), and **a clone does not copy the chain**, because copying it would
+enter every boat that finished the copy into the original's successor, which is somebody else's
+race.
+
+**A division is not a variant, and this is where the two finally meet without becoming each
+other.** A variant is a design; a division is a group of boats; `Race.Division` is the mapping
+between them for one race — which is exactly why the model could go on not knowing the word
+until there was a race to need it. **The map key is the division's plain id and the tag is
+derived from it** (`Race.tagFor` → `division:div-1`), because a YAML key containing a colon has
+to be quoted and an unquoted one does not produce a bad id but a *broken file*, on the next
+autosave, silently.
+
+### State is the events applied as they arrive
+
+There is no ordinal on the envelope and nothing is replayed. A start is published, an `AP` voids
+it, a new start supersedes the `AP` — so **the last message to arrive for a tag IS that tag's
+state**, and the same little machine runs on the server (`Dialog.Standing`), on the race screen
+and on every boat (`dialog.js` `state()`). Three consequences worth stating because each is a
+thing somebody would otherwise add:
+
+- **There is no "clear the AP" message and there must not be.** Publishing a start is what
+  clears it. `dialog-test.js` asserts that as behaviour rather than as an implementation, so the
+  day somebody adds a `clear` type the spec should start failing.
+- **Reconnection RE-STATES rather than replaying.** A boat that was away for two minutes does
+  not want the two minutes; it wants which course it is sailing, whether its division is
+  postponed, and when it starts. `Room.restate` sends the current standing as ordinary `course`,
+  `timer` and `flag` messages, unmarked, because the entry says *this is the course you are on*
+  and that is true whenever it arrives.
+- **The channel is the one thing that IS replayed**, because a channel is a history and what was
+  said cannot be summarised into a current value. `channel.since` hands back **the original
+  envelopes, ids and all**, which is what makes it idempotent: `dialog.js` keeps a `seen` set, so
+  the same entry arriving twice is one entry, and an entry whose id this boat has already
+  acknowledged does not raise the alert again.
+
+**Every countdown is run by the boat.** `timer` is an instant and two durations; the server sends
+it once and does not tick. The arithmetic that turned "in five minutes" into an absolute instant
+happened in the operator's browser against the operator's clock, and the countdown on the phone
+is against the phone's. That costs nothing that matters, because what a race is decided on is a
+difference between two readings of *one* clock.
+
+### The schemas, and why there are two validators
+
+`client/www/schemas/*.v1.json` — one file per message type, each describing that message's
+**body**. The envelope is the one shape every message shares, so it is checked in code rather
+than repeated twenty times, and `$ref` is deliberately outside the subset.
+
+They live under `client/www` because that is what makes one copy reach both sides: Maven already
+packages it as `/static/`, so `Schemas.java` reads them off the classpath and the client fetches
+them from `/schemas/`. **Two copies of a schema is two schemas.**
+
+**The client's validator is a constraint on the schemas, not the other way round.** No framework,
+no npm build, no bundler, and offline-first — so the subset is what a small hand-written
+validator covers: `type`, `properties`, `required`, `enum`, `const`, `items`,
+`minimum`/`maximum`, `pattern`, `format: date-time`. `additionalProperties` is always true and is
+never written, because unknown fields are ignored on both sides and that is what lets an
+installed client and an updated server go on talking. A schema that needs more than the subset
+is a message that should be simpler.
+
+> **`maxLength` was written and then taken out.** It is one line in a validator and it is not in
+> the promised subset, and the length cap it was for is better done by TRUNCATING
+> (`Dialog.MAX_SAY`) than by refusing: a sailor's message that is too long should arrive clipped,
+> not be thrown away.
+
+> **An unknown message TYPE is accepted, not refused** — on both sides. It is ignored and
+> *counted*. Refusing would make every future message type a breaking change for every server
+> already deployed, and a client silently dropping what the server sends is the failure the
+> versioning rules exist to make visible.
+
+### The transport: polling is built, the socket is not
+
+`POST /api/dialog` before there is a session (which is `hello` and `join`), `POST
+/api/dialog/{session}` afterwards. One call — `Dialog.exchange(session, envelopes)` — is the whole
+contract, written that way so the socket can use it unchanged: a frame is an exchange of one
+message with an empty reply, a poll is an exchange of several with whatever is queued.
+
+**Polling was built first on purpose.** The document's promise is that the fallback is the same
+conversation — identical envelopes, identical schemas, identical ordering — so the socket is a
+pipe to add rather than a protocol to design; building it first would have meant writing the
+fallback twice, once as a design and once as the thing that turned out to be needed. What the
+socket will need beyond what exists is a **ticker**, because `fleet` is currently enqueued when a
+boat polls, which is exactly right for polling and not enough for a socket.
+
+**`fleet` goes out on a fixed slow interval** (`FLEET_SECONDS`, five), not at the fix rate. At
+nine knots a boat moves twenty-three metres in five seconds, which on a screen showing a whole
+course is nothing; sixty boats at 1 Hz would be sixty fan-outs a second to say what a fleet
+screen cannot draw the difference of. One message carries every boat.
+
+### A join with no race behind it gets no channel
+
+**A BOAT JOINS A RACE WHERE THERE IS ONE**, and the join screen asks in that order: club →
+series → **race** → **division**, with the course following from the division rather than being
+picked again. A boat does not choose the geometry it was entered for, and being asked to would
+be being asked to get it right.
+
+> **That closes the division gap rather than papering over it.** The server can still FIND a race
+> from the course and the day — which is what a client that names neither gets, and why an older
+> one goes on working — but finding works only while one division sails one course and quietly
+> picks the first where it does not. A boat that names its race and its division has settled the
+> question `ask` exists for, from the only end that can settle it. A division name that is not in
+> that race is ignored rather than obeyed: that is a boat describing a race it is not in.
+
+**Only TODAY's races are offered**, because a race defined for next Saturday is not something a
+boat can join this afternoon. Where a series has races but none today the screen says so — *"3
+races defined, none today"* — since *no races* and *no races today* are different facts and only
+the second is worth acting on.
+
+**"No race — just sail a course" is an ANSWER, not an absent one**, which is why it carries a
+value where every other level's placeholder carries none. *There is nobody running a race on
+this* is a thing somebody means, and it is what this system did before there were committees; it
+reveals the course and variant selectors, and everything below follows from there. A division
+whose course has nothing published says so **before** the button rather than after it.
+
+What follows from there needed no second decision: no channel, no fleet, and **no fixes** —
+`fixSeconds` is absent from `joined`, and that absence is how the boat is told. On a phone in a
+bracket for four hours, reporting to nobody is battery and data spent on nobody. **A screen with
+nothing behind it is not offered**: `viewBar` filters Chat and Place out rather than showing them
+empty, because an empty Chat would say *nobody has spoken yet* where the truth is *there is
+nobody*.
+
+**And if there is no conversation to be had at all, the boat sails anyway.** `Device.join` falls
+back to the REST `/api/join`, which is the "query and sail" path and what a server too old to
+hold a dialog offers. The message stays on the screen, because a boat sailing without a committee
+should know that is what it is doing.
+
+### The boat's three new screens
+
+**The view selector grew from Course | Line | Auto to Course | Line | Chat | Place | Auto**, and
+`VIEW_MODES` in `raceclient.js` is what may be asked for by name — anything else reads as `auto`,
+so a screen that existed in an older build cannot strand somebody.
+
+**Auto gained one clause**: a new channel entry brings up the channel, *unless the boat is
+approaching a line*. The test is the one that already existed — if the Line screen would be
+taken, chat does not take it — and the channel arrives as a **hint** (`view(now, {channel})`)
+rather than as a field, because `RaceClient` knows about lines and fixes and must not learn what
+a chat message is. Offered once per entry rather than while something is unread, or a boat with
+an unread message could never look at its own course. **`Place` is never automatic**: it is
+somewhere you go to look, and it is the screen whose data is most likely to be stale.
+
+**The start is ABOVE every screen** (`startRow`), not on one of them. It is the one thing on the
+device that is about a moment rather than a place, and in the five minutes it matters it is the
+only thing anybody is looking at — a countdown a sailor has to change screens to see is a
+countdown they will miss.
+
+**NOTHING INTERRUPTS AN APPROACH.** While the Mark screen has the display an alert shows as a
+banner (`alertBanner`) and the modal waits; the modal is raised the moment the approach ends. A
+sailor thirty metres off a line at nine knots is doing the one thing on this boat that cannot be
+interrupted. The banner is not a quiet failure — it says what arrived and stays until read.
+
+**Dismissing the alert IS the acknowledgement.** One gesture, not two: a dialog offering
+*Dismiss* beside *Acknowledge* would ask somebody at a tiller to agree they had read a thing they
+had just closed.
+
+> **Acknowledged and INTERRUPTING are two different sets, and the difference matters.** `MUST_SEE`
+> is what carries an unseen badge and gets an `ack` — a course, a flag, an outcome and a committee
+> message, all four being things a protest could turn on. `INTERRUPTS` is the narrower set that
+> opens a modal: a course, a flag, an outcome. A committee message is acknowledged **by being
+> read** in the channel, because a radio call that put a dialog over somebody's plot would make
+> the committee reluctant to use the radio.
+
+**The safety three are set apart on the channel screen**, in warn colour with a rule above them.
+They are not racing messages and must not look like racing messages: they are there because the
+channel is the radio, and this is what a radio is for when the racing stops mattering.
+
+**Race progress ages rather than blanks**, and says how old it is. Live standings are the one
+thing boats want promptly from the server and therefore the one thing that cannot be had without
+it; a screen that went empty would be saying the fleet had vanished. It is a *view*, not an
+authority: a place on it is arithmetic over what boats reported about themselves, and corrected
+time is elapsed × TCF where a TCF is known — which is not the open question, since turning a TCF
+into a **distance** is.
+
+### The race screen
+
+`race.html` is a **second page**, and the reason is the undo: the editor saves as you go and holds
+exactly one undo, which is right for dragging a mark and wrong for raising an abandonment.
+
+**Colour is DIVISION here.** In the editor colour means leg role; the two never share a chart, and
+`DIVISION_COLOURS` deliberately shares no value with `ROLE_COLOUR` so they cannot be confused.
+What there must not be anywhere is a third meaning for colour.
+
+**Progress is texture within a division's own colour**, because the question a committee is
+actually asking is *which legs have been sailed*: **solid** where some boats have sailed,
+**dashed** where none has yet, **faint and thin** where all have. The band of "some" legs is the
+fleet's spread — its front edge is the leader, its back edge the last boat — so *can I shorten*
+is the width of that band, read at a glance and without a number. Read off what the boats said
+about themselves, which is the only thing anybody here knows.
+
+**There is no GO button and there cannot be.** The server keeps no clock, so a start is not
+triggered but scheduled as an absolute instant — **and the form asks for one**. It takes the
+start time itself, in the operator's own zone with that zone named on the form, plus the two
+durations that hang off it: the **warning** signal five minutes before and the **preparatory**
+four. A start sequence is a thing a committee decides — *this race starts at five past two* —
+and the earlier "start in N minutes" made the operator do that sum backwards, against a clock
+that had moved by the time they pressed the button. The card works the sequence out in the
+times it will actually happen at, before anything is published.
+
+> **The durations are durations, not instants**, because a sequence hangs off its start: moving
+> the start moves all of it, which is what a postponement does. And they are per DIVISION, kept
+> per division rather than shared — with "in five minutes" one number could serve every start,
+> and with absolute times it cannot, since div-1 starting at 14:05 and div-2 at 14:10 is the
+> entire point.
+
+> **Seeded once, from the race's PLANNED start where the definition has one** — which is what
+> that field in the series file is for: a rehearsal somebody wrote down in advance, brought to
+> the screen that publishes it. Never re-seeded, because this page re-renders every couple of
+> seconds and a seed that ran again would type over what somebody was in the middle of entering.
+> For the same reason the fields commit on `change` rather than `input`.
+
+**An irreversible act asks twice, in the button itself** rather than in a dialog, so nobody is
+ever agreeing to something that has scrolled out of view. And the screen offers **the flag that
+applies**: `AP` before a start has passed, **abandon** after — which is not an extra rule but what
+the two flags mean. The other rule it holds is that after an `AP` the next start is at least six
+minutes ahead, said out loud rather than merely disabling a button.
+
+**The fleet table's last two columns are the whole reason acknowledgements are in the protocol.**
+The question a committee genuinely has before starting is *have all boats seen the new course?*,
+and without somewhere to read the answer the acks would be bookkeeping nobody looks at.
+
+### How it is tested, and what the tests caught
+
+| | |
+|---|---|
+| `dialog-test.js` | the part with no wire in it: the start state machine, the channel's idempotence, the alert rule, the ladder, the validator |
+| `drive-race.mjs` | **a simple race end to end over the wire** — define, join, schedule, AP, re-schedule, fix, crossing, course change, ack, retire, chain to the next race |
+| `drive-racepage.mjs` | the committee's screen: the progress textures, the arming, the flag that applies, DNF |
+| `drive-alert.mjs` | **nothing interrupts an approach** — the same flag published twice, once away from a line and once on one |
+| `drive-racedef.mjs` | the editor's Races tab: that a race REACHES THE FILE, the chain written from the end a person thinks from, and the two ways a chain goes wrong |
+| `DialogTest.java` | that every schema is in the build, and that the Java validator agrees with the JavaScript one about the subset |
+
+> **`drive-alert.mjs` found a stack overflow on its first run, in the one path every boat takes.**
+> `Device.render` called `dialog.markRead()` because being on the channel screen *is* reading it,
+> and `markRead` called `changed()`, which is a request to render. So looking at the channel was
+> render → markRead → changed → render, for ever. Two guards now, because either alone is a trap:
+> **nothing to do is not a change** (`markRead` returns false and notifies nobody when there is
+> nothing unread), and the device passes `notify = false` because it is already rendering. The
+> same applies to `ack`, which is reached from the same place.
+>
+> Worth noting what kind of bug that is: it is not in the protocol, the schemas, the state
+> machine or the geometry — all of which have specs — but in the wiring between two things that
+> each worked. Which is what the page-level drivers are for, and why the protocol driver alone
+> would have shipped it.
+
+> **And two more the drivers caught, both worth the comment they now carry.** A mapper without
+> the time module **threw part way through writing a response** — a `joined` carries a snapshot
+> whose `archivedAt` is an `Instant` — leaving the client a truncated document rather than an
+> error, which reads as a parse failure in the client rather than a fault in the server. And
+> `race.js` did its first fetch at module top level with nothing round it, so a server that was
+> still starting left a page with its furniture drawn and nothing else, for ever, with nothing
+> on screen saying why. A club's connection being briefly bad is not an unusual condition.
+
+> **And `serve.sh` had a race that made a harness fault look like a bug in the code.** It killed
+> whatever held the port and slept a second; when that was not enough the new server could not
+> bind, so the driver talked to the OLD one — whose data root `serve.sh` had just deleted and
+> re-copied underneath it. What came back was a **404 for a race that had certainly just been
+> written**, which reads as a fault in the thing under test rather than in the thing testing it.
+> It waits for the port to be free now, and gives up politely before giving up rudely.
+
+> **The one that cost a user their work: a whole tab that never saved.** `endEdit()` skips the
+> write when nothing changed — which is right, because focusing a field and leaving it without
+> typing is an extremely ordinary thing to do, and without the guard every one of those would
+> write the file and consume the undo slot. But the guard compared points, lines and courses, and
+> **`races` was added to the file, the payload and the writer and not to that line** — so every
+> race edit compared equal to the state before it, the guard said "nothing changed", and the save
+> never ran. The editor showed the race; the file never heard of it; a reload lost the afternoon.
+> `snapshot()` and `takeUndo()` had the same hole, so undo could not have put a race back either.
+>
+> **ANYTHING ADDED TO THE FILE HAS TO BE ADDED IN FOUR PLACES**, and three of them are obvious:
+> the payload, the writer, the model. The fourth is this guard, and it is the one that fails
+> silently — everything works on screen and nothing reaches the disk. Reported by the user, not
+> by the suite, because every driver until `drive-racedef.mjs` wrote races by PUT rather than
+> through the form.
+
+> **`run.sh` used to hide exactly this.** A driver that DIED rather than reporting left a last
+> line that parsed to no number, the arithmetic failed on the empty string, and the run printed
+> a shell syntax error and abandoned the rest of the suite behind a `TOTAL` that looked like a
+> pass. A death now counts as a failure and prints the tail of what it said.
+
+### What is left as TODO, deliberately
+
+| | |
+|---|---|
+| **The WebSocket** | polling carries the same envelopes; the socket needs a ticker for `fleet` |
+| **`ask`** on join | every join answers itself today, because the division comes from the course. A question is a gap in what the server knows |
+| **`window`** (a start range) | schema'd, carried, and held as state by the client; the race screen does not publish one |
+| **Muting a sail number** | §8.4's instrument against a person jamming the channel |
+| **The rate cap** and **impersonation** | dialog §13, deferred on purpose — defences against attackers a prototype does not have |
+| **Authentication** | open question 8. `POST /api/conduct/...` is gated by `configWrites` like the other writes, and abandoning a race is the act that most obviously wants a name attached to it |
+| **The race screen holds no session** | it reads conduct over REST and publishes over REST. The committee IS a participant — its messages go into the same channel — but it is not yet one party in the conversation |
+| **Cornered legs on the race chart** | drawn straight; `coursedraw.track` does it properly and the committee's question is answered by a straight line |
+| **Nothing is cached across a reload** | on a phone that is the sharper cost: a browser reloading a backgrounded tab throws away a joined race mid-afternoon |
+| **Re-posting the record with its track** | `record({track: true})` builds it; nothing waits for wifi and sends it |
+| **Divisions are assigned by the COURSE a boat joined** | which is enough for one division per course and wrong the moment two divisions share one. `ask` is where that gets fixed |
+
+---
+
 ## The course model
 
 This supersedes the YAML sketch in brief §6, which was wrong in ways worth recording so
@@ -1855,10 +2336,39 @@ what an editing session produces — and a design somebody *did* sail survives b
 afterwards, or its records become uninterpretable. `GET /api/courses/{revision}` reads one
 back. See "The course lifecycle" below.
 
-Records are filed `records/{club}/{course}/{date}/{boatId}-{HHmmss}.json`. The start time
-is in the *name* so a boat may sail the same course twice in a day, and so a resubmission
-of the same run — the ordinary case, when the full track arrives later over wifi —
-supersedes rather than accumulates.
+Records are filed `records/{club}/{course}/{date}/{boatId}-{HHmmss}{±hhmm}.json` —
+`.../2026-09-18/AUS_1-072332+1000.json`. The start time is in the *name* so a boat may sail the
+same course twice in a day, and so a resubmission of the same run — the ordinary case, when the
+full track arrives later over wifi — supersedes rather than accumulates.
+
+**The date is the CLUB's local day, and it used to be a UTC one.** Everything else already
+agreed on local — `raceId` names a variant for the local day, `Race.on()` compares against
+`LocalDate.now(programme timezone)`, and the chain from one race to the next fires only within
+one local day — and this did not. The two agree through most of a Sydney afternoon and part
+company at the edges: a Thursday evening race in New York (20:00 EDT) filed under Friday, every
+week, invisibly; any Sydney morning before 10:00 filed under yesterday. Found by a driver that
+passed all evening and failed the moment the clock crossed midnight here.
+
+**The club's zone rather than the boat's**, which is the deliberate half. A race day belongs to
+the club running it, so a visitor whose phone is on another zone — or set wrong — still files
+under the day everybody else sailed. Taking it from the boat would be self-describing and would
+let one race day land in two directories, which is worse than the ambiguity it fixed.
+`JsonStore.save` therefore takes the zone, and both callers resolve it from the programme file;
+a record for a series that has since been retired falls back to UTC and **says so in the log**,
+rather than filing quietly under the wrong day.
+
+> **A date segment with an offset on it was considered and rejected.** `2026-09-18+1000` is
+> neither an instant nor a day: it cannot be compared, two offsets for one race day would make
+> two directories, and a season crossing daylight saving would alternate the directory's shape.
+> **The offset belongs on the instant, which is the only thing that has one** — hence its place
+> in the filename, where it also means a file says what it means without its directory. Zero
+> offset writes `+0000` rather than `Z`, so every name in every club's store is the same width.
+
+> **And Jackson would have thrown the offset away silently.** `ADJUST_DATES_TO_CONTEXT_TIME_ZONE`
+> is on by default, so an `OffsetDateTime` field reading `2026-09-18T00:23:12+10:00` comes back
+> as `2026-09-17T14:23:12Z` — the same instant, the wrong day, no error. It is not needed here,
+> because the club's zone and an `Instant` give the day between them; it is written down because
+> the obvious way to do this — put the offset on the record — has that trap in it.
 
 ---
 
@@ -2254,26 +2764,44 @@ answered by asserting a number in code.
 6. **QC thresholds as configuration.** Kinematic ceiling, minimum satellites, accuracy
    limit — all currently defaults asserted against no data.
 7. **Coordinate supply.** How marks are surveyed and by whom. Everything is `null` today.
-8. **Authentication on the writes.** There is none on any of them, and there are more of
-   them now: `POST /api/records` accepts a record for any boat; `PUT`, `POST` and `DELETE`
-   on `/api/programmes` rewrite, create and retire course files on disk; and
-   `POST /api/lifecycle/.../publications` decides what a fleet is handed. All but the
-   record POST are gated only by `server.configWrites`. Reads should stay open — a club
-   publishes its results — but a write is somebody's race result, somebody's survey, the
-   course a fleet will sail, or a whole season deleted. `sail-jinx` has a working Jetty
-   OpenID setup to copy. **This is the blocker for deploying to the Pi.**
+8. ~~**Authentication on the writes.**~~ **Answered and built** — see "Signing in". OpenID
+   Connect, lifted from sail-jinx, in front of the editor, the race screen and the writes behind
+   them, with an opt-in loopback bypass for the machine you are sitting at. **This was the
+   blocker for deploying to the Pi and no longer is**, with two things to know before doing it:
+   a server with authentication on needs the network at start-up for discovery, and
+   `allowLoopback` must be **off** behind a reverse proxy, where every request in the world
+   arrives from 127.0.0.1.
 
-   > **Narrowed, in [the dialog document](wiki/client-server-dialog.md) §7.1, to the half that can
-   > be solved: AUTHENTICATE AUTHORITY, TRUST DATA.** OpenID for race officers, and nothing at all
-   > for boats — because a boat's positions and instants are trusted by design, so a login would
-   > only put a name to an unverifiable claim, while publishing a course or abandoning a race is an
-   > act imposed on a fleet and *who did this* has an answer that matters. What that leaves
-   > unsolved and named rather than hidden is **impersonation**: any device can claim any sail
-   > number, and §1.1 trusts a boat about *itself*, not a third party about a boat.
+   > **What it deliberately does NOT cover is boats** — `POST /api/records`, `POST /api/join`
+   > and the whole of `/api/dialog` stay open, which is §7.1's *authenticate authority, trust
+   > data*. A boat's positions and instants are trusted by design, so a login there would put a
+   > name to an unverifiable claim; publishing a course or abandoning a race is an act imposed
+   > on a fleet, and *who did this* has an answer that matters.
+   >
+   > What that leaves unsolved and named rather than hidden is **impersonation**: any device can
+   > claim any sail number, and §1.1 trusts a boat about *itself*, not a third party about a
+   > boat. That is dialog §13, deferred on purpose while this is a prototype.
+   >
+   > And **one tier only**: any account the provider vouches for may use the officer's screens,
+   > narrowed to a club's Workspace by `allowedDomain` if a club wants it. Some accounts may
+   > abandon a race and others only watch is a sensible thing to want and nothing enforces it
+   > today — a field that nothing enforces reads as a promise.
 9. **Capacitor.** Not yet present. Background-geolocation behaviour, iOS Safari suspending
    the Geolocation API in the browser fallback, and plugin versions all shift; verify at
    build time rather than trusting the brief's §7.
-10. **Which gate side a boat took** is recorded by the client as well as the record, and
+10. **The fleet's own trust, which is the same question one level out.** `fleet` carries what
+    boats said about themselves, and Race progress and the race screen draw it — so a boat that
+    misreports puts a wrong position on everybody's screen. That is §1.1 working as designed for
+    a boat's *own* record and working less comfortably for a shared picture, and the honest
+    position today is that the fleet feed is a view rather than evidence. It is the same
+    impersonation question dialog §13 defers, seen from the screen rather than from the wire.
+11. ~~**A record is filed by its UTC date.**~~ **Answered and done:** it is filed by the club's
+    local day, with the offset in the filename. See "The record is the interface". What is left
+    is only the migration, which for this prototype is nothing: `data/store/` is gitignored and
+    holds test data, so **records written before this change are still under their old UTC day**
+    and are still readable by that name. A deployment with real records in it would need them
+    moved, which is a one-off script and not a code change.
+12. **Which gate side a boat took** is recorded by the client as well as the record, and
     still nothing downstream uses it. On the Mark screen it now shows: each side of a gate
     carries its own next-leg bearing, measured from **that side's** midpoint to the mean of
     the next step's, so the two arrows say what the choice costs. What is still taken to the
@@ -2290,14 +2818,18 @@ the browser may suspend the watch in the background. **Live place** does not exi
 
 What the client stops short of, deliberately rather than by omission:
 
-- **Nothing posts a `CourseRecord`**, on either page. The client holds everything one needs and
-  closing the loop is the next obvious step.
-- **The Course screen has no other boats on it**, which is most of what the brief asks that
-  screen for. That needs a fleet feed, which needs the dialog in
-  [`wiki/client-server-dialog.md`](wiki/client-server-dialog.md) — where the three screens still
-  missing are specified: **Race progress** (the brief's Live place), the **channel** (one inbox
-  for chat, course changes and flags, acknowledged by envelope id), and **alerts**, which never
-  open over an approach and show as a banner until it ends.
+- ~~**Nothing posts a `CourseRecord`.**~~ **Closed**: `RaceClient.record()` builds one and the
+  device sends it over the dialog the moment a course is complete. Two things about it are worth
+  knowing. **The instants are the interpolated ones**, which is the entire reason the detector
+  interpolates. And **the full track is not included by default** — a record with its fixes is
+  what makes a contested crossing examinable and is also megabytes over a phone's data
+  connection, so the one posted at the finish is thin. `record({track: true})` builds the fat one
+  and the store supersedes rather than accumulates — which is what makes resubmission the
+  ordinary case rather than a special one — but **nothing yet re-posts it when there is wifi**,
+  and that is the remaining half of closing this loop.
+- ~~**The Course screen has no other boats on it.**~~ **Built**: the fleet feed, Race progress,
+  the channel and the alerts all exist — see "The client–server dialog, as built". What is still
+  missing there is the WebSocket, `ask`, `window`, muting, and any authentication at all.
 - **The handicap is carried, not applied.** The join screen collects a TCF and does nothing
   with it, because turning a TCF into a distance is open question 5.
 - **No orientation is remembered** between sessions, and nothing is cached across a reload:

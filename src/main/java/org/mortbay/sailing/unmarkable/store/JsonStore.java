@@ -9,6 +9,7 @@ import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
@@ -83,12 +84,19 @@ public class JsonStore
     private static final DateTimeFormatter JOURNAL_MONTH =
         DateTimeFormatter.ofPattern("yyyy-MM").withZone(ZoneOffset.UTC);
 
-    /** The start time in a record's filename, so two runs in a day do not collide. */
-    private static final DateTimeFormatter STAMP = DateTimeFormatter.ofPattern("HHmmss");
+    /**
+     * The start time in a record's filename, with its offset, so two runs in a day do not
+     * collide and so the name says which day's clock it is on.
+     *
+     * <p>{@code Z} here is the OFFSET pattern letter, which writes {@code +1000} — and
+     * {@code +0000} rather than a bare {@code Z} for zero, so every name is the same width.
+     */
+    private static final DateTimeFormatter STAMP = DateTimeFormatter.ofPattern("HHmmssZ");
 
     private final Path recordsDir;
     private final Path coursesDir;
     private final Path journalDir;
+    private final Path conductDir;
     private final List<String> loadErrors = new ArrayList<>();
 
     public JsonStore(Path dataRoot)
@@ -97,6 +105,7 @@ public class JsonStore
         this.recordsDir = storeDir.resolve("records");
         this.coursesDir = storeDir.resolve("courses");
         this.journalDir = storeDir.resolve("journal");
+        this.conductDir = storeDir.resolve("conduct");
     }
 
     public void start() throws IOException
@@ -104,6 +113,7 @@ public class JsonStore
         Files.createDirectories(recordsDir);
         Files.createDirectories(coursesDir);
         Files.createDirectories(journalDir);
+        Files.createDirectories(conductDir);
         LOG.info("Store at {}", recordsDir.toAbsolutePath());
     }
 
@@ -118,7 +128,18 @@ public class JsonStore
      */
     public void save(CourseRecord record) throws IOException
     {
-        Path file = recordFile(record);
+        save(record, null);
+    }
+
+    /**
+     * Store a record, filed under the race day in the CLUB's own timezone.
+     *
+     * <p>@param zone the club's zone, from its programme file. Null falls back to UTC, which is
+     * where this started and is wrong at the edges — see {@link #recordFile}.
+     */
+    public void save(CourseRecord record, ZoneId zone) throws IOException
+    {
+        Path file = recordFile(record, zone);
         Files.createDirectories(file.getParent());
         writeAtomic(file, MAPPER.writeValueAsBytes(record));
         journal("record", record);
@@ -223,21 +244,103 @@ public class JsonStore
     }
 
     /**
-     * Where a run is filed.
+     * Where a run is filed: the club's race DAY, and the instant with its offset.
      *
      * <p>The start time is in the NAME rather than only in the file, so a boat may sail the
      * same course twice in a day and so a resubmission of the same run — the ordinary case,
-     * when the full track arrives later over wifi — lands on the same file and supersedes
-     * it rather than accumulating.
+     * when the full track arrives later over wifi — lands on the same file and supersedes it
+     * rather than accumulating.
+     *
+     * <p><b>A RACE DAY IS THE CLUB'S LOCAL DAY, and it used to be a UTC one.</b> Everything
+     * else in this system already agreed on local: {@code raceId} names a variant for the local
+     * day, {@code Race.on()} compares against {@code LocalDate.now(programme timezone)}, and the
+     * chain from one race to the next fires only within one local day. This did not, and the two
+     * agree for most of a Sydney afternoon and part company at the edges — a Thursday evening
+     * race in New York (20:00 EDT) filed under Friday, and any Sydney morning before 10:00 filed
+     * under yesterday. Found by a driver that passed all evening and failed the moment the clock
+     * crossed midnight.
+     *
+     * <p><b>The CLUB's zone rather than the boat's</b>, which is the part worth being deliberate
+     * about. A race day belongs to the club running it, so a visitor whose phone is on another
+     * zone — or set wrong — still files under the day everybody else sailed. Taking it from the
+     * boat would be self-describing and would let one race day land in two directories, which is
+     * worse than the ambiguity it fixed.
+     *
+     * <p><b>And the FILENAME carries the offset</b> ({@code 002312+1000}), so the file says what
+     * it means without its directory: a date segment with an offset on it was considered and is
+     * not a thing that can be compared — it is neither an instant nor a day, and two offsets for
+     * one day would be two directories. The offset belongs on the instant, which is the only
+     * thing that has one.
+     *
+     * <p>Zero offset writes {@code +0000} rather than {@code Z}, so every name in every club's
+     * store is the same shape and the same width.
      */
-    private Path recordFile(CourseRecord record)
+    private Path recordFile(CourseRecord record, ZoneId zone)
     {
         Instant at = record.startTime() != null ? record.startTime() : Instant.now();
-        ZonedDateTime local = at.atZone(ZoneOffset.UTC);
+        // UTC only when the caller could not say. Logged, because a record filed on the wrong
+        // day is not something anybody notices until they go looking for it.
+        ZoneId where = zone;
+        if (where == null)
+        {
+            where = ZoneOffset.UTC;
+            LOG.warn("No club timezone for {}/{} — filing {} by UTC day, which is right only "
+                + "for a club on UTC", record.club(), record.series(), record.boatId());
+        }
+        ZonedDateTime local = at.atZone(where);
         return recordsDir.resolve(safe(record.club()))
             .resolve(safe(record.course()))
             .resolve(local.toLocalDate().toString())
             .resolve(safe(record.boatId()) + "-" + STAMP.format(local) + ".json");
+    }
+
+    /**
+     * What happened in one race: who joined, what was said, which flags were raised.
+     *
+     * <p><b>Here rather than in the series YAML, and the line matters</b> (dialog document
+     * §12.5). A race's DEFINITION is configuration — a date, a format, a course per division —
+     * and belongs in the file a club diffs and could hand to another club. Its CONDUCT is a
+     * record of an afternoon involving real people, which is what this directory is for and why
+     * it is gitignored. Keeping the line is what stops a programme file filling up with a
+     * Saturday.
+     *
+     * <p>Written whole on every change rather than appended to. A race's conduct is kilobytes —
+     * a channel is as long as a race — and a document rewritten atomically cannot be caught
+     * half-way, where an append that failed mid-line leaves a file nothing can read.
+     */
+    public void saveConduct(String club, String series, String race, Object document)
+        throws IOException
+    {
+        Path file = conductFile(club, series, race);
+        Files.createDirectories(file.getParent());
+        writeAtomic(file, MAPPER.writeValueAsBytes(document));
+    }
+
+    /** One race's conduct, or empty — which is the ordinary case for a race nobody has run. */
+    public Optional<Map<String, Object>> conduct(String club, String series, String race)
+    {
+        Path file = conductFile(club, series, race);
+        if (!Files.isRegularFile(file))
+            return Optional.empty();
+        try
+        {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> read = MAPPER.readValue(Files.readAllBytes(file), Map.class);
+            return Optional.ofNullable(read);
+        }
+        catch (Exception e)
+        {
+            // Defensive, like every other load here: one unreadable race must not take the
+            // afternoon's other races down with it.
+            loadErrors.add(file + ": " + e.getMessage());
+            LOG.error("Could not read conduct {}", file, e);
+            return Optional.empty();
+        }
+    }
+
+    private Path conductFile(String club, String series, String race)
+    {
+        return conductDir.resolve(safe(club)).resolve(safe(series)).resolve(safe(race) + ".json");
     }
 
     public List<String> loadErrors()

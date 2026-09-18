@@ -220,6 +220,15 @@ ok('joining puts the course on the screen', device().includes('<svg class="plot"
 ok('...and it is the SAME screens the rig shows, not a second client',
   device().includes('BTW') && device().includes('DTW') && device().includes('data-orient="leg"'));
 
+// A SCREEN WITH NOTHING BEHIND IT IS NOT OFFERED (§8.2). This fixture has no race on the
+// course, so there is nobody to communicate with and nothing to be placed among — and Chat and
+// Place are absent from the selector rather than present and empty. An empty Chat would say
+// "nobody has spoken yet", where the truth is "there is nobody".
+ok('...with no Chat or Place, because a join with no race behind it has no channel',
+  !device().includes('data-view="chat"') && !device().includes('data-view="place"'));
+ok('...and no fixes are reported to nobody, which is what the absent fixSeconds asked for',
+  mod.__boat.device.dialog.fixSeconds == null);
+
 // The wake lock is asked for on joining, because that is the first moment the browser will
 // entertain the question. Where there is no such API the page has to say so rather than
 // pretend: a screen that quietly slept would look like the application crashing.

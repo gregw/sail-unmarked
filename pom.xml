@@ -45,6 +45,17 @@
             <artifactId>jetty-server</artifactId>
             <version>${jetty.version}</version>
         </dependency>
+        <!--
+            The login, and the ONE outbound call this server can make: an OpenID Connect
+            discovery at start-up and a token exchange per sign-in. Nothing else here talks
+            out, and an HTTP client for any other purpose is still the regression the
+            architecture exists to prevent.
+        -->
+        <dependency>
+            <groupId>org.eclipse.jetty</groupId>
+            <artifactId>jetty-openid</artifactId>
+            <version>${jetty.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.eclipse.jetty.ee10</groupId>
             <artifactId>jetty-ee10-servlet</artifactId>

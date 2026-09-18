@@ -20,6 +20,7 @@ import org.mortbay.sailing.unmarkable.model.Ids;
 import org.mortbay.sailing.unmarkable.model.Line;
 import org.mortbay.sailing.unmarkable.model.NamedPoint;
 import org.mortbay.sailing.unmarkable.model.Programme;
+import org.mortbay.sailing.unmarkable.model.Race;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -112,7 +113,7 @@ public class ProgrammeLibrary
                     + series + "' — the path wins");
             Programme programme = new Programme(club, series, raw.name(), raw.datum(),
                 raw.timezone(), raw.defaults(), raw.points(), raw.lines(), raw.courses(),
-                raw.notes());
+                raw.races(), raw.notes());
             programmes.put(key(club, series), programme);
             files.put(key(club, series), file);
         }
@@ -157,13 +158,20 @@ public class ProgrammeLibrary
         Map<String, Line> lines, Map<String, Course> courses,
         List<ProgrammeWriter.Rename> renames) throws IOException
     {
+        save(club, series, points, lines, courses, null, renames);
+    }
+
+    public void save(String club, String series, Map<String, NamedPoint> points,
+        Map<String, Line> lines, Map<String, Course> courses, Map<String, Race> races,
+        List<ProgrammeWriter.Rename> renames) throws IOException
+    {
         Path file = files.get(key(club, series));
         if (file == null)
             throw new IOException("No such programme: " + key(club, series));
-        ProgrammeWriter.write(file, points, lines, courses, renames);
-        LOG.info("Wrote {} point(s), {} line(s) and {} course(s) to {}",
+        ProgrammeWriter.write(file, points, lines, courses, races, renames);
+        LOG.info("Wrote {} point(s), {} line(s), {} course(s) and {} race(s) to {}",
             points == null ? "no" : points.size(), lines == null ? "no" : lines.size(),
-            courses == null ? "no" : courses.size(), file);
+            courses == null ? "no" : courses.size(), races == null ? "no" : races.size(), file);
         load();
     }
 

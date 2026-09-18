@@ -3,6 +3,7 @@ package org.mortbay.sailing.unmarkable.store;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -33,6 +34,89 @@ public class JsonStoreTest
             Instant.now(), "0.1.0",
             List.of(new CrossingEvent(0, "leeward", Direction.FORWARD, start, null, 3, 3, true, null)),
             List.of());
+    }
+
+    /**
+     * A RACE DAY IS THE CLUB'S LOCAL DAY, and this is the case that used to be filed wrong.
+     *
+     * <p>07:00 UTC on 1 January is 18:00 the same day in Sydney, so both agree — which is why
+     * every other test here passed while the rule was wrong. 19:25 UTC on 17 September is 05:25
+     * on the EIGHTEENTH in Sydney, and that is the one that matters: a race sailed on Friday
+     * morning must not be filed under Thursday.
+     */
+    @Test
+    public void aRecordIsFiledUnderTheClubsOwnDay(@TempDir Path root) throws Exception
+    {
+        JsonStore store = new JsonStore(root);
+        store.start();
+        ZoneId sydney = ZoneId.of("Australia/Sydney");
+        store.save(record("boat-1", JoinMode.RACE, "2026-09-17T19:25:00Z", 3600), sydney);
+
+        assertThat("filed under the Sydney day, not the UTC one",
+            store.day("test.example", "up-and-back", LocalDate.parse("2026-09-18")), hasSize(1));
+        assertThat("and NOT under the UTC day",
+            store.day("test.example", "up-and-back", LocalDate.parse("2026-09-17")), hasSize(0));
+    }
+
+    /**
+     * An evening race west of Greenwich, which is the other half of the same fault.
+     *
+     * <p>20:00 on Thursday in New York is 00:00 on FRIDAY in UTC, so a whole club's Thursday
+     * series used to file under Friday — every week, invisibly.
+     */
+    @Test
+    public void anEveningRaceWestOfGreenwichStaysOnItsOwnDay(@TempDir Path root) throws Exception
+    {
+        JsonStore store = new JsonStore(root);
+        store.start();
+        store.save(record("boat-1", JoinMode.RACE, "2026-09-18T00:00:00Z", 3600),
+            ZoneId.of("America/New_York"));
+
+        assertThat(store.day("test.example", "up-and-back", LocalDate.parse("2026-09-17")),
+            hasSize(1));
+    }
+
+    /**
+     * The FILENAME carries the offset, so a file says what it means without its directory.
+     *
+     * <p>A date segment with an offset on it was considered and rejected: it is neither an
+     * instant nor a day, cannot be compared, and two offsets for one race day would be two
+     * directories. The offset belongs on the instant, which is the only thing that has one.
+     */
+    @Test
+    public void theFilenameCarriesTheOffset(@TempDir Path root) throws Exception
+    {
+        JsonStore store = new JsonStore(root);
+        store.start();
+        store.save(record("boat-1", JoinMode.RACE, "2026-09-17T19:25:00Z", 3600),
+            ZoneId.of("Australia/Sydney"));
+
+        Path day = root.resolve("store/records/test.example/up-and-back/2026-09-18");
+        List<String> names;
+        try (java.util.stream.Stream<Path> files = java.nio.file.Files.list(day))
+        {
+            names = files.map(f -> f.getFileName().toString()).toList();
+        }
+        assertThat(names, contains("boat-1-052500+1000.json"));
+    }
+
+    /**
+     * And a resubmission still supersedes, which is what putting the start time in the name is
+     * for — the ordinary second post being the same run with its full track attached.
+     */
+    @Test
+    public void aResubmissionStillSupersedesAcrossTheChange(@TempDir Path root) throws Exception
+    {
+        JsonStore store = new JsonStore(root);
+        store.start();
+        ZoneId sydney = ZoneId.of("Australia/Sydney");
+        store.save(record("boat-1", JoinMode.RACE, "2026-09-17T19:25:00Z", 3600), sydney);
+        store.save(record("boat-1", JoinMode.RACE, "2026-09-17T19:25:00Z", 3599), sydney);
+
+        List<CourseRecord> day = store.day("test.example", "up-and-back",
+            LocalDate.parse("2026-09-18"));
+        assertThat(day, hasSize(1));
+        assertThat(day.get(0).elapsedSeconds().orElse(-1), is(3599L));
     }
 
     @Test

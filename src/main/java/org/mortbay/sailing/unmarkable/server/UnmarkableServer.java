@@ -3,6 +3,7 @@ package org.mortbay.sailing.unmarkable.server;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Path;
+import java.util.EnumSet;
 import java.util.Properties;
 
 import org.eclipse.jetty.ee10.servlet.ServletContextHandler;
@@ -14,8 +15,20 @@ import org.eclipse.jetty.server.HttpConnectionFactory;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.server.Slf4jRequestLogWriter;
+import jakarta.servlet.DispatcherType;
+import org.eclipse.jetty.client.HttpClient;
+import org.eclipse.jetty.client.WWWAuthenticationProtocolHandler;
+import org.eclipse.jetty.ee10.servlet.FilterHolder;
+import org.eclipse.jetty.ee10.servlet.SessionHandler;
+import org.eclipse.jetty.security.SecurityHandler;
+import org.eclipse.jetty.security.openid.OpenIdAuthenticator;
+import org.eclipse.jetty.security.openid.OpenIdConfiguration;
+import org.eclipse.jetty.security.openid.OpenIdLoginService;
+import org.mortbay.sailing.unmarkable.config.AuthConfig;
 import org.mortbay.sailing.unmarkable.config.UnmarkableConfig;
 import org.mortbay.sailing.unmarkable.course.ProgrammeLibrary;
+import org.mortbay.sailing.unmarkable.dialog.Dialog;
+import org.mortbay.sailing.unmarkable.dialog.Schemas;
 import org.mortbay.sailing.unmarkable.store.CourseLedger;
 import org.mortbay.sailing.unmarkable.store.JsonStore;
 import org.slf4j.Logger;
@@ -118,9 +131,22 @@ public class UnmarkableServer
         connector.setPort(port >= 0 ? port : config.server().port());
         server.addConnector(connector);
 
+        // THE CONVERSATION (dialog document §3). One service, and for now one transport: the
+        // polling one, because the document's promise is that the WebSocket carries the same
+        // envelopes and building the socket first would have meant designing the fallback twice.
+        Schemas schemas = new Schemas();
+        if (!schemas.missing().isEmpty())
+            LOG.error("Message schemas missing from the build: {}", schemas.missing());
+        Dialog dialog = new Dialog(programmes, ledger, store);
+
+        AuthConfig auth = AuthConfig.load(configDir);
+
         ServletContextHandler context = new ServletContextHandler("/");
+        if (auth.enabled())
+            secure(context, auth, server);
+        context.addServlet(new ServletHolder(new DialogServlet(dialog, schemas)), "/api/dialog/*");
         context.addServlet(new ServletHolder(
-            new ApiServlet(config, programmes, store, ledger, version)), "/api/*");
+            new ApiServlet(config, programmes, store, ledger, dialog, auth, version)), "/api/*");
         context.addServlet(new ServletHolder(new StaticResourceServlet()), "/*");
         server.setHandler(context);
         server.start();
@@ -139,6 +165,78 @@ public class UnmarkableServer
             LOG.error("{} programme file(s) had problems — see errors above",
                 programmes.loadErrors().size());
         return server;
+    }
+
+    /**
+     * Put the officer's screens behind an OpenID Connect login.
+     *
+     * <p>The issuer is all that is configured: the authorisation and token endpoints and the
+     * signing keys are discovered from it at start-up. That discovery is the one outbound call
+     * this server makes, and it is why a server with authentication on needs the network to
+     * start — which is worth knowing before switching it on for a Pi on a committee boat.
+     *
+     * <p>Sessions come with it. They are in memory and go when the process does, so a restart
+     * signs the officer out; nothing a boat is doing is affected, because no boat has a session
+     * here at all.
+     */
+    private static void secure(ServletContextHandler context, AuthConfig auth, Server server)
+    {
+        OpenIdConfiguration oidc = new OpenIdConfiguration.Builder()
+            .issuer(auth.issuer())
+            .clientId(auth.clientId())
+            .clientSecret(auth.clientSecret())
+            // The address and the hosted domain come back in these, and without them there is
+            // nothing to check a club domain against. "openid" is not listed: the configuration
+            // already asks for it, and naming it again puts it in the request twice.
+            .scopes("email", "profile")
+            .httpClient(tokenExchangeClient())
+            .build();
+        server.addBean(oidc);
+
+        // The third argument is the ERROR PAGE, not a post-logout path. Get the two the wrong
+        // way round and the error page is null, which is Jetty's signal to answer a failed
+        // callback with a bare 403 and no explanation — the one response in this flow that
+        // somebody setting a club up has to be able to read.
+        OpenIdAuthenticator authenticator =
+            new OpenIdAuthenticator(oidc, auth.redirectPath(), AuthFilter.ERROR_PATH, null);
+        SecurityHandler security = new UnmarkableSecurityHandler(auth);
+        security.setAuthenticator(authenticator);
+        security.setLoginService(new OpenIdLoginService(oidc));
+
+        context.setSessionHandler(new SessionHandler());
+        context.setSecurityHandler(security);
+        // After the security handler, so the sign-in has happened and there are claims to read.
+        context.addFilter(new FilterHolder(new AuthFilter(auth)), "/*",
+            EnumSet.of(DispatcherType.REQUEST));
+    }
+
+    /**
+     * The client that redeems the authorisation code, with one handler taken out.
+     *
+     * <p>Copied from sail-jinx, where it was earned: when the client id and secret do not match,
+     * Google's token endpoint answers <b>401 with a JSON body naming the problem</b> and no
+     * {@code WWW-Authenticate} header, because it is reporting a refusal rather than offering a
+     * challenge. Jetty's {@code WWWAuthenticationProtocolHandler} sees a 401, looks for the
+     * header it implies, and fails the exchange with a protocol violation — discarding the body
+     * that says which end was wrong. So the one misconfiguration most likely to happen while
+     * registering a club's OAuth client reports itself as a transport fault.
+     *
+     * <p>Removing the handler loses nothing: this client talks to exactly one endpoint, which
+     * authenticates by form parameters and never challenges.
+     */
+    private static HttpClient tokenExchangeClient()
+    {
+        return new HttpClient()
+        {
+            @Override
+            protected void doStart() throws Exception
+            {
+                super.doStart();
+                // After super.doStart(), not in the constructor: the client installs its default
+                // protocol handlers as it starts, so one removed earlier comes back.
+                getProtocolHandlers().remove(WWWAuthenticationProtocolHandler.NAME);
+            }
+        };
     }
 
     /** Build version, from the Maven-filtered {@code unmarkable.properties}. */

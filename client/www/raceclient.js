@@ -33,6 +33,7 @@
 import {
   CrossingDetector,
   RelocationWatch,
+  fromLocal,
   prepareLine,
   projectCog,
   qualityCheck,
@@ -182,6 +183,13 @@ export function bearingLocal(from, to) {
  * Constructed once, when the join succeeds, and then fed fixes for the rest of the race.
  * Everything it knows is in it; there is nothing to fetch and nothing to wait for.
  */
+/**
+ * What may be asked for by name. Anything else reads as `auto`, so a stale value — a screen
+ * that existed in a build somebody had before this one — cannot strand a sailor on a screen
+ * with no way back.
+ */
+export const VIEW_MODES = ['overview', 'mark', 'chat', 'place'];
+
 export class RaceClient {
   constructor(snapshot, options = {}) {
     this.snapshot = snapshot;
@@ -757,6 +765,83 @@ export class RaceClient {
   }
 
   /**
+   * THE ARTEFACT: everything a scorer or a protest could need, as a `CourseRecord`.
+   *
+   * <b>This is the only thing that leaves this system</b>, which is why it carries the awkward
+   * parts as well as the result: the latched crossings with their interpolated instants, the
+   * candidates that were rejected and why, and the QC refusals. Anything a scorer needs and
+   * cannot find here would pull race concepts back into this codebase.
+   *
+   * <b>The instants are the INTERPOLATED ones</b>, taken from the crossings rather than from
+   * the fixes that confirmed them. That is the entire reason the detector interpolates, and
+   * using a fix time would throw the precision away at the last step — by up to the fix
+   * interval, at both ends of an elapsed time.
+   *
+   * <b>The full track is included when it is asked for, and not by default.</b> A record with
+   * its fixes is what makes a contested crossing examinable, and it is also megabytes over a
+   * phone's data connection at the end of a race. So the record posted the moment a boat
+   * finishes is the thin one, and the same record can be posted again with `{ track: true }`
+   * when there is wifi — the store supersedes rather than accumulates, which is what makes
+   * resubmission the ordinary case rather than a special one.
+   */
+  record({ track = false, joinMode = null, submittedAt = Date.now() } = {}) {
+    const snapshot = this.snapshot ?? {};
+    const iso = (value) => (value == null ? null : new Date(value).toISOString());
+    return {
+      club: snapshot.club ?? null,
+      series: snapshot.series ?? null,
+      course: snapshot.course ?? null,
+      // The REVISION, not just the course: courses are edited live, so a course id alone
+      // would let two boats be compared who sailed different water.
+      courseRevision: snapshot.revision ?? null,
+      join: joinMode ?? this.joinMode ?? 'ANONYMOUS',
+      boatId: this.boat?.sail || this.boat?.name || null,
+      boatName: this.boat?.name ?? null,
+      sailNumber: this.boat?.sail ?? null,
+      tcf: Number(this.boat?.tcf) > 0 ? Number(this.boat.tcf) : null,
+      startTime: iso(this.startAt),
+      finishTime: iso(this.finishAt),
+      submittedAt: iso(submittedAt),
+      appVersion: 'dev',
+      crossings: [
+        ...this.crossings.map((crossing) => ({
+          step: crossing.step,
+          line: crossing.line,
+          cross: String(crossing.cross ?? '').toUpperCase(),
+          time: iso(crossing.time),
+          position: crossing.point ? fromLocal(this.origin, crossing.point) : null,
+          confirmBefore: crossing.confirmBefore ?? 0,
+          confirmAfter: crossing.confirmAfter ?? 0,
+          counted: true,
+          note: crossing.lap > 1 ? `lap ${crossing.lap}` : null,
+        })),
+        ...this.rejects.map((reject) => ({
+          step: -1,
+          line: reject.line ?? null,
+          cross: null,
+          time: iso(reject.at ?? null),
+          position: null,
+          confirmBefore: 0,
+          confirmAfter: 0,
+          counted: false,
+          note: `${reject.what ?? 'REJECTED'}: ${reject.reason ?? ''}`.trim(),
+        })),
+      ],
+      // AS `CrossingEvent`s WITH `counted: false`, which is how the model already carries them —
+      // `counted` and `note` exist for exactly this. A separate `rejected` array was written
+      // first and was silently DROPPED by the server, because `CourseRecord` has no such field
+      // and unknown properties are ignored: the record arrived looking complete with the half
+      // that answers "why is there no crossing here?" missing. A record that carried only what
+      // counted would be a record that could not be argued with.
+      fixes: track ? this.fixes.map((point) => ({
+        latitude: fromLocal(this.origin, point).latitude,
+        longitude: fromLocal(this.origin, point).longitude,
+        time: iso(point.t ?? null),
+      })) : [],
+    };
+  }
+
+  /**
    * Which screen the sailor should be looking at, and why.
    *
    * The sailor never asks for the Mark screen. On a boat the hands are busy and the
@@ -770,13 +855,24 @@ export class RaceClient {
    * line running along the leg, and the screen was taking over four kilometres out.
    *
    * <b>And the sailor can overrule it.</b> `viewMode` is `auto` by default, which is the design
-   * above; set to `overview` or `mark` it simply says which screen, because somebody setting up
-   * or checking the next leg has every right to pick and a display that refused would be
-   * insisting it knows better about what somebody wants to look at. The rule underneath goes on
-   * running either way — the hysteresis is still updated below — so `auto` resumes with the
-   * right answer rather than with whatever happened to be true when it was left.
+   * above; set to any of the screens it simply says which, because somebody setting up or
+   * checking the next leg has every right to pick and a display that refused would be insisting
+   * it knows better about what somebody wants to look at. The rule underneath goes on running
+   * either way — the hysteresis is still updated below — so `auto` resumes with the right answer
+   * rather than with whatever happened to be true when it was left.
+   *
+   * <b>AUTO GAINED ONE CLAUSE when the channel arrived</b> (§9.5): a new channel entry brings up
+   * the channel, <em>unless the boat is approaching a line</em>. The test is the one that
+   * already exists — if the Line screen would be taken, chat does not take it — so the priority
+   * reads: the Mark screen while approaching or within the dwell, then a new channel entry, then
+   * whatever the rule already said.
+   *
+   * <b>The channel is a HINT rather than a field</b>, and that is the seam being kept: this
+   * class knows about lines and fixes and must not learn what a chat message is. The page passes
+   * `{channel: true}` when something has arrived that wants the screen, and the rule that
+   * decides screens stays in one place.
    */
-  view(now = Date.now()) {
+  view(now = Date.now(), hints = {}) {
     // No live step means the course is complete, and there is no Mark screen to force: there
     // is no mark. This comes before the override deliberately.
     if (!this.live()) return 'overview';
@@ -803,11 +899,15 @@ export class RaceClient {
     // moment AUTO is handed back it answers for where the boat is NOW, not for where it was
     // when somebody pressed a button.
     if (this.viewMode !== 'auto') return this.viewMode;
-    return this.showingMark ? 'mark' : 'overview';
+    if (this.showingMark) return 'mark';
+    // Priority 2, and only here: `Place` is never automatic — it is somewhere you go to look,
+    // not something that should arrive, and it is the screen whose data is most likely stale.
+    if (hints.channel) return 'chat';
+    return 'overview';
   }
 
   /**
-   * Which screen the sailor has asked for: `auto`, `overview` or `mark`.
+   * Which screen the sailor has asked for: `auto`, or one of the screens by name.
    *
    * Here rather than on the page, because `view()` is the single answer to "which screen" and a
    * page that second-guessed it would be a second rule to keep in agreement with the first.
@@ -815,7 +915,7 @@ export class RaceClient {
    * on a screen with no way back.
    */
   setViewMode(mode) {
-    this.viewMode = mode === 'overview' || mode === 'mark' ? mode : 'auto';
+    this.viewMode = VIEW_MODES.includes(mode) ? mode : 'auto';
     return this.viewMode;
   }
 

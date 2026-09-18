@@ -33,3 +33,6 @@ data/backups/
 /sailing-pf
 /sail-jinx
 
+
+# The login's client secret. auth.yaml.example beside it shows the shape without it.
+data/config/auth.yaml

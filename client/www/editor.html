@@ -295,6 +295,12 @@
       <span id="save" class="mono" style="font-size:11px"></span>
       <span id="status" class="mono" style="font-size:11px"></span>
       <span style="flex:1 1 auto"></span>
+      <!--
+        WHO IS SIGNED IN, on the screens that require it. Filled from /api/config, which every
+        page fetches anyway; empty and invisible where there is no login, so the machine on a
+        desk is not shown an account it does not have.
+      -->
+      <span id="whoami" class="small mono"></span>
       <a href="index.html" class="small">&larr; Home</a>
     </div>
     <svg id="map" viewBox="0 0 700 500"></svg>
@@ -311,6 +317,10 @@
           <button id="tab_points" data-tab="points">Points</button>
           <button id="tab_lines" data-tab="lines">Lines</button>
           <button id="tab_courses" data-tab="courses" class="on">Courses</button>
+          <!-- THE FOURTH TAB. A race lives in a series, so DEFINING one is editing and belongs
+               here with the same chart and the same drill-down; RUNNING one is race.html,
+               because there is no undo for telling a fleet to stop. -->
+          <button id="tab_races" data-tab="races">Races</button>
         </div>
         <div id="rows"></div>
         <!-- OUTSIDE #rows, because #rows is rebuilt whenever the pane changes and a message

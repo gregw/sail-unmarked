@@ -35,6 +35,7 @@ import {
   translateBy,
   wheelZoomStep,
 } from './geo.js';
+import { showWhoami } from './whoami.js';
 
 /** How much of the chart a selected line is framed to occupy. */
 const FRAME_FRACTION = 0.2;
@@ -102,6 +103,10 @@ const state = {
   picking: null,        // 'port' | 'starboard' while an end is waiting for a chart click
   courses: new Map(),   // id -> { id, name, public, notes, variants: Map }
   selectedCourse: null,
+  // A RACE IS THE FOURTH KIND OF THING IN THIS FILE, and the first one that is about a day
+  // rather than about water: a date, a format, and a course for each division sailing it.
+  races: new Map(),     // id -> { id, name, date, format, divisions: {}, next, notes }
+  selectedRace: null,
   // The Courses tab edits exactly ONE variant, and that is the whole of the scope rule:
   // which tab you are on says whether an edit lands on the club's geometry or on this
   // design alone.
@@ -179,6 +184,20 @@ async function loadProgramme(key) {
     notes: c.notes ?? null,
     variants: new Map(Object.entries(c.variants ?? {}).map(([vid, v]) => [vid, variantIn(vid, v)])),
   }]));
+  state.races = new Map(Object.entries(programme.races ?? {}).map(([id, r]) => [id, {
+    id,
+    name: r.name ?? null,
+    date: r.date ?? null,
+    format: r.format ?? null,
+    next: r.next ?? null,
+    notes: r.notes ?? null,
+    // Copied out rather than referred to, like every other level here: an edit must not
+    // reach back into the fetched document, which is what the save is diffed against.
+    divisions: Object.fromEntries(Object.entries(r.divisions ?? {}).map(([name, d]) => [name, {
+      name, course: d.course ?? null, variant: d.variant ?? null, start: d.start ?? null,
+    }])),
+  }]));
+  state.selectedRace = null;
   state.lengths = programme.lengths ?? {};
   state.selectedCourse = null;
   state.selectedVariant = null;
@@ -1474,7 +1493,7 @@ function render() {
   // every level's fields sit inline under that level's own selector, which is the order the
   // pane is read in — course, its fields, variant, its fields, snapshot, its details.
   const wrap = el('formWrap');
-  if (wrap) wrap.hidden = state.tab === 'courses';
+  if (wrap) wrap.hidden = state.tab === 'courses' || state.tab === 'races';
   if (state.tab === 'points') renderForm();
   else if (state.tab === 'lines') renderLineForm();
 }
@@ -1506,6 +1525,12 @@ function showTab(tab) {
  * read once and then permanently in the way of the list it sits above.
  */
 const INFO = {
+  races: '<b>Races</b> are what a day\'s racing is made of: a date, a format, and a course '
+    + 'for each division. Defining one is EDITING — it is configuration, it diffs, and it '
+    + 'lives in this series\'s file. Running one is the <a href="race.html">race screen</a>, '
+    + 'which is a separate page because there is no undo for telling a fleet to stop. A race '
+    + 'may name the race that FOLLOWS it, and a boat that stops racing one is entered for that '
+    + 'next race if it is on the same day — which is why "regatta" does not have to be a word.',
   points: '<b>Points</b> are places, named once and shared by every line that touches '
     + 'them &mdash; so a correction is one edit, and two lines that meet at a mark stay '
     + 'together. Select one and click the chart to put it there, drag it to move it, or '
@@ -1797,6 +1822,9 @@ function isOpen(level) {
   // course and hiding it by default would hide the point.
   if (level === 'sequence') return true;
   if (level === 'course' || level === 'variant') return true;
+  // A race's fields are the whole of a race: the selector above them says only which day it
+  // is, so a closed one would be a level with nothing on it.
+  if (level === 'race') return true;
   return false;
 }
 
@@ -1821,6 +1849,7 @@ function formsChanged() {
   state.courseFieldsFor = undefined;
   state.variantFieldsFor = undefined;
   state.seriesFormFor = undefined;
+  state.raceFieldsFor = undefined;
 }
 
 function renderRows() {
@@ -1911,6 +1940,30 @@ function renderRows() {
       // own: choosing a capture IS the act of asking to see it.
       if (state.selectedSnapshot) out += '<div class="foldBody" id="snapshotForm"></div>';
     }
+  } else if (state.tab === 'races') {
+    /*
+     * DEFINING A RACE IS EDITING (dialog document §12.1), which is why this is a tab of the
+     * editor rather than a page of its own: a race's definition is configuration — a name, a
+     * date, a format, a division-to-variant map, a planned start — authored ahead of time,
+     * diffable, and part of the file a club could hand to another club whole.
+     *
+     * Conducting one is `race.html`, and the reason is the undo. This page saves as you go and
+     * holds exactly one undo, which is right for dragging a mark and wrong for raising an
+     * abandonment.
+     */
+    out += picker('race', 'Race',
+      byId([...state.races.values()]).map((r) => ({
+        value: r.id, label: `${r.date ?? '(no date)'} — ${r.id}`,
+      })), state.selectedRace, [
+        ['race_add', '+', 'new race'],
+        ['race_clone', '&#10697;', 'clone this race'],
+        ['race_delete', '&times;', 'delete this race'],
+      ], 'choose a race', INFO.races);
+    if (currentRace())
+    {
+      out += fold('race', 'Race details')
+        + (isOpen('race') ? '<div class="foldBody" id="raceForm"></div>' : '');
+    }
   } else {
     // Points and lines are the CLUB's, so their selector sits under the series and carries no
     // course above it — which is the tab rule made visible.
@@ -1929,7 +1982,7 @@ function renderRows() {
   state.rowsHtml = out;
   state.courseFieldsFor = undefined;
   state.variantFieldsFor = undefined;
-  wireRow(['course', 'variant', 'items']);
+  wireRow(['course', 'variant', 'items', 'race']);
 }
 
 /**
@@ -1989,6 +2042,7 @@ function wireRow(levels) {
     // same-variant case.
     if (state.selectedSnapshot) selectVariant(state.selectedVariant);
   });
+  pick('race', selectRace);
   pick('items', (id) => (state.tab === 'points' ? selectPoint(id) : selectLine(id)));
   const on = (id, fn) => el(id)?.addEventListener('click', fn);
   const withCourse = (fn) => () => { const c = currentCourse(); if (c) fn(c); };
@@ -2012,6 +2066,9 @@ function wireRow(levels) {
   on('cmd_snapshot_clone', cloneSnapshot);
   on('cmd_snapshot_publish', publishSnapshot);
   on('cmd_snapshot_delete', forgetSnapshot);
+  on('cmd_race_add', addRace);
+  on('cmd_race_clone', cloneRace);
+  on('cmd_race_delete', deleteRace);
   on('cmd_item_add', addThing);
   on('cmd_item_delete', deleteThing);
 }
@@ -2027,6 +2084,7 @@ function renderList() {
   if (isOpen('series') && state.key) renderSeriesForm();
   if (isOpen('course') && currentCourse()) renderCourseFields();
   if (isOpen('variant') && currentVariant()) renderVariantFields();
+  if (isOpen('race') && currentRace()) renderRaceFields();
   if (state.selectedSnapshot) renderSnapshotDetail();
   // The tab is required to show the course length ALWAYS, so it is set from the selection
   // rather than from whichever section happens to be unfolded — folding a form must not take
@@ -2664,6 +2722,367 @@ function renderVariantFields() {
   wireVariantFields(course, variant);
   el('cmd_snapshot')?.addEventListener('click', () => takeSnapshot(course, variant));
   syncCourseForm();
+}
+
+/** The race the pane is editing, or null. */
+function currentRace() {
+  return state.tab === 'races' ? (state.races.get(state.selectedRace) ?? null) : null;
+}
+
+/**
+ * Choose a race, and take the chart with it.
+ *
+ * <b>Selecting a race selects its first division's design</b>, so the chart shows the water the
+ * race is actually on rather than every line the club owns. That is the one place this tab
+ * reaches into the Courses tab's selection, and it is worth it: a race being defined is a race
+ * somebody is looking at, and a chart showing everything shows nothing.
+ */
+function selectRace(id) {
+  state.selectedRace = id;
+  const race = state.races.get(id);
+  const first = Object.values(race?.divisions ?? {})[0] ?? null;
+  if (first?.course && state.courses.has(first.course)) {
+    state.selectedCourse = first.course;
+    state.selectedVariant = first.variant
+      && state.courses.get(first.course).variants.has(first.variant)
+      ? first.variant : null;
+  }
+  state.selectedSnapshot = null;
+  state.snapshotShown = null;
+  formsChanged();
+  refreshGeo();
+  frameVariant(currentVariant());
+  render();
+}
+
+/**
+ * A new race, named for the day it is on.
+ *
+ * `yyyymmdd-race-n`, which is what {@link raceId} already names a variant expanded from a
+ * template — and for the same reason, because it is the same fact: a race is a shape sailed on
+ * a day, and usually not the only one that day.
+ */
+function addRace() {
+  const today = new Date();
+  const day = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}`
+    + String(today.getDate()).padStart(2, '0');
+  let n = 1;
+  while (state.races.has(`${day}-race-${n}`)) n++;
+  const id = `${day}-race-${n}`;
+  beginEdit();
+  state.races.set(id, {
+    id,
+    name: `Race ${n}`,
+    date: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-`
+      + String(today.getDate()).padStart(2, '0'),
+    format: 'fleet',
+    next: null,
+    notes: null,
+    // ONE DIVISION, because a race with none can hand no boat a course — and the first thing
+    // anybody does is pick the course, which is a division whether or not they use the word.
+    divisions: { open: { name: 'open', course: [...state.courses.keys()][0] ?? null, variant: null, start: null } },
+  });
+  state.selectedRace = id;
+  state.open.race = true;
+  formsChanged();
+  endEdit();
+  render();
+}
+
+function cloneRace() {
+  const race = currentRace();
+  if (!race) return;
+  let id = `${race.id}-copy`;
+  let n = 2;
+  while (state.races.has(id)) id = `${race.id}-copy-${n++}`;
+  beginEdit();
+  state.races.set(id, {
+    ...race,
+    id,
+    // A CLONE IS NOT THE NEXT RACE. Copying the chain would enter every boat that finished the
+    // copy into the original's successor, which is somebody else's race.
+    next: null,
+    divisions: Object.fromEntries(Object.entries(race.divisions).map(([name, d]) =>
+      [name, { ...d }])),
+  });
+  state.selectedRace = id;
+  formsChanged();
+  endEdit();
+  render();
+}
+
+function deleteRace() {
+  const race = currentRace();
+  if (!race) return;
+  // A race another race names as its NEXT is holding it: deleting it would break the chain
+  // silently, and a boat finishing would find nothing to be entered for. Named rather than
+  // cascaded, like every other delete here.
+  const held = [...state.races.values()].filter((r) => r.next === race.id).map((r) => r.id);
+  if (held.length) {
+    note(`${race.id} is the next race of ${held.join(', ')} — clear that first`, true);
+    return;
+  }
+  beginEdit();
+  state.races.delete(race.id);
+  state.selectedRace = null;
+  formsChanged();
+  endEdit();
+  render();
+}
+
+/**
+ * The race's own fields: what it is, when, and a course for each division.
+ *
+ * <b>Creating a division is creating a TAG and picking a variant for it</b> (§12.3), which is
+ * the whole of the division mechanism this system has — and deliberately so: divisions do not
+ * exist on the server as a concept, only as tags that messages carry. So this form writes a
+ * name and a course, and the tag `division:<name>` falls out of the name.
+ */
+function renderRaceFields() {
+  const into = el('raceForm');
+  const race = currentRace();
+  if (!into || !race) return;
+  const courses = byId([...state.courses.values()]);
+  const others = byId([...state.races.values()].filter((r) => r.id !== race.id));
+
+  /*
+   * THE CHAIN IS PART OF THE KEY, because it lives on OTHER races.
+   *
+   * The guard exists to keep the caret in whatever somebody is typing, so it compares what the
+   * form shows — and what this form shows now includes a link written on a different race
+   * entirely. A key that knew only about this race would call the form unchanged after the
+   * chain moved and never redraw it, which is the same trap the sequence fold fell into.
+   */
+  const chain = [...state.races.values()].map((r) => `${r.id}>${r.next ?? ''}`).join(',');
+  const key = `${race.id}/${Object.keys(race.divisions).join(',')}/${chain}`;
+  if (state.raceFieldsFor === key) return;
+  state.raceFieldsFor = key;
+
+  /*
+   * WHICH RACE THIS ONE FOLLOWS, derived from the model rather than stored beside it.
+   *
+   * The file holds `next` on the race BEFORE, which is where the chain has to live: the server
+   * reads it when a boat stops racing and needs to know where to enter it. So "follows" is not a
+   * second field to keep in agreement with the first — it is the same link read backwards, and
+   * there is exactly one race that can answer to it.
+   */
+  const follows = others.find((r) => r.next === race.id)?.id ?? null;
+
+  // A race is followed by ONE race. Offering one that already leads into another would fork the
+  // chain, and a boat that stopped racing would be entered for two races at once — so those are
+  // named and left out rather than silently stealing the link when chosen.
+  const taken = others.filter((r) => r.next && r.next !== race.id);
+  const loops = (from) => {
+    // And a chain must not eat its own tail: following a race this one already leads to, however
+    // far down, would enter a boat into a loop it never leaves.
+    for (let at = race.next, guard = 0; at && guard < 100; guard++) {
+      if (at === from) return true;
+      at = state.races.get(at)?.next ?? null;
+    }
+    return false;
+  };
+  const candidates = others.filter((r) => !taken.includes(r) && !loops(r.id));
+
+  into.innerHTML = `
+    <div class="idname">
+      <div><label class="label" for="r_id">Race (id)</label>
+        <input id="r_id" value="${esc(race.id)}" spellcheck="false"></div>
+      <div><label class="label" for="r_name">Long name</label>
+        <input id="r_name" value="${esc(race.name ?? '')}"></div>
+    </div>
+    <div class="idname">
+      <div><label class="label" for="r_date">Date</label>
+        <input id="r_date" type="date" value="${esc(race.date ?? '')}"></div>
+      <div><label class="label" for="r_format">Format</label>
+        <input id="r_format" value="${esc(race.format ?? '')}" placeholder="fleet"></div>
+    </div>
+    <!--
+      A RACE KNOWS ITS NEXT RACE — that is the model, and it is the whole answer to several races
+      in a day: a boat that stops racing one is entered for the next, provided it is the same day
+      and has a division of the same name. Which is why "regatta" never has to become a word.
+
+      BUT THE FORM ASKS THE OTHER WAY ROUND, and that is not a contradiction — it is the order
+      races are actually made in. When you create race two, race three does not exist yet, so
+      "followed by" is a question whose answer cannot be given: the only races on offer are the
+      ones already made, which are the ones BEFORE this. Asking what this race FOLLOWS can always
+      be answered at the moment of asking, and it writes the same single link from the other end.
+    -->
+    <label class="label" for="r_follows">Follows</label>
+    <select id="r_follows">
+      <option value=""${follows ? '' : ' selected'}>nothing — this is the first race</option>
+      ${candidates.map((r) => `<option value="${esc(r.id)}"${r.id === follows ? ' selected' : ''}>`
+        + `${esc(r.id)}${r.date && r.date !== race.date ? ` — ${esc(r.date)}` : ''}</option>`).join('')}
+    </select>
+    ${race.next ? `<div style="font-size:11px; color:var(--muted); margin-top:3px">
+      Boats that stop racing this one are entered for <strong>${esc(race.next)}</strong>.</div>`
+      : ''}
+    ${taken.length ? `<div style="font-size:11px; color:var(--muted); margin-top:3px">
+      ${esc(taken.map((r) => r.id).join(', '))} already ${taken.length === 1 ? 'leads' : 'lead'}
+      into another race, so ${taken.length === 1 ? 'it is' : 'they are'} not offered: a race is
+      followed by one race, or the chain would fork and a boat would be entered twice.</div>`
+      : ''}
+
+    <label class="label">Divisions</label>
+    <div style="font-size:11px; color:var(--muted); margin-bottom:4px">
+      A division is a tag and a course for it. A boat joining that course is tagged
+      <span class="mono">division:&lt;name&gt;</span>, which is how every message finds it.
+    </div>
+    ${Object.entries(race.divisions).map(([name, division]) => {
+      const course = state.courses.get(division.course);
+      const variants = course ? byId([...course.variants.values()]).filter((v) => !v.template) : [];
+      // The same row styling the sequence's steps use, because it is the same shape of thing:
+      // a row of small controls that has to fit a 470px pane.
+      return `<div class="steprow" data-div="${esc(name)}">
+        <input value="${esc(name)}" data-dname="${esc(name)}" spellcheck="false"
+          style="flex:0 0 74px; min-width:0">
+        <select data-dcourse="${esc(name)}">
+          ${courses.map((c) => `<option value="${esc(c.id)}"${c.id === division.course
+            ? ' selected' : ''}>${esc(c.id)}</option>`).join('')}
+        </select>
+        <!--
+          LEAVING THE VARIANT UNSAID MEANS "the course's only sailable design", which the server
+          resolves at join time — and that is an answer only when the course HAS one. The empty
+          option therefore says which case this course is in rather than the same four words
+          either way: with one design it names it, with several it says how many and that one of
+          them has to be picked, because a division that names no variant of a course with three
+          hands a boat nothing and says so only when somebody tries to join.
+        -->
+        <select data-dvariant="${esc(name)}">
+          <option value=""${division.variant ? '' : ' selected'}>${variants.length === 1
+            ? `&mdash; ${esc(variants[0].id)} (its only design)`
+            : variants.length === 0 ? '&mdash; this course has no design to sail'
+              : `&mdash; pick one of ${variants.length}`}</option>
+          ${variants.map((v) => `<option value="${esc(v.id)}"${v.id === division.variant
+            ? ' selected' : ''}>${esc(v.id)}</option>`).join('')}
+        </select>
+        <button data-ddelete="${esc(name)}" title="remove this division">&times;</button>
+      </div>`;
+    }).join('')}
+    <div class="lifecycle"><button id="r_add_div">Add division</button></div>
+    <label class="label" for="r_notes">Race notes</label>
+    <textarea id="r_notes" rows="2" spellcheck="false">${esc(race.notes ?? '')}</textarea>
+    <div class="lifecycle">
+      <a href="race.html" class="small">Run this race &rarr;</a>
+    </div>`;
+  wireRaceFields(race);
+}
+
+function wireRaceFields(race) {
+  const text = (id, field) => el(id)?.addEventListener('change', (ev) => {
+    beginEdit();
+    state.races.get(race.id)[field] = ev.target.value || null;
+    endEdit();
+    formsChanged();
+    render();
+  });
+  text('r_name', 'name');
+  text('r_date', 'date');
+  text('r_format', 'format');
+  text('r_notes', 'notes');
+
+  /*
+   * FOLLOWS IS WRITTEN AT THE OTHER END. The model keeps `next` on the race before, because that
+   * is what the server reads when a boat stops racing and has to be told where it is entered —
+   * so choosing here clears whatever pointed at this race and sets the link on the one chosen.
+   *
+   * Both halves matter: without the clear, changing the answer would leave two races leading
+   * into this one, and the chain would fork the moment anybody finished.
+   */
+  el('r_follows')?.addEventListener('change', (ev) => {
+    const chosen = ev.target.value || null;
+    beginEdit();
+    for (const other of state.races.values()) {
+      if (other.id !== race.id && other.next === race.id) other.next = null;
+    }
+    const before = chosen ? state.races.get(chosen) : null;
+    if (before) before.next = race.id;
+    endEdit();
+    formsChanged();
+    render();
+  });
+
+  // A RENAME SAVES ITSELF, and does not wait for the blur that would normally do it: the
+  // re-render destroys the very input the browser is in the middle of leaving, so the blur
+  // lands on a detached node or never fires. Every other rename in this pane does the same.
+  el('r_id')?.addEventListener('change', (ev) => {
+    const to = slug(ev.target.value);
+    if (!to || to === race.id) return;
+    beginEdit();
+    const held = state.races.get(race.id);
+    state.races.delete(race.id);
+    state.races.set(to, { ...held, id: to });
+    for (const other of state.races.values()) {
+      if (other.next === race.id) other.next = to;   // the chain follows the rename
+    }
+    state.selectedRace = to;
+    endEdit();
+    formsChanged();
+    render();
+  });
+
+  for (const input of el('raceForm').querySelectorAll('[data-dname]')) {
+    input.addEventListener('change', (ev) => {
+      const from = input.dataset.dname;
+      const to = slug(ev.target.value);
+      if (!to || to === from) return;
+      beginEdit();
+      const held = state.races.get(race.id);
+      const division = held.divisions[from];
+      delete held.divisions[from];
+      held.divisions[to] = { ...division, name: to };
+      endEdit();
+      formsChanged();
+      render();
+    });
+  }
+  for (const select of el('raceForm').querySelectorAll('[data-dcourse]')) {
+    select.addEventListener('change', (ev) => {
+      beginEdit();
+      const division = state.races.get(race.id).divisions[select.dataset.dcourse];
+      division.course = ev.target.value;
+      // The variant is dropped with the course: keeping one would name a variant of a course
+      // it does not belong to, which is a race nobody can be given.
+      division.variant = null;
+      endEdit();
+      formsChanged();
+      render();
+    });
+  }
+  for (const select of el('raceForm').querySelectorAll('[data-dvariant]')) {
+    select.addEventListener('change', (ev) => {
+      beginEdit();
+      state.races.get(race.id).divisions[select.dataset.dvariant].variant = ev.target.value || null;
+      endEdit();
+      formsChanged();
+      render();
+    });
+  }
+  for (const button of el('raceForm').querySelectorAll('[data-ddelete]')) {
+    button.addEventListener('click', () => {
+      const held = state.races.get(race.id);
+      if (Object.keys(held.divisions).length <= 1) {
+        note('a race needs at least one division, or no boat can be handed a course', true);
+        return;
+      }
+      beginEdit();
+      delete held.divisions[button.dataset.ddelete];
+      endEdit();
+      formsChanged();
+      render();
+    });
+  }
+  el('r_add_div')?.addEventListener('click', () => {
+    const held = state.races.get(race.id);
+    let n = Object.keys(held.divisions).length + 1;
+    while (held.divisions[`div-${n}`]) n++;
+    beginEdit();
+    held.divisions[`div-${n}`] = {
+      name: `div-${n}`, course: [...state.courses.keys()][0] ?? null, variant: null, start: null,
+    };
+    endEdit();
+    formsChanged();
+    render();
+  });
 }
 
 /** A capture, read-only, under the selector that chose it. */
@@ -3993,6 +4412,31 @@ function relatedLines(pointId) {
  * Built once and used twice — it is both the save payload and the undo slot's serialised
  * form — so a shape the server accepts is by construction a shape undo can put back.
  */
+/**
+ * The races as the file wants them.
+ *
+ * <b>A race's DEFINITION only</b> — a name, a date, a format, a course per division, and the
+ * race that follows. What happened on the day goes to `data/store/` with the other
+ * real-people data (dialog document §12.5), and keeping that line is what stops a programme
+ * file filling up with a Saturday.
+ */
+function racesPayload() {
+  const races = {};
+  for (const [id, race] of state.races) {
+    races[id] = {
+      name: race.name ?? null,
+      date: race.date ?? null,
+      format: race.format ?? null,
+      next: race.next ?? null,
+      notes: race.notes ?? null,
+      divisions: Object.fromEntries(Object.entries(race.divisions ?? {}).map(([name, d]) => [
+        name, { course: d.course ?? null, variant: d.variant ?? null, start: d.start ?? null },
+      ])),
+    };
+  }
+  return races;
+}
+
 function coursesPayload() {
   const courses = {};
   for (const [id, course] of state.courses) {
@@ -4037,6 +4481,21 @@ function coursesPayload() {
   return courses;
 }
 
+/** The mirror of `racesPayload`, for undo — the same shape the initial load builds. */
+function racesFrom(payload) {
+  return new Map(Object.entries(payload).map(([id, r]) => [id, {
+    id,
+    name: r.name ?? null,
+    date: r.date ?? null,
+    format: r.format ?? null,
+    next: r.next ?? null,
+    notes: r.notes ?? null,
+    divisions: Object.fromEntries(Object.entries(r.divisions ?? {}).map(([name, d]) => [name, {
+      name, course: d.course ?? null, variant: d.variant ?? null, start: d.start ?? null,
+    }])),
+  }]));
+}
+
 /** The inverse, for undo. `variantIn` is the same reader the initial load uses. */
 function coursesFrom(payload) {
   return new Map(Object.entries(payload).map(([id, c]) => [id, {
@@ -4054,6 +4513,7 @@ function snapshot() {
     points: JSON.stringify([...state.points]),
     lines: JSON.stringify([...state.lines]),
     courses: JSON.stringify(coursesPayload()),
+    races: JSON.stringify(racesPayload()),
     selected: state.selected,
     selectedLine: state.selectedLine,
     selectedCourse: state.selectedCourse,
@@ -4085,9 +4545,23 @@ function endEdit() {
   const before = state.editing;
   state.editing = null;
   if (!before) return;
+  /*
+   * EVERY BLOCK THE FILE HOLDS, and forgetting one is a whole tab that silently never saves.
+   *
+   * That is not hypothetical: `races` was added to the file, to the payload and to the writer,
+   * and not to this line — so every race edit compared equal to the state before it, the guard
+   * said "nothing changed", and the save never ran. The editor showed the race, the file never
+   * heard of it, and a reload lost the afternoon's work. Found by the first driver that made a
+   * race through the FORM rather than through the API.
+   *
+   * The guard itself is worth keeping — focusing a field and leaving it without typing is an
+   * extremely ordinary thing to do, and without it every one of those would write the file and
+   * consume the undo slot. It just has to know about everything the file holds.
+   */
   const unchanged = before.points === JSON.stringify([...state.points])
     && before.lines === JSON.stringify([...state.lines])
-    && before.courses === JSON.stringify(coursesPayload());
+    && before.courses === JSON.stringify(coursesPayload())
+    && before.races === JSON.stringify(racesPayload());
   if (unchanged && before.renames.length === 0) return;
   state.undo = before;
   save(before.renames);
@@ -4101,6 +4575,9 @@ function takeUndo() {
   state.points = new Map(JSON.parse(back.points));
   state.lines = new Map(JSON.parse(back.lines));
   state.courses = coursesFrom(JSON.parse(back.courses));
+  // Undo has to put every block back, for the same reason the guard above has to compare them
+  // all: a block it does not know about is one an undo silently leaves as it is.
+  state.races = racesFrom(JSON.parse(back.races ?? '{}'));
   state.selected = back.selected;
   state.selectedLine = back.selectedLine;
   state.selectedCourse = back.selectedCourse;
@@ -4156,9 +4633,10 @@ async function doSave(renames) {
     const response = await fetch(`/api/programmes/${state.key}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      // Both blocks every time. Editing a line can create a point, and the two halves of
-      // that have to land together or the file names a point that does not exist yet.
-      body: JSON.stringify({ renames, points, lines, courses }),
+      // Every block every time. Editing a line can create a point, and the two halves of
+      // that have to land together or the file names a point that does not exist yet; races
+      // ride along for the same reason, since a race names a course.
+      body: JSON.stringify({ renames, points, lines, courses, races: racesPayload() }),
     });
     if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
     const result = await response.json();
@@ -4398,6 +4876,7 @@ function wire() {
 wire();
 showTab('courses');
 renderActions();
+showWhoami();
 loadProgrammeList(null).catch((e) => {
   el('status').innerHTML = `<span class="warn">${esc(e.message)}</span>`;
 });

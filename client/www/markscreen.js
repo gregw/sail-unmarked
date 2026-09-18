@@ -72,6 +72,8 @@ export const ORIENTATIONS = {
 export const VIEWS = {
   overview: { label: 'Course' },
   mark: { label: 'Line' },
+  chat: { label: 'Chat', needs: 'channel' },
+  place: { label: 'Place', needs: 'channel' },
   auto: { label: 'Auto' },
 };
 
@@ -100,10 +102,23 @@ export const chartBar = (options = {}) => {
   </div>`;
 };
 
-/** The view selector, on both screens, because either one may be the one you want to leave. */
-export const viewBar = (mode) =>
-  `<div class="orient views">${Object.entries(VIEWS).map(([key, spec]) =>
-    `<button data-view="${key}" class="${key === mode ? 'on' : ''}">${esc(spec.label)}</button>`).join('')}</div>`;
+/**
+ * The view selector, on every screen, because any one of them may be the one you want to leave.
+ *
+ * <b>A SCREEN WITH NOTHING BEHIND IT IS NOT OFFERED</b> (§8.2). Chat and Place need a race — a
+ * join with no race behind it has nobody to communicate with and no fleet to be placed among —
+ * so they are absent from the selector rather than present and empty. An empty Chat would say
+ * *nobody has spoken yet*, where the truth is *there is nobody*.
+ *
+ * The unread count rides on the Chat button, because that is the one thing about the channel
+ * worth knowing from another screen.
+ */
+export const viewBar = (mode, options = {}) =>
+  `<div class="orient views">${Object.entries(VIEWS)
+    .filter(([, spec]) => spec.needs !== 'channel' || options.channel)
+    .map(([key, spec]) => `<button data-view="${key}" class="${key === mode ? 'on' : ''}">`
+      + `${esc(spec.label)}${key === 'chat' && options.unread
+        ? ` <span class="unread">${options.unread}</span>` : ''}</button>`).join('')}</div>`;
 
 /** The three-way selector, on every screen that can be turned — which is both of them. */
 export const orientationBar = (orientation) =>
@@ -1411,7 +1426,7 @@ export function markScreen(state, options = {}) {
       <strong class="disp">MARK ${esc(state.step.letter)}</strong>
       <span class="mono muted">${state.step.index + 1} / ${state.of}${state.lap > 1 ? ` &middot; lap ${state.lap}` : ''}</span>
     </div>
-    ${viewBar(options.viewMode ?? 'auto')}
+    ${viewBar(options.viewMode ?? 'auto', options)}
     ${orientationBar(orientation)}
     <div class="leg ${arrow.cls}">
       <svg viewBox="0 0 22 22" width="22" height="22"><polygon points="11,2 19,20 11,15 3,20" fill="currentColor"/></svg>
@@ -1857,7 +1872,7 @@ export function overviewPanel(client, options = {}) {
       <strong class="disp">${esc(client.snapshot.name ?? client.snapshot.course)}</strong>
       <span class="mono muted">${esc(client.snapshot.revision)}</span>
     </div>
-    ${viewBar(options.viewMode ?? 'auto')}
+    ${viewBar(options.viewMode ?? 'auto', options)}
     ${orientationBar(options.orientation ?? 'north')}
     ${overview(client, options)}
     ${chartBar(options)}

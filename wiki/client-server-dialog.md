@@ -3,10 +3,21 @@
 **What a boat and the server say to each other, and the rules that keep them able to say it
 after they have drifted apart in version.**
 
-> **Status: nothing here is built yet, and all of it is now decided.** §13 lists the two things
-> deliberately DEFERRED — both of them defences against bad actors, both deferred until there is
-> something worth attacking. Everything else has been settled in conversation and is written down
-> here so it cannot drift.
+> **Status: decided, and substantially built.** A simple race runs end to end —
+> `tools/editor-drive/drive-race.mjs` defines one, joins a boat, schedules a start, postpones it,
+> re-schedules it, reports fixes and crossings, changes the course, has it acknowledged, retires
+> the boat and chains it into the next race of the day. What is deliberately NOT built is listed
+> in CLAUDE.md under "The client–server dialog, as built": the WebSocket (the polling transport
+> carries the same envelopes), `ask`, `window`, muting, and any authentication at all. §13 lists
+> the two things deliberately DEFERRED — both defences against bad actors, both waiting until
+> there is something worth attacking.
+>
+> **Where the build departs from this document, the document is right and the code is behind.**
+> One clarification the building produced rather than a departure: §8.4 acknowledges four kinds
+> of message, and §9.3 raises a modal for two of them — so *acknowledged* and *interrupting* are
+> two sets, not one. A committee message is acknowledged by being READ in the channel, because a
+> radio call that put a dialog over somebody's plot would make the committee reluctant to use the
+> radio.
 
 **What is settled, and where to find it**
 
