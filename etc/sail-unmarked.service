@@ -1,5 +1,5 @@
 [Unit]
-Description=unmarked — sail racing around virtual marks
+Description=sail-unmarked — sail racing around virtual marks
 Documentation=https://github.com/gregw/unmarked
 # network-online rather than network, and with a login configured it is not merely
 # preferable: the server reaches the OpenID provider during start-up to discover its
@@ -12,16 +12,16 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=unmarked
-Group=unmarked
-WorkingDirectory=/opt/unmarked
-Environment=HOME=/var/lib/unmarked
-ExecStart=/usr/bin/mvn --batch-mode -Dmaven.repo.local=/var/lib/unmarked/.m2/repository exec:java -Dunmarked-data=/var/lib/unmarked
+User=sail-unmarked
+Group=sail-unmarked
+WorkingDirectory=/opt/sail-unmarked
+Environment=HOME=/var/lib/sail-unmarked
+ExecStart=/usr/bin/mvn --batch-mode -Dmaven.repo.local=/var/lib/sail-unmarked/.m2/repository exec:java -Dunmarked-data=/var/lib/sail-unmarked
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=unmarked
+SyslogIdentifier=sail-unmarked
 
 NoNewPrivileges=true
 
@@ -30,7 +30,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ReadWritePaths=/var/lib/unmarked
+ReadWritePaths=/var/lib/sail-unmarked
 
 [Install]
 WantedBy=multi-user.target

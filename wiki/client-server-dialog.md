@@ -7,7 +7,7 @@ after they have drifted apart in version.**
 > `tools/editor-drive/drive-race.mjs` defines one, joins a boat, schedules a start, postpones it,
 > re-schedules it, reports fixes and crossings, changes the course, has it acknowledged, retires
 > the boat and chains it into the next race of the day. What is deliberately NOT built is listed
-> in CLAUDE.md under "The client–server dialog, as built": the WebSocket (the polling transport
+> in §14.9 below: the WebSocket (the polling transport
 > carries the same envelopes), `ask`, `window`, muting, and any authentication at all. §13 lists
 > the two things deliberately DEFERRED — both defences against bad actors, both waiting until
 > there is something worth attacking.
@@ -308,7 +308,8 @@ for boats.** The asymmetry is the point, and it follows from §1.1 rather than f
   has a real answer that matters. That is where a login earns its keep.
 
 So the rule is **authenticate authority, trust data** — which is [open question
-8](../CLAUDE.md) narrowed to the half that can actually be solved.
+8](../CLAUDE.md), answered since and built — see [`deployment.md`](deployment.md) — narrowed to the
+half that can actually be solved.
 
 > **Two risks this leaves, and neither is covered by §1.1.** That section says a boat is trusted
 > *about itself*; it says nothing about a third party lying *about* a boat.
@@ -711,7 +712,7 @@ Provisional, and separate from the boat's screens because the people are differe
 club's desk or a committee boat, on a laptop, with a keyboard.
 
 The **welcome screen** is left alone; it will be rewritten around authentication when there is
-any ([open question 8](../CLAUDE.md)).
+any ([open question 8](../CLAUDE.md), now answered — see [`deployment.md`](deployment.md)).
 
 ### 12.1 Defining a race is EDITING; running one is not
 
@@ -862,3 +863,210 @@ does matter. If it succeeds there will be bad actors and this section is where t
 > **What is NOT open**, and should not be reopened without a reason: the trust model (§1.1), the
 > absence of a server clock (§1.2), the absence of an ordinal (§4), that boats are unauthenticated
 > (§7.1), and that a withdrawal never reaches the water (§11).
+
+---
+
+## 14. As built
+
+**What exists, and the rules a change has to respect.** The design is above; this is the state of it.
+`dialog.js` is the boat's half, `Dialog.java` and `DialogServlet.java` the server's, with
+`client/www/schemas/*.v1.json` shared between them.
+
+**The conversation is the OPTIONAL half of this application, and every line of it is arranged to stay
+that way.** Nothing in `dialog.js`, `Dialog.java` or `DialogServlet.java` is on the path from a fix to a
+latch: `device.feed()` gives the fix to the client, the client decides everything that matters, and only
+*then* is anything queued for the server. A poll that throws sets `connected` false and queues what was
+going to be said, and a boat goes on rounding its marks and timing them to the metre.
+`drive-client.mjs` takes the network away and sails a whole course with it gone, which is the claim made
+mechanical.
+
+### 14.1 Definition is configuration; conduct is a record of an afternoon
+
+| | Where | Why |
+|---|---|---|
+| **Race definition** — name, date, format, `division → course/variant`, the next race | the series YAML (`Race`, `races:`) | authored ahead of time, it diffs, and it is part of the file a club could hand to another club whole |
+| **Conduct** — who joined, the channel, flags raised, positions, acknowledgements | `data/store/conduct/{club}/{series}/{race}.json` | a record of an afternoon involving real people, which is what that gitignored directory is for |
+
+Keeping that line is what stops a programme file filling up with a Saturday. The editor's Races tab is
+the UI for the definition half — see [`course-editor.md`](course-editor.md).
+
+### 14.2 State is the events applied as they arrive
+
+There is no ordinal on the envelope and nothing is replayed. A start is published, an `AP` voids it, a
+new start supersedes the `AP` — so **the last message to arrive for a tag IS that tag's state**, and the
+same little machine runs on the server (`Dialog.Standing`), on the race screen and on every boat
+(`dialog.js` `state()`). Three consequences, each a thing somebody would otherwise add:
+
+- **There is no "clear the AP" message and there must not be.** Publishing a start is what clears it.
+  `dialog-test.js` asserts that as behaviour, so the day somebody adds a `clear` type the spec fails.
+- **Reconnection RE-STATES rather than replaying.** A boat that was away for two minutes does not want
+  the two minutes; it wants which course it is sailing, whether its division is postponed, and when it
+  starts. `Room.restate` sends the current standing as ordinary `course`, `timer` and `flag` messages,
+  unmarked, because the entry says *this is the course you are on* and that is true whenever it arrives.
+- **The channel is the one thing that IS replayed**, because a channel is a history and what was said
+  cannot be summarised into a current value. `channel.since` hands back **the original envelopes, ids and
+  all**, which is what makes it idempotent: `dialog.js` keeps a `seen` set.
+
+**Every countdown is run by the boat.** `timer` is an instant and two durations; the server sends it once
+and does not tick. That costs nothing that matters, because what a race is decided on is a difference
+between two readings of *one* clock.
+
+### 14.3 The schemas, and why there are two validators
+
+One file per message type, each describing that message's **body**. The envelope is the one shape every
+message shares, so it is checked in code rather than repeated twenty times, and `$ref` is deliberately
+outside the subset.
+
+They live under `client/www` because that is what makes one copy reach both sides: Maven packages it as
+`/static/`, so `Schemas.java` reads them off the classpath and the client fetches them from `/schemas/`.
+**Two copies of a schema is two schemas.**
+
+**The client's validator is a constraint on the schemas, not the other way round.** No framework, no npm
+build, no bundler, and offline-first — so the subset is what a small hand-written validator covers:
+`type`, `properties`, `required`, `enum`, `const`, `items`, `minimum`/`maximum`, `pattern`,
+`format: date-time`. `additionalProperties` is always true and is never written, because unknown fields
+are ignored on both sides and that is what lets an installed client and an updated server go on talking.
+A schema that needs more than the subset is a message that should be simpler.
+
+> **`maxLength` was written and then taken out.** It is not in the promised subset, and the length cap it
+> was for is better done by TRUNCATING (`Dialog.MAX_SAY`) than by refusing: a sailor's message that is
+> too long should arrive clipped, not be thrown away.
+
+> **An unknown message TYPE is accepted, not refused** — on both sides. It is ignored and *counted*.
+> Refusing would make every future message type a breaking change for every server already deployed, and
+> a client silently dropping what the server sends is the failure the versioning rules exist to make
+> visible.
+
+### 14.4 The transport: polling is built, the socket is not
+
+`POST /api/dialog` before there is a session (`hello` and `join`), `POST /api/dialog/{session}`
+afterwards. One call — `Dialog.exchange(session, envelopes)` — is the whole contract, written that way so
+the socket can use it unchanged: a frame is an exchange of one message with an empty reply, a poll is an
+exchange of several with whatever is queued.
+
+**Polling was built first on purpose.** The promise is that the fallback is the same conversation —
+identical envelopes, schemas and ordering — so the socket is a pipe to add rather than a protocol to
+design; building it first would have meant writing the fallback twice. What the socket will need beyond
+what exists is a **ticker**, because `fleet` is enqueued when a boat polls, which is right for polling
+and not enough for a socket.
+
+**`fleet` goes out on a fixed slow interval** (`FLEET_SECONDS`), not at the fix rate. At nine knots a boat
+moves twenty-three metres in five seconds, which on a screen showing a whole course is nothing; sixty
+boats at 1 Hz would be sixty fan-outs a second to say what a fleet screen cannot draw the difference of.
+
+### 14.5 A join with no race behind it gets no channel
+
+**A BOAT JOINS A RACE WHERE THERE IS ONE**, and the join screen asks club → series → race → division,
+with the course following from the division. The server can still FIND a race from the course and the day
+— which is what an older client gets — but finding works only while one division sails one course. A
+division name that is not in that race is ignored rather than obeyed: that is a boat describing a race it
+is not in.
+
+**A screen with nothing behind it is not offered**: `viewBar` filters Chat and Place out rather than
+showing them empty, because an empty Chat would say *nobody has spoken yet* where the truth is *there is
+nobody*.
+
+### 14.6 The boat's three screens
+
+**`VIEW_MODES` in `raceclient.js` is what may be asked for by name** — anything else reads as `auto`, so a
+screen that existed in an older build cannot strand somebody.
+
+**Auto gained one clause**: a new channel entry brings up the channel, *unless the boat is approaching a
+line*. The channel arrives as a **hint** (`view(now, {channel})`) rather than as a field, because
+`RaceClient` knows about lines and fixes and must not learn what a chat message is. Offered once per
+entry rather than while something is unread, or a boat with an unread message could never look at its own
+course. **`Place` is never automatic**: it is somewhere you go to look, and it is the screen whose data is
+most likely to be stale.
+
+**The start is ABOVE every screen** (`startRow`), not on one of them. It is the one thing on the device
+that is about a moment rather than a place, and a countdown a sailor has to change screens to see is a
+countdown they will miss.
+
+**NOTHING INTERRUPTS AN APPROACH.** While the Mark screen has the display an alert shows as a banner
+(`alertBanner`) and the modal waits, raised the moment the approach ends. A sailor thirty metres off a
+line at nine knots is doing the one thing on this boat that cannot be interrupted. The banner is not a
+quiet failure — it says what arrived and stays until read.
+
+**Dismissing the alert IS the acknowledgement.** One gesture, not two: a dialog offering *Dismiss* beside
+*Acknowledge* would ask somebody at a tiller to agree they had read a thing they had just closed.
+
+> **Acknowledged and INTERRUPTING are two different sets.** `MUST_SEE` is what carries an unseen badge and
+> gets an `ack` — a course, a flag, an outcome and a committee message, all four being things a protest
+> could turn on. `INTERRUPTS` is the narrower set that opens a modal: a course, a flag, an outcome. A
+> committee message is acknowledged by being read.
+
+**The safety three are set apart on the channel screen**, in warn colour with a rule above them. They are
+not racing messages and must not look like racing messages: the channel is the radio, and this is what a
+radio is for when the racing stops mattering.
+
+**Race progress ages rather than blanks**, and says how old it is. Live standings are the one thing boats
+want promptly from the server and therefore the one thing that cannot be had without it; a screen that
+went empty would be saying the fleet had vanished. It is a *view*, not an authority.
+
+### 14.7 The race screen
+
+`race.html` is a **second page**, and the reason is the undo: the editor saves as you go and holds exactly
+one undo, which is right for dragging a mark and wrong for raising an abandonment.
+
+**Colour is DIVISION here.** In the editor colour means leg role; the two never share a chart, and
+`DIVISION_COLOURS` deliberately shares no value with `ROLE_COLOUR`. What there must not be anywhere is a
+third meaning for colour.
+
+**Progress is texture within a division's own colour**, because the question a committee is asking is
+*which legs have been sailed*: **solid** where some boats have sailed, **dashed** where none has yet,
+**faint and thin** where all have. The band of "some" is the fleet's spread, so *can I shorten* is the
+width of that band, read at a glance and without a number.
+
+**There is no GO button and there cannot be.** The server keeps no clock, so a start is scheduled as an
+absolute instant — **and the form asks for one**, in the operator's own zone with that zone named, plus
+the warning and preparatory durations that hang off it. A start sequence is a thing a committee decides —
+*this race starts at five past two* — and "start in N minutes" made the operator do that sum backwards
+against a clock that had moved by the time they pressed the button.
+
+> **The durations are durations, not instants**, because a sequence hangs off its start: moving the start
+> moves all of it, which is what a postponement does. And they are per DIVISION, since div-1 starting at
+> 14:05 and div-2 at 14:10 is the entire point.
+>
+> **Seeded once, from the race's PLANNED start where the definition has one.** Never re-seeded, because
+> the page re-renders every couple of seconds and a seed that ran again would type over what somebody was
+> entering. For the same reason the fields commit on `change` rather than `input`.
+
+**An irreversible act asks twice, in the button itself** rather than in a dialog, so nobody is agreeing to
+something that has scrolled out of view. The screen offers **the flag that applies**: `AP` before a start
+has passed, **abandon** after. After an `AP` the next start is at least six minutes ahead, said out loud
+rather than merely disabling a button.
+
+**The fleet table's last two columns are the whole reason acknowledgements are in the protocol.** The
+question a committee genuinely has before starting is *have all boats seen the new course?*, and without
+somewhere to read the answer the acks would be bookkeeping nobody looks at.
+
+### 14.8 How it is tested
+
+| | |
+|---|---|
+| `dialog-test.js` | the part with no wire in it: the start state machine, the channel's idempotence, the alert rule, the ladder, the validator |
+| `drive-race.mjs` | a simple race end to end over the wire — define, join, schedule, AP, re-schedule, fix, crossing, course change, ack, retire, chain to the next race |
+| `drive-racepage.mjs` | the committee's screen: the progress textures, the arming, the flag that applies, DNF |
+| `drive-alert.mjs` | **nothing interrupts an approach** — the same flag published twice, once away from a line and once on one |
+| `drive-racedef.mjs` | the editor's Races tab: that a race REACHES THE FILE, the chain written from the end a person thinks from, and the two ways a chain goes wrong |
+| `DialogTest.java` | that every schema is in the build, and that the Java validator agrees with the JavaScript one about the subset |
+
+> **The page-level drivers exist because the protocol driver alone would ship the wiring bugs.** The one
+> that proved it was a render loop — being on the channel screen *is* reading it, and marking read
+> requested a render. Two guards now, because either alone is a trap: **nothing to do is not a change**,
+> and a caller already rendering passes `notify = false`.
+
+### 14.9 What is left as TODO, deliberately
+
+| | |
+|---|---|
+| **The WebSocket** | polling carries the same envelopes; the socket needs a ticker for `fleet` |
+| **`ask`** on join | every join answers itself today, because the division comes from the course. A question is a gap in what the server knows |
+| **`window`** (a start range) | schema'd, carried, and held as state by the client; the race screen does not publish one |
+| **Muting a sail number** | §8.4's instrument against a person jamming the channel |
+| **The rate cap** and **impersonation** | §13, deferred on purpose — defences against attackers a prototype does not have |
+| **The race screen holds no session** | it reads conduct over REST and publishes over REST. The committee IS a participant — its messages go into the same channel — but it is not yet one party in the conversation |
+| **Cornered legs on the race chart** | drawn straight; `coursedraw.track` does it properly |
+| **Nothing is cached across a reload** | a browser reloading a backgrounded tab throws away a joined race mid-afternoon |
+| **Re-posting the record with its track** | `record({track: true})` builds it; nothing waits for wifi and sends it |
+| **Divisions are assigned by the COURSE a boat joined** | enough for one division per course, wrong the moment two share one. `ask` is where that gets fixed |

@@ -82,12 +82,12 @@ import org.slf4j.LoggerFactory;
  * only people with accounts can read are results nobody reads — the same judgement
  * sail-jinx makes.
  *
- * <p><b>None of the writes have authentication and that is a known hole.</b> The record
- * POST is somebody's race result; the programme PUT rewrites a course file on disk; the
- * publications POST decides what a whole fleet is handed. All but the record POST are at
- * least gated by {@code server.configWrites}, which the deployment can turn off. Every one
- * of them needs a login before this is reachable from anywhere but a desk — sail-jinx has
- * a working Jetty OpenID setup to copy. See CLAUDE.md.
+ * <p><b>The officer's writes are behind a login; the boat's are deliberately not.</b> The
+ * programme PUT rewrites a course file on disk and the publications POST decides what a whole
+ * fleet is handed, so both need a signed-in officer ({@link UnmarkedSecurityHandler}) as well as
+ * {@code server.configWrites}. The record POST stays open, because a boat's own account of its
+ * race is trusted by construction and a login there would name a claim nothing can check. See
+ * {@code wiki/deployment.md}.
  */
 public class ApiServlet extends HttpServlet
 {

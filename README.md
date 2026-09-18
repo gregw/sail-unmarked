@@ -1,4 +1,4 @@
-# unmarked
+# Sail Unmarked
 
 *Sail racing around virtual marks. Every mark is a line to be crossed, not a point to be
 rounded.*
@@ -71,4 +71,5 @@ prototype — not on a phone, not offline, and it posts no records yet. **Live p
 built at all.
 
 See [`wiki/unmarked-racing-brief.html`](wiki/unmarked-racing-brief.html) for the design
-brief, and [`CLAUDE.md`](CLAUDE.md) for the working notes and the course model.
+brief, [`wiki/course-model.md`](wiki/course-model.md) for what a course is made of, and
+[`CLAUDE.md`](CLAUDE.md) for the working notes and the rest of the wiki's index.

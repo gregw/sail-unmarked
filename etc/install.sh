@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install.sh — installs the unmarked systemd service on a Debian/Raspberry Pi system.
+# install.sh — installs the sail-unmarked systemd service on a Debian/Raspberry Pi system.
 # Must be run as root (or with sudo).
 #
 # Safe to re-run: upgrading is `git pull && sudo etc/install.sh`. The data directory is
@@ -8,11 +8,11 @@
 # the script exits non-zero if it does not come back.
 set -euo pipefail
 
-SERVICE_NAME=unmarked.service
-SERVICE_USER=unmarked
-INSTALL_DIR=/opt/unmarked
-DATA_DIR=/var/lib/unmarked
-SERVICE_FILE=/etc/systemd/system/unmarked.service
+SERVICE_NAME=sail-unmarked.service
+SERVICE_USER=sail-unmarked
+INSTALL_DIR=/opt/sail-unmarked
+DATA_DIR=/var/lib/sail-unmarked
+SERVICE_FILE=/etc/systemd/system/sail-unmarked.service
 SRC_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 for cmd in java mvn rsync node; do
@@ -83,7 +83,7 @@ sudo -u "$SERVICE_USER" HOME="$DATA_DIR" \
         -Dmaven.repo.local='$DATA_DIR/.m2/repository' compile -q"
 
 echo "==> Installing systemd service unit…"
-install -m 644 "$SRC_DIR/etc/unmarked.service" "$SERVICE_FILE"
+install -m 644 "$SRC_DIR/etc/sail-unmarked.service" "$SERVICE_FILE"
 
 echo "==> Reloading systemd and enabling service…"
 systemctl daemon-reload
@@ -118,12 +118,12 @@ echo ""
 echo "Installation complete."
 echo ""
 if [ "$WAS_RUNNING" != true ]; then
-    echo "  Start:   sudo systemctl start unmarked"
+    echo "  Start:   sudo systemctl start sail-unmarked"
 fi
-echo "  Restart: sudo systemctl restart unmarked"
-echo "  Stop:    sudo systemctl stop unmarked"
-echo "  Status:  sudo systemctl status unmarked"
-echo "  Logs:    sudo journalctl -u unmarked -f"
+echo "  Restart: sudo systemctl restart sail-unmarked"
+echo "  Stop:    sudo systemctl stop sail-unmarked"
+echo "  Status:  sudo systemctl status sail-unmarked"
+echo "  Logs:    sudo journalctl -u sail-unmarked -f"
 echo ""
 echo "Data directory: $DATA_DIR"
 echo "  config/clubs/<club domain>/<series>.yaml   points, lines, courses and races"
@@ -143,7 +143,7 @@ if [ ! -f "$DATA_DIR/config/auth.yaml" ]; then
     echo "  sudo chown $SERVICE_USER:$SERVICE_USER $DATA_DIR/config/auth.yaml"
     echo "  sudo chmod 600 $DATA_DIR/config/auth.yaml"
     echo "  sudo -e $DATA_DIR/config/auth.yaml     # the OAuth client, and enabled: true"
-    echo "  sudo systemctl restart unmarked"
+    echo "  sudo systemctl restart sail-unmarked"
     echo ""
     echo "Two things to get right there:"
     echo "  - the server needs a route at START-UP with a login configured: it discovers the"
