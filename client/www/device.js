@@ -66,7 +66,7 @@ export const PLOT = { width: 400, height: 330 };
  */
 export const NO_RACE = '__course';
 
-export const REMEMBERED = 'unmarkable.join';
+export const REMEMBERED = 'unmarked.join';
 
 export function recall() {
   try {

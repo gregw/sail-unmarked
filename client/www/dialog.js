@@ -130,7 +130,7 @@ export class Dialog {
   async join(request) {
     await this.schemas.load().catch(() => false);
     const hello = await this.exchange([
-      this.envelope('hello', { versions: [1], client: { name: 'unmarkable', build: 'dev' } }),
+      this.envelope('hello', { versions: [1], client: { name: 'unmarked', build: 'dev' } }),
       this.envelope('join', request),
     ]);
     const refused = hello.find((m) => m.type === 'rejected');

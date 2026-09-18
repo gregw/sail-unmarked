@@ -1,7 +1,7 @@
 /*
  * The on-water palette from the brief. Dark by default and not by preference: these
  * screens are read in a cockpit, one-handed, in glare or at dusk, by somebody who has
- * something else to be doing. Every value here is from wiki/unmarkable-racing-brief.html
+ * something else to be doing. Every value here is from wiki/unmarked-racing-brief.html
  * so the app and its own design document cannot drift apart.
  */
 :root {

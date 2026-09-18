@@ -1,12 +1,12 @@
-# unmarkable server configuration.
+# unmarked server configuration.
 #
 # Small on purpose. Everything about the racing — points, lines, courses, and the
 # detection tuning — lives in the club/series programme files under clubs/, because
 # that is what a club owns and what changes. What is left here is the listener.
 
 site:
-  name: "Unmarkable Racing"
-  contact: "unmarkable@mortbay.org"
+  name: "Unmarked Racing"
+  contact: "unmarked@mortbay.org"
 
 server:
   # 8081 is sailing-pf, 8082 is sail-jinx, 8888 is the sailing-pf admin connector.
@@ -14,12 +14,12 @@ server:
 
   # Reconstruct the externally-visible URL from X-Forwarded-* headers. Set true when
   # something else terminates the connection — the proxy in front of
-  # https://unmarkable.mortbay.org — and false when this server is reached directly.
+  # https://unmarked.mortbay.org — and false when this server is reached directly.
   # Never turn it on for a directly-exposed server: those headers are whatever the
   # client sent.
   forwardedHeaders: false
 
-  # One line per request in the ordinary log — on the Pi, `journalctl -u unmarkable`.
+  # One line per request in the ordinary log — on the Pi, `journalctl -u unmarked`.
   # On by default. The clients here are phones on marginal connections, so "did the
   # record actually arrive" is the question that will be asked, and this is what
   # answers it.

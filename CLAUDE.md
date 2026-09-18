@@ -1,11 +1,11 @@
-# unmarkable
+# unmarked
 
 **Sail racing around virtual marks.** Every mark is a line to be crossed via GPS rather
 than a point to be rounded.
 
 ## Read this first
 
-[`wiki/unmarkable-racing-brief.html`](wiki/unmarkable-racing-brief.html) is the design
+[`wiki/unmarked-racing-brief.html`](wiki/unmarked-racing-brief.html) is the design
 brief and the source of truth for *what this is*. Open it in a browser — it carries the
 diagrams, and the SVGs beside it are referenced from it:
 
@@ -94,8 +94,8 @@ No database, no framework, no outbound HTTP client. Port **8083** (8081 is saili
 
 ```bash
 mvn exec:java                              # serves http://localhost:8083/ from ./data
-mvn exec:java -Dunmarkable-data=/path/to/data
-mvn test                                   # 124 Java tests + 722 JS assertions
+mvn exec:java -Dunmarked-data=/path/to/data
+mvn test                                   # 125 Java tests + 722 JS assertions
 node tools/run-js-tests.mjs                # just the JavaScript specs
 tools/editor-drive/run.sh                  # the editor, both clients, the race screen and
                                            # the whole conversation, against a live server (412) (412)
@@ -106,7 +106,7 @@ tools/editor-drive/run.sh                  # the editor, both clients, the race 
 ## Layout
 
 ```txt
-unmarkable/
+unmarked/
   wiki/                                 the brief, the lifecycle note and their SVGs
   data/config/config.yaml               site + listener. Small on purpose.
   data/config/clubs/<club>/<series>.yaml points, lines, courses and races. See below.
@@ -114,7 +114,7 @@ unmarkable/
                                         auth.yaml.example beside it shows the shape
   data/store/records/                   race records (GITIGNORED — real people's tracks)
   data/store/conduct/                   what happened in each race: the channel, the flags
-  etc/unmarkable.service                systemd unit for the Pi
+  etc/unmarked.service                systemd unit for the Pi
   etc/install.sh                        installs it; safe to re-run for an upgrade
   client/www/                           THE CLIENT. Capacitor webDir, and packaged as
                                         /static/ so the browser fallback is the same build
@@ -136,7 +136,7 @@ unmarkable/
     *-test.js / *-test.html             executable specs, in a browser
   tools/run-js-tests.mjs                the same specs, in the Maven build
   tools/editor-drive/                   the editor, driven headlessly against a live server
-  src/main/java/org/mortbay/sailing/unmarkable/
+  src/main/java/org/mortbay/sailing/unmarked/
     model/                              records: Position, NamedPoint, LineEnd, Line,
                                         CourseStep, CourseVariant, Course, Programme, Race,
                                         Fix, CrossingEvent, CourseRecord, CourseSnapshot, Geo
@@ -146,10 +146,10 @@ unmarkable/
     store/CourseLedger.java             snapshots taken and publications live, one JSON
                                         document per club — see the lifecycle below
     model/Ids.java                      what may be used as an id, in one place
-    server/                             UnmarkableServer, ApiServlet, DialogServlet,
+    server/                             UnmarkedServer, ApiServlet, DialogServlet,
                                         StaticResourceServlet, and the login:
-                                        UnmarkableSecurityHandler, AuthFilter, SignedIn
-    config/                             UnmarkableConfig, AuthConfig
+                                        UnmarkedSecurityHandler, AuthFilter, SignedIn
+    config/                             UnmarkedConfig, AuthConfig
 ```
 
 ### Where the logic that decides a race lives
@@ -1643,7 +1643,7 @@ and learns one file.
 ### What is behind it, and what must never be
 
 **AUTHENTICATE AUTHORITY, TRUST DATA** — the dialog document §7.1, made mechanical in
-`UnmarkableSecurityHandler.getConstraint`:
+`UnmarkedSecurityHandler.getConstraint`:
 
 | | |
 |---|---|
@@ -2353,9 +2353,20 @@ passed all evening and failed the moment the clock crossed midnight here.
 the club running it, so a visitor whose phone is on another zone — or set wrong — still files
 under the day everybody else sailed. Taking it from the boat would be self-describing and would
 let one race day land in two directories, which is worse than the ambiguity it fixed.
-`JsonStore.save` therefore takes the zone, and both callers resolve it from the programme file;
-a record for a series that has since been retired falls back to UTC and **says so in the log**,
-rather than filing quietly under the wrong day.
+`JsonStore.save` therefore **requires** the zone — there is no overload that omits it, and there
+was one: it took null and warned, so the only callers left using it were the tests, and every
+build printed a misconfiguration warning about a misconfiguration nobody had. A convenience that
+lets a caller skip the one fact the file layout depends on is a convenience that will eventually
+file somebody's race on the wrong day.
+
+**The zone comes from `ProgrammeLibrary.zone(club, series)`, which falls back to any series of
+the same club.** That fallback is not tidiness: `CourseRecord.series` is **nullable**, so a boat
+may post a record naming only its club and course — and without it such a record is filed by UTC
+day, which is the exact fault this all exists to prevent and is reachable straight off the wire
+rather than only from a fixture. The zone is declared per programme file because that is where
+configuration lives; it is a fact about the club, which races in one place. Null only for a club
+this server has never heard of, and then the store **says so in the log** rather than filing
+quietly under a day nobody can predict.
 
 > **A date segment with an offset on it was considered and rejected.** `2026-09-18+1000` is
 > neither an instant nor a day: it cannot be compared, two offsets for one race day would make
@@ -2727,6 +2738,13 @@ last season's results meaningless.
 - **Defensive loading everywhere.** A bad course file is reported and skipped, never fatal.
   A club with a typo must not take the other six clubs' racing down with it. Same for one
   boat's corrupt record versus the whole fleet's results.
+- **A handled failure logs its MESSAGE, not its stack trace.** The trace goes to `debug`. A
+  corrupt file is an *expected* condition on these paths — it is what loading defensively is
+  for — and a Jackson parse trace tells nobody anything they can act on, where the message
+  carries the file and the line and column. The rule earned itself: `mvn install` was passing
+  while printing a `JsonParseException` and its stack, which is how people learn to scroll past
+  stack traces, and the next real one goes with it. A failed *write* keeps its trace, because
+  that is not expected and the trace is where the cause is.
 - **Unknown YAML/JSON properties are ignored**, so a newer file loads on an older build.
 - **No coordinates are asserted anywhere in `data/`.** Every position is `null` until
   somebody supplies a survey. Test fixtures invent their own and say so.

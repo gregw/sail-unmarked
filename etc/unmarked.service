@@ -1,0 +1,36 @@
+[Unit]
+Description=unmarked — sail racing around virtual marks
+Documentation=https://github.com/gregw/unmarked
+# network-online rather than network, and with a login configured it is not merely
+# preferable: the server reaches the OpenID provider during start-up to discover its
+# endpoints, so starting before the Pi has a route means that lookup fails and the unit
+# does not come up at all. Without a login it is the milder reason — the server binds a
+# port and is useless without a route, and boats posting records are the point of it
+# being up.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=unmarked
+Group=unmarked
+WorkingDirectory=/opt/unmarked
+Environment=HOME=/var/lib/unmarked
+ExecStart=/usr/bin/mvn --batch-mode -Dmaven.repo.local=/var/lib/unmarked/.m2/repository exec:java -Dunmarked-data=/var/lib/unmarked
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=unmarked
+
+NoNewPrivileges=true
+
+# The store holds boats' own accounts of their races, which is the evidence behind
+# every result. These stop a confused or compromised process writing anywhere else.
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/unmarked
+
+[Install]
+WantedBy=multi-user.target

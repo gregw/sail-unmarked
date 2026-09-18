@@ -25,7 +25,7 @@
  */
 import { ok, report, settle } from './dom.mjs';
 
-const PORT = process.env.UNMARKABLE_PORT || '8084';
+const PORT = process.env.UNMARKED_PORT || '8084';
 const at = (path) => `http://localhost:${PORT}${path}`;
 
 const json = async (path, options) => {

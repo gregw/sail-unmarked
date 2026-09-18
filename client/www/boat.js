@@ -156,7 +156,7 @@ function onFix(fix) {
 /* ====================================================================== the device */
 
 const device = new Device(el('device'), {
-  kicker: 'Unmarkable Racing',
+  kicker: 'Unmarked Racing',
   note: gnssPanel,
   wireNote: () => el('gnss_start')?.addEventListener('click', startReceiver),
   /*

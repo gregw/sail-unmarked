@@ -193,7 +193,7 @@ globalThis.sessionStorage = (() => {
   };
 })();
 
-const PORT = process.env.UNMARKABLE_PORT || '8084';
+const PORT = process.env.UNMARKED_PORT || '8084';
 const realFetch = globalThis.fetch;
 globalThis.fetch = (p, o) => realFetch(p.startsWith('http') ? p : `http://localhost:${PORT}${p}`, o);
 

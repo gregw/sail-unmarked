@@ -1,4 +1,4 @@
-# unmarkable
+# unmarked
 
 *Sail racing around virtual marks. Every mark is a line to be crossed, not a point to be
 rounded.*
@@ -70,5 +70,5 @@ fix. Steer it at a line and the Mark screen takes over on its own as it closes. 
 prototype — not on a phone, not offline, and it posts no records yet. **Live place** is not
 built at all.
 
-See [`wiki/unmarkable-racing-brief.html`](wiki/unmarkable-racing-brief.html) for the design
+See [`wiki/unmarked-racing-brief.html`](wiki/unmarked-racing-brief.html) for the design
 brief, and [`CLAUDE.md`](CLAUDE.md) for the working notes and the course model.

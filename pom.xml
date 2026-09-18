@@ -5,13 +5,13 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.mortbay.sailing</groupId>
-    <artifactId>unmarkable</artifactId>
+    <artifactId>unmarked</artifactId>
     <version>0.1.0-SNAPSHOT</version>
 
     <scm>
-        <url>https://github.com/gregw/unmarkable</url>
-        <connection>scm:git:https://github.com/gregw/unmarkable.git</connection>
-        <developerConnection>scm:git:git@github.com:gregw/unmarkable.git</developerConnection>
+        <url>https://github.com/gregw/unmarked</url>
+        <connection>scm:git:https://github.com/gregw/unmarked.git</connection>
+        <developerConnection>scm:git:git@github.com:gregw/unmarked.git</developerConnection>
     </scm>
 
     <properties>
@@ -21,7 +21,7 @@
         <jetty.version>12.1.12</jetty.version>
         <junit.version>5.13.4</junit.version>
         <hamcrest.version>3.0</hamcrest.version>
-        <unmarkable-data>data</unmarkable-data>
+        <unmarked-data>data</unmarked-data>
     </properties>
 
     <dependencies>
@@ -82,20 +82,20 @@
 
     <build>
         <resources>
-            <!-- unmarkable.properties carries ${project.version} through to runtime so
+            <!-- unmarked.properties carries ${project.version} through to runtime so
                  the UI can show which build it is. Everything else is copied verbatim:
                  the client HTML is full of ${...}-looking JS. -->
             <resource>
                 <directory>src/main/resources</directory>
                 <includes>
-                    <include>unmarkable.properties</include>
+                    <include>unmarked.properties</include>
                 </includes>
                 <filtering>true</filtering>
             </resource>
             <resource>
                 <directory>src/main/resources</directory>
                 <excludes>
-                    <exclude>unmarkable.properties</exclude>
+                    <exclude>unmarked.properties</exclude>
                 </excludes>
                 <filtering>false</filtering>
             </resource>
@@ -125,8 +125,8 @@
                     <execution>
                         <id>default-cli</id>
                         <configuration>
-                            <mainClass>org.mortbay.sailing.unmarkable.server.UnmarkableServer</mainClass>
-                            <commandlineArgs>${unmarkable-data}</commandlineArgs>
+                            <mainClass>org.mortbay.sailing.unmarked.server.UnmarkedServer</mainClass>
+                            <commandlineArgs>${unmarked-data}</commandlineArgs>
                         </configuration>
                     </execution>
                     <!-- The crossing detector and the geo module are JavaScript, because

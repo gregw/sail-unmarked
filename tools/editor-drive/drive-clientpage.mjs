@@ -107,7 +107,7 @@ ok('...and offering to sail once the whole path is chosen',
 // WHAT IS REMEMBERED IS THE BOAT, NOT THE COURSE. A sail number and a club are facts about
 // whoever is holding the phone; the series, course and variant are the decision being made, and
 // a remembered one would be a default nobody chose.
-const held = JSON.parse(globalThis.sessionStorage.getItem('unmarkable.join') ?? '{}');
+const held = JSON.parse(globalThis.sessionStorage.getItem('unmarked.join') ?? '{}');
 ok('the sail number, the boat name and the club are kept for next time',
   held.sail === 'AUS 1' && held.name === 'Bombora' && held.club === programme.club);
 ok('...and the series, course and variant are NOT, since they are today\'s decision',
