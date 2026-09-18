@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "fleet",
+  "description": "S→C. Every boat, in one message, on a fixed slow interval — sixty boats at 1 Hz is sixty fan-outs a second to say what a screen cannot draw (§8.4).",
+  "type": "object",
+  "properties": {
+    "race": {
+      "type": "string"
+    },
+    "boats": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    }
+  },
+  "required": [
+    "boats"
+  ]
+}

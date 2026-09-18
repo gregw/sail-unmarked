@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "leave",
+  "description": "C→S. The boat is done with this race.",
+  "type": "object",
+  "properties": {
+    "session": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "session"
+  ]
+}

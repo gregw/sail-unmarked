@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "timer",
+  "description": "S→C. An instant and two durations, and nothing else. EVERY COUNTDOWN IS RUN BY THE BOAT against the boat's own clock; the server sends this once and does not tick (§8.4).",
+  "type": "object",
+  "properties": {
+    "startAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "warningSeconds": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "startSeconds": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "flags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "text": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "startAt",
+    "text"
+  ]
+}

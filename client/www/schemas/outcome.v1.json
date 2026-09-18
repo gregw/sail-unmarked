@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "outcome",
+  "description": "S→C. The committee says a boat is DNF, DNS, or racing after all. Never inferred from a boat going quiet (§8.6).",
+  "type": "object",
+  "properties": {
+    "boatId": {
+      "type": "string"
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "dnf",
+        "dns",
+        "racing",
+        "retired",
+        "finished"
+      ]
+    },
+    "reason": {
+      "type": "string"
+    },
+    "text": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "boatId",
+    "outcome"
+  ]
+}

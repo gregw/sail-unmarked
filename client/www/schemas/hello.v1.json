@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "hello",
+  "description": "C→S. Opens the conversation. The client proposes every version it can speak and the server disposes (§5.1).",
+  "type": "object",
+  "properties": {
+    "versions": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      }
+    },
+    "client": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "versions"
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "rejected",
+  "description": "S→C. Any refusal. BOTH a code and a sentence: a code cannot be shown to somebody and a sentence cannot be acted on (§8.1).",
+  "type": "object",
+  "properties": {
+    "code": {
+      "type": "string"
+    },
+    "text": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "code",
+    "text"
+  ]
+}

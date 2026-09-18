@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "join",
+  "description": "C→S. A boat takes a course. `revision` is what the boat already holds. `race` and `division` are named where the sailor named them — which is the only thing that can settle which division a boat is in once two of them sail one course; without them the server finds the race from the course and the day (§8.2).",
+  "type": "object",
+  "properties": {
+    "sailNo": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "club": {
+      "type": "string"
+    },
+    "series": {
+      "type": "string"
+    },
+    "course": {
+      "type": "string"
+    },
+    "variant": {
+      "type": "string"
+    },
+    "revision": {
+      "type": "string"
+    },
+    "race": {
+      "type": "string"
+    },
+    "tcf": {
+      "type": "number",
+      "minimum": 0
+    },
+    "answers": {
+      "type": "object"
+    },
+    "division": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "club",
+    "series",
+    "course"
+  ]
+}

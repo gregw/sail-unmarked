@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "say",
+  "description": "Both ways. The channel is a radio: no private conversations, and everybody hears it. A length cap costs nothing and is worth having (§13).",
+  "type": "object",
+  "properties": {
+    "session": {
+      "type": "string"
+    },
+    "text": {
+      "type": "string"
+    },
+    "messageId": {
+      "type": "string"
+    },
+    "from": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "text"
+  ]
+}

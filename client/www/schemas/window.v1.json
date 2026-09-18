@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "window",
+  "description": "S→C. A start RANGE, for formats that open one rather than counting down. Carried by the protocol; the race screen does not offer it yet.",
+  "type": "object",
+  "properties": {
+    "opensAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "closesAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "text": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "opensAt",
+    "text"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "left",
+  "description": "S→C. Acknowledging a leave.",
+  "type": "object",
+  "properties": {
+    "session": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "session"
+  ]
+}

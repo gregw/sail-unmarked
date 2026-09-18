@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "course",
+  "description": "S→C. New geometry, whole. Acknowledged, because whether a boat saw it is a question a protest could turn on (§12.4).",
+  "type": "object",
+  "properties": {
+    "revision": {
+      "type": "string"
+    },
+    "course": {
+      "type": "object"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "text": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "revision",
+    "text"
+  ]
+}

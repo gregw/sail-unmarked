@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "fix",
+  "description": "C→S. Where the boat is, at `fixSeconds` from `joined` and NOT at the receiver's rate. Taken on trust (§1.1) and never replayed (§4.1).",
+  "type": "object",
+  "properties": {
+    "session": {
+      "type": "string"
+    },
+    "position": {
+      "type": "object",
+      "properties": {
+        "latitude": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "longitude": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        }
+      },
+      "required": [
+        "latitude",
+        "longitude"
+      ]
+    },
+    "cogDeg": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 360
+    },
+    "sogKn": {
+      "type": "number",
+      "minimum": 0
+    },
+    "revision": {
+      "type": "string"
+    },
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "session",
+    "position"
+  ]
+}

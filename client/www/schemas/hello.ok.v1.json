@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "hello.ok",
+  "description": "S→C. The version the server chose, and how often to come back. NO TIME IN IT: the server is not a clock to set yours by (§1.2).",
+  "type": "object",
+  "properties": {
+    "v": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "poll": {
+      "type": "integer",
+      "minimum": 100
+    },
+    "features": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "v"
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "joined",
+  "description": "S→C. The parameters the client is to run on. Carries the COURSE, not a reference to it. `fixSeconds` is ABSENT when there is no race behind the join, which is how the boat is told to report no fixes (§8.2).",
+  "type": "object",
+  "properties": {
+    "session": {
+      "type": "string"
+    },
+    "boatId": {
+      "type": "string"
+    },
+    "race": {
+      "type": "string"
+    },
+    "raceName": {
+      "type": "string"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "fixSeconds": {
+      "type": "number",
+      "minimum": 0
+    },
+    "revision": {
+      "type": "string"
+    },
+    "course": {
+      "type": "object"
+    },
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "session"
+  ]
+}

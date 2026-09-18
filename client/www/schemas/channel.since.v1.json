@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "channel.since",
+  "description": "C→S. The gap after the last entry the boat holds. The channel is the ONE thing that is replayed, because a channel IS a history and what was said cannot be summarised into a current value (§4.1).",
+  "type": "object",
+  "properties": {
+    "session": {
+      "type": "string"
+    },
+    "after": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "session"
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "flag",
+  "description": "S→C. A condition the race is in. AP suspends and does not reschedule; abandonment is the post-start instrument (§8.5). Acknowledged.",
+  "type": "object",
+  "properties": {
+    "flag": {
+      "type": "string",
+      "enum": [
+        "postponed",
+        "abandoned",
+        "recall",
+        "shorten",
+        "none"
+      ]
+    },
+    "reason": {
+      "type": "string"
+    },
+    "text": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "flag",
+    "text"
+  ]
+}

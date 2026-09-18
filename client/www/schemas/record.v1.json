@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "record",
+  "description": "C→S. The artefact — a full CourseRecord. The one thing that leaves this system, and the only one a protest could be argued from.",
+  "type": "object",
+  "properties": {
+    "session": {
+      "type": "string"
+    },
+    "record": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "session",
+    "record"
+  ]
+}

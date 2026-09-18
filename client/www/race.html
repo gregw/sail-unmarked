@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!--
+  RUNNING A RACE — dialog document §12, and a SECOND PAGE rather than a tab of the editor.
+
+  The reason is the undo. The editor saves as you go and holds exactly one undo, which is right
+  for dragging a mark and wrong for raising an abandonment: there is no undo for telling a fleet
+  to stop. Live conduct wants actions that are deliberate and confirmed, and it wants furniture
+  the editor's pane has no room for — the fleet table, the start states, the channel, the
+  acknowledgement coverage.
+
+  Defining a race is the other half and it IS editing: that is the editor's fourth tab.
+-->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Race &middot; Unmarkable Racing</title>
+<link rel="stylesheet" href="style.css">
+<style>
+body { padding: 0; height: 100vh; overflow: hidden; }
+
+.split { display: grid; grid-template-columns: 1fr 470px; grid-template-rows: 100%; height: 100vh; }
+@media (max-width: 1100px) { .split { grid-template-columns: 1fr 380px; } }
+
+.left { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+.topbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--panel2);
+}
+.topbar .sp { flex: 1; }
+.topbar select {
+  background: var(--panel2); color: var(--ink); border: 1px solid var(--panel2);
+  border-radius: 4px; padding: 4px 6px; font-size: 12px;
+}
+#chart { flex: 1; min-height: 0; width: 100%; display: block; background: var(--sea); }
+
+.pane {
+  border-left: 1px solid var(--panel2); background: var(--panel);
+  display: flex; flex-direction: column; min-height: 0; overflow-y: auto; padding: 10px 12px;
+}
+.pane h2 { margin: 14px 0 6px; font-size: 16px; }
+.pane h2:first-child { margin-top: 0; }
+.pane .hint { font-size: 11.5px; color: var(--muted); margin-bottom: 6px; }
+
+.card {
+  background: var(--sea); border: 1px solid var(--panel2); border-radius: 5px;
+  padding: 8px 10px; margin-bottom: 8px;
+}
+.card .who { display: flex; align-items: baseline; gap: 8px; }
+.card .who .name { font-family: var(--disp); font-size: 17px; font-weight: 600; }
+.card .who .state {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase;
+  margin-left: auto;
+}
+.card .who .state.scheduled { color: var(--line); }
+.card .who .state.racing { color: var(--ok); }
+.card .who .state.postponed, .card .who .state.abandoned { color: var(--warn); }
+.card .who .state.none { color: var(--muted); }
+.card .row { display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.card label {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--muted);
+}
+.card input[type=number], .card input[type=text], .card input[type=time] {
+  background: var(--panel2); color: var(--ink); border: 1px solid var(--panel2);
+  border-radius: 4px; padding: 4px 6px; font-family: var(--mono); font-size: 12px; width: 78px;
+}
+.card .said { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+button.act {
+  background: var(--panel2); color: var(--ink); border: 1px solid var(--panel2);
+  border-radius: 4px; padding: 5px 9px; font-family: var(--body); font-size: 12.5px;
+  cursor: pointer;
+}
+button.act:hover { border-color: var(--line); }
+/* An act with no undo asks twice, and says so in its colour while it is asking. */
+button.act.danger { border-color: var(--warn); color: var(--warn); }
+button.act.arming { background: var(--warn); color: var(--sea); border-color: var(--warn); }
+button.act:disabled { opacity: 0.45; cursor: default; }
+
+table.fleet { width: 100%; border-collapse: collapse; font-size: 12px; }
+table.fleet th {
+  text-align: left; font-family: var(--mono); font-size: 9px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--muted); font-weight: 400;
+  padding: 3px 4px; border-bottom: 1px solid var(--panel2);
+}
+table.fleet td { padding: 3px 4px; border-bottom: 1px solid rgba(23, 41, 58, 0.6); }
+table.fleet td.seen.yes { color: var(--ok); }
+table.fleet td.seen.no { color: var(--warn); }
+table.fleet tr.stale td { opacity: 0.5; }
+
+.channel { max-height: 260px; overflow-y: auto; font-size: 12.5px; }
+.channel .said { padding: 3px 6px; border-left: 3px solid transparent; }
+.channel .said .who { font-size: 10px; color: var(--muted); }
+.channel .said.safety { border-left-color: var(--warn); background: rgba(255, 95, 86, 0.08); }
+.channel .said.state { border-left-color: var(--line); }
+.compose { display: flex; gap: 6px; margin-top: 6px; }
+.compose input {
+  flex: 1; min-width: 0; background: var(--panel2); color: var(--ink);
+  border: 1px solid var(--panel2); border-radius: 4px; padding: 5px 7px; font-size: 13px;
+}
+
+.legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--muted); }
+.legend span { display: flex; align-items: center; gap: 4px; }
+.legend i { width: 18px; height: 3px; display: inline-block; }
+</style>
+</head>
+<body>
+
+<div class="split">
+  <div class="left">
+    <div class="topbar">
+      <span class="kicker">Race</span>
+      <select id="pick"></select>
+      <span class="sp"></span>
+      <span class="mono" id="clock" style="font-size:12px; color:var(--muted)"></span>
+      <select class="basemap" id="basemap"></select>
+      <span id="whoami" class="mono" style="font-size:11px; color:var(--muted)"></span>
+      <a href="editor.html" style="font-size:12px">course editor</a>
+      <a href="index.html" style="font-size:12px">&larr; home</a>
+    </div>
+    <svg id="chart" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div class="topbar" style="border-top:1px solid var(--panel2); border-bottom:none">
+      <div class="legend" id="legend"></div>
+    </div>
+  </div>
+
+  <div class="pane" id="pane"></div>
+</div>
+
+<script type="module" src="race.js"></script>
+
+</body>
+</html>

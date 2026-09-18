@@ -1,0 +1,41 @@
+# Who may run a club's racing from this server.
+#
+# Copy to auth.yaml and fill in. THAT FILE IS GITIGNORED because it holds a client secret;
+# this one is committed and must never hold a real one.
+#
+# WHAT IT PROTECTS, and what it deliberately does not (see wiki/client-server-dialog.md §7.1):
+#
+#   behind the login          the course editor, the race screen, and the writes behind them —
+#                             publishing a course, scheduling a start, abandoning a race
+#   open to everybody         every GET (a club publishes its racing), joining a course,
+#                             posting a record, and the whole of /api/dialog
+#
+# Boats are never authenticated, and that is the design rather than a gap. A boat's positions
+# and instants are trusted by construction, so a login there would put a name to a claim
+# nothing can check; an officer's acts are decisions imposed on a fleet, and "who did this"
+# has an answer that matters. Authenticate authority, trust data.
+
+enabled: true
+
+# Any OpenID Connect provider that publishes a discovery document. Google is the default and is
+# what sail-jinx uses, so a club running both registers one client.
+issuer: "https://accounts.google.com"
+
+# From the provider's console. The secret is why this file is gitignored.
+clientId: "000000000000-xxxxxxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com"
+clientSecret: "PUT-THE-REAL-ONE-HERE"
+
+# Must match the redirect URI registered with the provider, exactly.
+redirectPath: "/auth/callback"
+
+# Optional. Blank or absent means ANY account the provider will vouch for — which is what
+# "restrict to any authenticated user" means and is a real setting, not a placeholder. Naming a
+# domain narrows it to a club's own Workspace, checked against the `hd` claim the provider
+# asserts rather than against anything the browser said.
+# allowedDomain: "myc.org.au"
+
+# TREAT REQUESTS FROM THIS MACHINE AS SIGNED IN. Off by default, and the default is the
+# important half: BEHIND A REVERSE PROXY EVERY REQUEST IN THE WORLD ARRIVES FROM 127.0.0.1, so
+# a bypass left on is the editor handed to the internet, silently. Turn it on for a laptop you
+# are sitting at; leave it off for anything with nginx in front of it.
+allowLoopback: false
