@@ -291,6 +291,19 @@ the selector is on the overview as well and sets one setting.
   alternatives' midpoints, so DTW and the course's own leg length are one quantity.
 - **DTW switches units at a fifth of a mile.** Safe only because the unit is printed beside the figure every
   time. **Bearings are true throughout**, because there is no variation model anywhere in this system.
+- **It is drawn to be read in DAYLIGHT** (`OVERVIEW_INK`). Dark is the background's job, not the
+  course's: everything here used to be faint over a dark panel, which on a desk reads as a tasteful
+  picture and on the water at midday reads as an empty screen. The ranking between marks is carried by
+  **colour and weight** — green live, blue ahead, a thinner dashed track — rather than by fading them
+  out, so only a mark already crossed this lap is dimmed, and only to *still legible*. The basemap stays
+  faint, because that is the thing everything else is read against.
+- **It shows the boat's own track back to the last line** (`RaceClient.legTrack`), which is the one
+  question the course drawing cannot answer: not where the leg goes but where the boat has actually
+  been on it. Kept apart from the Mark screen's trail and **decimated by distance** (`LEG_TRACK`) — a
+  boat parked on a start line for five minutes adds one point — and it starts at the *interpolated
+  crossing*, so it touches the mark it came from. Reset by a crossing, a skip and a relocation: the
+  segment across a dropout is not a sailed track, which is the same reason the detectors are re-armed.
+  Drawn in the boat's own ink, because the course's colours mean leg role and the cyan dashes mean COG.
 - **The live line is marked in the live triangle's own colour**, and counts as live while *any* of its
   crossings is: it is the same piece of water either way.
 - **The COG runs out as far as the picture goes**, forward only. Here the question is what the boat is
@@ -390,6 +403,14 @@ and this is a page whose entire interaction is *click exactly there*. Drawn twic
 underneath, because a reticle in one colour vanishes wherever it crosses something of about that brightness.
 **The cursor says what the chart will do** — green for a helm order, orange for putting the boat down, two
 gestures that are one click apart and cannot be undone.
+
+**The boat is DRAGGED, not placed by an armed button.** Arming a mode and then clicking is two gestures
+and a state to remember, and it puts *teleport the boat* one click away from *steer the boat* with nothing
+between them but a highlighted button. Picking the hull up says what is happening while it happens, can be
+abandoned by dropping it back, and cannot be done by accident because it starts on the boat: a press within
+`GRAB_PX` of the hull picks it up, anywhere else still pans the chart or gives a helm order. While it is in
+hand the chart shows where it came from as well as where it is going, and the cursor is orange over the boat
+and green everywhere else.
 
 **Picking the boat up does not cancel the helm order** (`BoatSim.placeAt`). Moving a boat says where it *is*,
 not where it was going; if it should be stopped there is a Pause button.

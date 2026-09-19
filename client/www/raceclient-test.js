@@ -13,7 +13,8 @@
  * below and it fails loudly if the rule is ever relaxed.
  */
 
-import { MAX_ACCEL_MS2, RaceClient, bearingLocal, clock, midpointOf, originOf } from './raceclient.js';
+import {
+  LEG_TRACK, MAX_ACCEL_MS2, RaceClient, bearingLocal, clock, midpointOf, originOf } from './raceclient.js';
 import { offsetBy } from './boatsim.js';
 
 const REF = { latitude: -33.8, longitude: 151.28 };
@@ -291,6 +292,33 @@ export function run(check) {
   sail(either, { e: 0, n: 120 }, { e: 0, n: 420 });
   check('...finishing on the line it started on', either.finished
     && either.crossings[either.crossings.length - 1].line === 'north');
+
+  /* ------------------------------------------------- the track since the last line */
+
+  /*
+   * WHERE THE BOAT HAS BEEN ON THIS LEG, which the overview draws behind it. Kept apart from
+   * the Mark screen's trail because it answers a different question over a different scale —
+   * a whole leg on a picture a mile across, rather than the last few seconds against one line.
+   */
+  const tracked = fresh(WINDWARD_LEEWARD);
+  sail(tracked, { e: 0, n: -400 }, { e: 0, n: -120 });
+  check('the boat leaves a track on the leg it is sailing', tracked.legTrack.length > 3);
+  // DECIMATED BY DISTANCE, not by time: a boat parked on a start line for five minutes adds one
+  // point, where every fix would add three hundred and draw nothing anybody can see.
+  check('...decimated, so a long leg is a few hundred points rather than a few thousand',
+    tracked.legTrack.length < tracked.fixes.length
+    && tracked.legTrack.every((p, i) => i === 0
+      || Math.hypot(p.x - tracked.legTrack[i - 1].x, p.y - tracked.legTrack[i - 1].y)
+        >= LEG_TRACK.everyM - 0.001));
+
+  sail(tracked, { e: 0, n: -120 }, { e: 0, n: 120 });
+  const latchedAt = tracked.crossings[tracked.crossings.length - 1];
+  check('crossing a line starts the next leg\'s track ON that line, at the crossing itself',
+    tracked.legTrack.length >= 1
+    && Math.hypot(tracked.legTrack[0].x - latchedAt.point.x,
+      tracked.legTrack[0].y - latchedAt.point.y) < 0.001);
+  check('...so the track behind the boat belongs to the leg it is on and no further back',
+    tracked.legTrack.length < 5);
 
   /* --------------------------------------------------- stepping through, in practice */
 

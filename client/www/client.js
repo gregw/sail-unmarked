@@ -40,13 +40,30 @@ import { boatArt, crossingNormal, esc, hhmmss } from './markscreen.js';
  */
 const RIG_BOAT_PX = 23;
 
+/**
+ * How near the boat a press has to be to pick it UP rather than steer it somewhere.
+ *
+ * <b>The boat is dragged, not placed by an armed button.</b> Arming a mode and then clicking is
+ * two gestures and a state to remember, and it puts *teleport the boat* one click away from
+ * *steer the boat* with nothing but a button's highlight between them. Picking the hull up and
+ * putting it down is the thing itself: it says what is about to happen while it is happening,
+ * it can be abandoned by dropping it back, and it cannot be done by accident because it starts
+ * on the boat.
+ *
+ * A little larger than the hull is drawn, because a target the exact size of the thing is a
+ * target you miss — and the cost of missing is a helm order, which is undone by giving another.
+ */
+const GRAB_PX = RIG_BOAT_PX * 0.8;
+
 const el = (id) => document.getElementById(id);
 
 const state = {
   view: new MapView(),
   basemap: 'chart',
   sim: new BoatSim({ at: { latitude: -33.8, longitude: 151.27 }, running: false }),
-  placing: false,
+  // Where the boat is being dragged to, in pixels, while a hand is on it. Null the rest of
+  // the time, which is also how the drawing knows to put the hull at its real position.
+  moving: null,
   // Draw no course on the RIG's chart. The one thing on this page that is not a knob on the
   // receiver: it takes away the operator's own knowledge of where the marks are, so the only
   // thing left saying where to steer is the device beside it — which is the claim the whole
@@ -202,7 +219,10 @@ function renderOverlay() {
   // that are one click apart and cannot be undone.
   if (state.pointer && !state.dragging) {
     const { x, y } = state.pointer;
-    const colour = state.placing ? 'var(--toside)' : 'var(--ok)';
+    // Orange over the boat, where a press picks it UP, and green everywhere else, where a
+    // click is a helm order. Two gestures, one pointer, and the cursor says which is which
+    // before anything happens rather than after.
+    const colour = state.moving || overBoat(x, y) ? 'var(--toside)' : 'var(--ok)';
 
     // Range and bearing from the boat, because on a steering rig the question behind every
     // click is "how far is that, and which way" — and it is free to answer here.
@@ -245,7 +265,19 @@ function renderOverlay() {
   // is sailing it, so a boat drawn to scale would be a dot at one zoom and fill the harbour at
   // another. Showing range by size is the device's job, where the scale means something.
   const [bx, by] = view.toPx(state.sim.at);
-  out += boatArt(bx, by, state.sim.headingDeg, RIG_BOAT_PX);
+  if (state.moving) {
+    // PICKED UP: the hull follows the hand, and where it came from stays on the chart until it
+    // is let go. A drag that showed only the destination would leave somebody who had changed
+    // their mind with nowhere to put it back.
+    const [mx, my] = state.moving;
+    out += `<line x1="${bx.toFixed(1)}" y1="${by.toFixed(1)}" x2="${mx.toFixed(1)}" y2="${my.toFixed(1)}"`
+      + ` stroke="var(--toside)" stroke-width="1.4" stroke-dasharray="4,4" opacity="0.7"/>`;
+    out += boatArt(bx, by, state.sim.headingDeg, RIG_BOAT_PX,
+      { fill: 'none', edge: 'var(--toside)' });
+    out += boatArt(mx, my, state.sim.headingDeg, RIG_BOAT_PX, { fill: 'var(--toside)' });
+  } else {
+    out += boatArt(bx, by, state.sim.headingDeg, RIG_BOAT_PX);
+  }
 
   el('over').innerHTML = out;
   el('truth').textContent = state.client
@@ -405,11 +437,6 @@ el('run').addEventListener('click', () => {
   renderRun();
 });
 
-el('place').addEventListener('click', () => {
-  state.placing = !state.placing;
-  el('place').classList.toggle('on', state.placing);
-});
-
 const knob = (id, format, apply) => {
   const input = el(id);
   const show = () => { el(`${id}_v`).textContent = format(Number(input.value)); };
@@ -496,14 +523,29 @@ const svgPx = (ev) => {
   return [ev.clientX - box.left, ev.clientY - box.top];
 };
 
+/** Is this pixel on the boat? What decides whether a press picks it up or pans the chart. */
+const overBoat = (x, y) => {
+  const [bx, by] = state.view.toPx(state.sim.at);
+  return Math.hypot(x - bx, y - by) <= GRAB_PX;
+};
+
 let drag = null;
 el('rig').addEventListener('pointerdown', (ev) => {
-  drag = { at: svgPx(ev), moved: false };
+  const at = svgPx(ev);
+  // THE BOAT IS PICKED UP BY PRESSING ON IT, which is why this test comes first: the chart's
+  // own pan and the boat's drag are one pointer doing two things, and the one that starts ON
+  // the boat is the one about the boat. Everywhere else the chart still pans.
+  if (overBoat(...at)) state.moving = at;
+  else drag = { at, moved: false };
   el('rig').setPointerCapture(ev.pointerId);
 });
 el('rig').addEventListener('pointermove', (ev) => {
   const at = svgPx(ev);
   state.pointer = { x: at[0], y: at[1] };
+  if (state.moving) {
+    state.moving = at;
+    return;
+  }
   if (!drag) return;
   const [x, y] = at;
   const [dx, dy] = [x - drag.at[0], y - drag.at[1]];
@@ -521,15 +563,12 @@ el('rig').addEventListener('pointerleave', () => {
 el('rig').addEventListener('pointerup', (ev) => {
   el('rig').classList.remove('dragging');
   state.dragging = false;
-  if (!drag) return;
-  const moved = drag.moved;
-  drag = null;
-  if (moved) return;
-  // A click is a helm order: steer there. Holding the Place button down instead teleports,
-  // which is not something a boat does and is therefore a separate, deliberate gesture
-  // rather than a modifier on the ordinary one.
   const position = state.view.toPosition(...svgPx(ev));
-  if (state.placing) {
+  if (state.moving) {
+    // PUT DOWN WHERE THE HAND LET GO. Teleporting a boat is not something a boat does, so it
+    // is a deliberate gesture of its own rather than a modifier on the ordinary click — and
+    // being a drag, it is one nobody performs by accident.
+    state.moving = null;
     state.sim.placeAt(position);
     // Put down beyond wherever it was headed, the boat has "arrived" and would sit there.
     // Re-aimed at the mark it still owes, because dropping a boat further along the course
@@ -537,11 +576,14 @@ el('rig').addEventListener('pointerup', (ev) => {
     // looked for all the world like the simulator had hung.
     if (state.sim.arrived()) aimAtMark();
     state.wake = [{ ...position }];
-    state.placing = false;
-    el('place').classList.remove('on');
-  } else {
-    state.sim.steerTo(position);
+    return;
   }
+  if (!drag) return;
+  const moved = drag.moved;
+  drag = null;
+  if (moved) return;
+  // A click anywhere else is a helm order: steer there.
+  state.sim.steerTo(position);
 });
 el('rig').addEventListener('wheel', (ev) => {
   ev.preventDefault();

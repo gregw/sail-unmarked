@@ -44,6 +44,7 @@ import {
   labelBox,
   COG_FIT_PERP,
   BOAT_LENGTHS_ACROSS,
+  OVERVIEW_INK,
   FLOOR_SPAN_M,
   minSpanM,
   realFor,
@@ -402,6 +403,29 @@ export function run(check) {
   check('...marking the one in force', viewBar('mark').includes('data-view="mark" class="on"'));
   check('...and AUTO is what it opens on, because the sailor never has to ASK for the Mark '
     + 'screen — only to be able to', viewBar('auto').includes('data-view="auto" class="on"'));
+
+  /* --------------------------------------- the overview is drawn to be read in daylight */
+
+  /*
+   * DARK IS THE BACKGROUND'S JOB, NOT THE COURSE'S. These screens are dark because they are
+   * read in glare, and everything on this one used to be drawn faint on top of that — which on
+   * a desk reads as a tasteful picture and on the water at midday reads as an empty screen. The
+   * ranking between the marks is carried by COLOUR and WEIGHT (green live, blue ahead, thinner
+   * dashed track) rather than by fading them out, so only what is genuinely behind the boat is
+   * dimmed, and only to "still legible".
+   */
+  const daylight = overviewPanel(client, { now: t });
+  const opacities = [...daylight.matchAll(/opacity="([\d.]+)"/g)].map((m) => Number(m[1]));
+  check('nothing the sailor has to SEE on the overview is drawn under two thirds strength',
+    opacities.length > 0 && opacities.every((o) => o >= OVERVIEW_INK.done));
+  check('...the track included, which is the thing the course hangs on',
+    new RegExp(`stroke-width="${OVERVIEW_INK.trackWidth}" opacity="${OVERVIEW_INK.track}"`)
+      .test(daylight) && OVERVIEW_INK.track >= 0.8);
+  check('...and a mark not yet reached, which is the ordinary case',
+    daylight.includes(`opacity="${OVERVIEW_INK.ahead}"`) && OVERVIEW_INK.ahead >= 0.9);
+  // The live mark is full strength and always was: what changed is everything around it.
+  check('...with the live mark still at full strength, since the ranking is by colour',
+    daylight.includes('opacity="1"'));
 
   /* ----------------------------------------------------------- the clock on screen */
 

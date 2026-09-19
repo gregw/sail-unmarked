@@ -1640,6 +1640,44 @@ export const OVERVIEW_ZOOM = { min: 0.25, max: 16, step: 1.5 };
 export const BASEMAP_INK = 0.32;
 
 /**
+ * HOW BRIGHT THE COURSE IS DRAWN ON THE OVERVIEW, and it is drawn for DAYLIGHT.
+ *
+ * The screens are dark because they are read in glare and at dusk — but dark is the
+ * BACKGROUND's job, not the course's. Everything here was drawn faint, which on a desk reads as
+ * a tasteful picture with the live mark standing out of it, and on the water in sunshine reads
+ * as an empty screen: a phone in a bracket at midday loses half its contrast to the sky before
+ * anything on it is even looked at, and a 50% stroke over a dark panel is the first thing to
+ * go.
+ *
+ * So the rule is that everything the sailor needs to SEE is drawn near full strength, and the
+ * ranking between them is carried by colour and weight rather than by fading them out: the live
+ * mark is green where the others are blue, and the track behind it is thinner and dashed. Only
+ * what is genuinely behind the boat — a mark already crossed this lap — is dimmed, and even
+ * that is dimmed to "still legible" rather than to "nearly gone".
+ *
+ * The one thing that stays faint is the basemap (`BASEMAP_INK`), because that is a background
+ * and is the thing everything else has to be read against.
+ */
+export const OVERVIEW_INK = {
+  /** The legs, which are a construction line under the marks rather than the marks. */
+  track: 0.85,
+  trackWidth: 1.8,
+  /** A mark not yet reached: the ordinary case, and it must be readable at a glance. */
+  ahead: 0.95,
+  /** A mark already crossed this lap. Behind the boat, but still part of the picture. */
+  done: 0.6,
+  /**
+   * The boat's own COG, run out to the edge. Not the course, but read in the same glance and
+   * lost to the same glare — and it is the line that answers "what am I pointing at".
+   */
+  cog: 0.85,
+  cogWidth: 1.5,
+  /** The track sailed since the last line. The boat's own, in the boat's own ink. */
+  trail: 0.8,
+  trailWidth: 2,
+};
+
+/**
  * What the sailor has done to the overview by hand: zoomed it, or moved it.
  *
  * <b>The overview re-fits every frame, and that is right until somebody takes hold of it.</b>
@@ -1835,7 +1873,7 @@ export function overview(client, options = {}) {
     const live = uses.some(({ step }) => client.isLive(step.index));
     out += `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}"`
       + ` stroke="${live ? ROLE_COLOUR.start : 'var(--line)'}" stroke-width="${live ? 3.5 : 2}"`
-      + ` opacity="${live ? 1 : 0.75}"/>`;
+      + ` opacity="${live ? 1 : OVERVIEW_INK.ahead}"/>`;
   }
 
   const steps = client.steps.map((step) => ({
@@ -1843,7 +1881,9 @@ export function overview(client, options = {}) {
   }));
   for (const segment of track(steps, { closed: !!client.snapshot.closed })) {
     const crossing = segment.kind === 'crossing';
-    out += `<path d="${segment.d}" fill="none" stroke="${crossing ? 'var(--muted)' : ROLE_COLOUR.leg}" stroke-width="1.4" opacity="0.5" stroke-dasharray="${crossing ? 'none' : '4,4'}"/>`;
+    out += `<path d="${segment.d}" fill="none" stroke="${crossing ? 'var(--muted)' : ROLE_COLOUR.leg}"`
+      + ` stroke-width="${OVERVIEW_INK.trackWidth}" opacity="${OVERVIEW_INK.track}"`
+      + ` stroke-dasharray="${crossing ? 'none' : '4,4'}"/>`;
   }
 
   client.steps.forEach((step) => {
@@ -1856,10 +1896,32 @@ export function overview(client, options = {}) {
       const shape = placed.get(`${step.index}:${crossing.line}`);
       if (!shape) continue;
       const colour = live ? ROLE_COLOUR.start : done ? 'var(--muted)' : ROLE_COLOUR.leg;
-      out += `<polygon points="${shape.points}" fill="${colour}" opacity="${live ? 1 : done ? 0.35 : 0.75}"/>`;
+      out += `<polygon points="${shape.points}" fill="${colour}"`
+        + ` opacity="${live ? 1 : done ? OVERVIEW_INK.done : OVERVIEW_INK.ahead}"/>`;
       out += `<text x="${shape.label.x.toFixed(1)}" y="${(shape.label.y + 4).toFixed(1)}" text-anchor="middle" font-family="var(--mono)" font-size="${LABEL.fontPx}" fill="var(--sea)">${esc(step.letter)}</text>`;
     }
   });
+
+  /*
+   * THE TRACK SINCE THE LAST LINE, drawn behind the boat.
+   *
+   * It answers the question the course drawing cannot: not *where does the leg go* but *where
+   * have I actually been on it* — how far off the rhumb line the last tack put you, whether the
+   * lift held, where you crossed the one before. It stops at the mark it came from, because a
+   * track that ran back through the whole race would draw the course a second time in a colour
+   * that means something else.
+   *
+   * In the boat's OWN ink rather than in any of the course's colours: those mean leg role
+   * (green, blue, red) and this is not a leg, and the cyan dashes are the COG, which is where
+   * the boat is going rather than where it has been. Solid, thin, and under the hull.
+   */
+  if ((client.legTrack ?? []).length > 1) {
+    const d = client.legTrack
+      .map((p, i) => { const q = to(p); return `${i ? 'L' : 'M'}${q.x.toFixed(1)},${q.y.toFixed(1)}`; })
+      .join(' ');
+    out += `<path d="${d}" fill="none" stroke="var(--ink)" stroke-width="${OVERVIEW_INK.trailWidth}"`
+      + ` stroke-linecap="round" stroke-linejoin="round" opacity="${OVERVIEW_INK.trail}"/>`;
+  }
 
   if (client.point) {
     const px = to(client.point);
@@ -1878,7 +1940,8 @@ export function overview(client, options = {}) {
       const end = { x: px.x + Math.sin(theta) * far, y: px.y - Math.cos(theta) * far };
       out += `<line x1="${px.x.toFixed(1)}" y1="${px.y.toFixed(1)}"`
         + ` x2="${end.x.toFixed(1)}" y2="${end.y.toFixed(1)}" stroke="var(--cog)"`
-        + ` stroke-width="1.2" stroke-dasharray="7,6" opacity="0.65"/>`;
+        + ` stroke-width="${OVERVIEW_INK.cogWidth}" stroke-dasharray="7,6"`
+        + ` opacity="${OVERVIEW_INK.cog}"/>`;
     }
     // Turned by its COG less whatever is at the top, so the boat points its true way round
     // at North up and straight up the leg at Leg up. The same hull the approach draws, at a

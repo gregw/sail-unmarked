@@ -14,7 +14,7 @@
  * make either happen.
  */
 import { $, H, choose, chosenIn, ok, optionsOf, paneHtml, report, settle, unfold } from './dom.mjs';
-import { BOAT } from '../../client/www/markscreen.js';
+import { BOAT, OVERVIEW_INK } from '../../client/www/markscreen.js';
 import { ROLE_COLOUR } from '../../client/www/coursedraw.js';
 
 /* ------------------------------------------- something public and published to join */
@@ -286,14 +286,21 @@ ok('...steering for the NEXT line now, named and ranged',
 const st = mod.__state;
 const before = st.client.waypoint().distanceM;
 const rad = (st.client.waypoint().bearingDeg * Math.PI) / 180;
-const { offsetBy } = await import('../../client/www/boatsim.js');
+const { offsetBy, metresBetween } = await import('../../client/www/boatsim.js');
 const ahead = offsetBy(st.sim.at, Math.sin(rad) * 150, Math.cos(rad) * 150);
 
-H('place:click')();
+// THE BOAT IS DRAGGED, not armed and clicked: the press starts ON the hull, the hand carries
+// it, and letting go puts it down there. A press anywhere else is a helm order, which is what
+// makes the two gestures impossible to confuse.
+const [fromX, fromY] = st.view.toPx(st.sim.at);
 const [px, py] = st.view.toPx(ahead);
-H('rig:pointerdown')({ clientX: px, clientY: py, pointerId: 1 });
+H('rig:pointerdown')({ clientX: fromX, clientY: fromY, pointerId: 1 });
+H('rig:pointermove')({ clientX: px, clientY: py, pointerId: 1 });
+ok('pressing on the boat picks it up rather than panning the chart', !!st.moving);
 H('rig:pointerup')({ clientX: px, clientY: py, pointerId: 1 });
-ok('placing the boat keeps it sailing — the helm order survives being picked up',
+ok('...and letting go puts it down there', !st.moving
+  && Math.round(metresBetween(st.sim.at, ahead)) <= 2);
+ok('dragging the boat keeps it sailing — the helm order survives being picked up',
   !!st.sim.target && !st.sim.arrived());
 
 // The chart draws its own cursor, because a system crosshair is one hairline over tiles and
@@ -412,8 +419,17 @@ const boatOn = () => /translate\(([-\d.]+),([-\d.]+)\) rotate\([-\d.]+\) scale/
 ok('the overview marks the line being sailed at, not only the triangle on it',
   new RegExp(`<line [^>]*stroke="${ROLE_COLOUR.start.replace(/[()]/g, '\\$&')}" stroke-width="3.5"`)
     .test(overviewSvg()));
+// Width and brightness off the constant rather than written here: the overview is drawn to be
+// read in DAYLIGHT, and the numbers that decide that are one place, in `OVERVIEW_INK`.
 ok('...and runs the COG out as far as the picture goes',
-  /stroke="var\(--cog\)" stroke-width="1.2"/.test(overviewSvg()));
+  new RegExp(`stroke="var\\(--cog\\)" stroke-width="${OVERVIEW_INK.cogWidth}"`)
+    .test(overviewSvg()));
+
+// THE TRACK SINCE THE LAST LINE, in the boat's own ink: where it has BEEN on this leg, which
+// no part of the course drawing can say.
+ok('...and draws the boat\'s own track back down the leg it is sailing',
+  new RegExp(`<path d="M[^"]+" fill="none" stroke="var\\(--ink\\)" stroke-width="${OVERVIEW_INK.trailWidth}"`)
+    .test(overviewSvg()) && mod.__state.client.legTrack.length > 1);
 
 ok('the overview carries a bar of chart controls under the chart',
   /data-zoom="in"/.test(device()) && /id="o_basemap"/.test(device()));

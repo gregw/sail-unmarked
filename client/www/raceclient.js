@@ -125,6 +125,26 @@ export const APPROACH = {
 export const TRAIL = 120;
 
 /**
+ * THE TRACK SINCE THE LAST LINE, which is what the overview draws behind the boat.
+ *
+ * A different question from the Mark screen's trail and kept separately for that reason. There
+ * the question is *what did the last few seconds look like against this line*, at every fix,
+ * for a picture a few tens of metres across. Here it is *where have I been on this leg* — a
+ * whole leg, on a picture that may be a mile across, where a fix every five seconds says as
+ * much as a fix every fifth of one and there is no room to draw the difference.
+ *
+ * So it is decimated by DISTANCE rather than by time: a boat parked on a start line for five
+ * minutes adds one point, and a boat reaching at twenty knots adds them as fast as it earns
+ * them. `everyM` is a few boat lengths, which is under a pixel at most overview scales; `max`
+ * is a cap for a long passage leg, and dropping the oldest is right because the point of this
+ * is the recent shape of the leg rather than its beginning.
+ *
+ * It starts AT the line: the first point of each leg is the interpolated crossing itself, so
+ * the trail touches the mark it came from rather than starting a fix later, somewhere past it.
+ */
+export const LEG_TRACK = { everyM: 25, max: 400 };
+
+/**
  * How many of those the approach view is required to keep on screen.
  *
  * Enough to see that the boat is under way and which way it has come, and no more. Fitting
@@ -335,6 +355,7 @@ export class RaceClient {
     this.crossings = [];       // what latched, in order: the record being built
     this.rejects = [];         // QC refusals and rejected candidates, for the audit trail
     this.fixes = [];           // recent accepted fixes, projected, for the plot
+    this.legTrack = [];        // where the boat has been since the last line — see LEG_TRACK
     this.lastGood = null;
     this.point = null;         // where the boat is, in the local frame
     this.fix = null;
@@ -468,6 +489,7 @@ export class RaceClient {
     this.point = toLocal(this.origin, fix);
     this.fixes.push({ ...this.point, time: fix.time, accuracyM: fix.accuracyM });
     if (this.fixes.length > TRAIL) this.fixes.shift();
+    this.trackLeg(this.point);
     if (!this.startedAt) this.startedAt = fix.time;
     this.updateApproach(fix);
 
@@ -541,6 +563,10 @@ export class RaceClient {
       gateSide: crossedStep.crossings.length > 1 ? took.line : null,
     });
     this.dwellUntil = fix.time.getTime() + this.approach.dwellMs;
+    // THE NEW LEG'S TRACK STARTS ON THE LINE, at the interpolated crossing rather than at the
+    // next fix — which is somewhere past the mark, and would draw a trail that began in open
+    // water a boat-length beyond the thing it is measured from.
+    this.legTrack = latched.point ? [{ x: latched.point.x, y: latched.point.y }] : [];
     this.advance(wasStarting);
     // Taken from the CROSSING, not from the fix that confirmed it: the interpolated instant is
     // the whole point, and an elapsed time built from the confirming fix would be late by up to
@@ -580,6 +606,9 @@ export class RaceClient {
     this.rejects.push(event);
     this.relocations += 1;
     this.fixes = [];
+    // The segment from where we thought the boat was to where it turns out to be is not a
+    // sailed track, so it is not drawn as one — the same reason the detectors are re-armed.
+    this.legTrack = [{ x: to.x, y: to.y }];
     this.point = to;
     this.smoothSogMs = null;
     this.smoothCogM = null;
@@ -630,6 +659,18 @@ export class RaceClient {
     this.showingMark = false;
     this.markSince = null;
     this.arm();
+  }
+
+  /**
+   * Add a point to the leg's track, if it is far enough from the last one to be worth having.
+   *
+   * See `LEG_TRACK` for why this is decimated by distance and kept apart from `fixes`.
+   */
+  trackLeg(point) {
+    const last = this.legTrack[this.legTrack.length - 1];
+    if (last && Math.hypot(point.x - last.x, point.y - last.y) < LEG_TRACK.everyM) return;
+    this.legTrack.push({ x: point.x, y: point.y });
+    if (this.legTrack.length > LEG_TRACK.max) this.legTrack.shift();
   }
 
   /**
@@ -700,6 +741,9 @@ export class RaceClient {
     this.showingMark = false;
     this.markSince = null;
     this.watchedLine = null;
+    // A different mark is a different leg, and the track behind the boat belongs to the leg it
+    // was sailed on rather than to the boat.
+    this.legTrack = this.point ? [{ x: this.point.x, y: this.point.y }] : [];
     this.arm();
     return target;
   }

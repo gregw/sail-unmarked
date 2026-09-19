@@ -234,13 +234,20 @@ select.basemap {
     <div class="rigbar">
       <span class="kicker">Test rig</span>
       <button class="plain" id="run">Start</button>
-      <button class="plain" id="place">Place boat</button>
+      <!--
+        THERE IS NO "PLACE BOAT" BUTTON: the boat is DRAGGED. Arming a mode and then clicking
+        was two gestures and a state to remember, and it put "teleport the boat" one click away
+        from "steer the boat" with nothing between them but a highlighted button. Picking the
+        hull up and putting it down says what is happening while it happens, can be abandoned
+        by dropping it back, and cannot be done by accident because it starts on the boat.
+      -->
+      <span class="mono" style="font-size:11px; color:var(--muted)">drag the boat to move it</span>
       <span class="sp"></span>
       <span class="mono" id="truth" style="font-size:11px; color:var(--muted)"></span>
       <!--
         HIDE COURSE puts the rig's chart back to what the water looks like: no lines, no end
         dots, no letters. It is beside the basemap selector because both decide what the chart
-        SHOWS, where Start and Place boat decide what the boat does.
+        SHOWS, where Start and the helm orders decide what the boat does.
       -->
       <label class="tick" title="Draw no course on the rig's chart, so the only thing saying where the marks are is the device beside it">
         <input type="checkbox" id="hidecourse"> Hide course
