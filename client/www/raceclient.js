@@ -195,6 +195,15 @@ export class RaceClient {
     this.snapshot = snapshot;
     this.boat = options.boat ?? {};
     this.joinMode = options.joinMode ?? 'ANONYMOUS';
+    /*
+     * HOW LONG THIS BOAT IS, which the approach plot needs twice over: it draws the hull to
+     * scale, and the closest it will zoom is measured in boat lengths of line. Asked for on the
+     * join screen rather than assumed, because ten metres drawn under a five-metre dinghy is a
+     * picture that lies about the one thing this screen is for — how much room there is.
+     *
+     * Ten is the fallback, which is what every boat had before the field existed.
+     */
+    this.boatLengthM = Number(this.boat.lengthM) > 0 ? Number(this.boat.lengthM) : 10;
     this.approach = { ...APPROACH, ...(options.approach ?? {}) };
 
     const defaults = snapshot.defaults ?? {};
@@ -1019,6 +1028,9 @@ export class RaceClient {
       boatName: this.boat?.name ?? null,
       sailNumber: this.boat?.sail ?? null,
       tcf: Number(this.boat?.tcf) > 0 ? Number(this.boat.tcf) : null,
+      // Carried for whoever scores it: a length is what a handicapper and a protest both ask
+      // for first, and it is the one fact about the boat this application now knows precisely.
+      lengthM: this.boatLengthM,
       startTime: iso(this.startAt),
       finishTime: iso(this.finishAt),
       submittedAt: iso(submittedAt),
@@ -1227,6 +1239,9 @@ export class RaceClient {
       rejected: watched.detector.rejected,
       lap: this.lap,
       of: this.steps.length,
+      // Drawn to scale, so the plot says how close the boat is without a number — and it is
+      // the same length the zoom floor is measured in. See `realFor` and `minSpanM`.
+      boatM: this.boatLengthM,
       // The Mark screen dashes SOG and COG when these are stale rather than showing the
       // last good ones: they are instantaneous, so an old one is wrong rather than merely
       // old, and this is the screen somebody is staring at while a line comes up.

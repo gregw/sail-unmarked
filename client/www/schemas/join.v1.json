@@ -32,6 +32,11 @@
       "type": "number",
       "minimum": 0
     },
+    "lengthM": {
+      "description": "How long the boat is, in metres. The boat's own screens draw the hull to scale and zoom no closer than a few of these; the server carries it onto the record.",
+      "type": "number",
+      "minimum": 0
+    },
     "answers": {
       "type": "object"
     },

@@ -41,7 +41,7 @@ public class JsonStoreTest
     {
         Instant start = Instant.parse(startedAt);
         return new CourseRecord("test.example", "fixture", "up-and-back", "a3f19c", join,
-            boatId, "Bombora", "AUS1234", 1.02, start, start.plusSeconds(elapsed),
+            boatId, "Bombora", "AUS1234", 1.02, 10.5, start, start.plusSeconds(elapsed),
             Instant.now(), "0.1.0",
             List.of(new CrossingEvent(0, "leeward", Direction.FORWARD, start, null, 3, 3, true, null)),
             List.of());
@@ -214,7 +214,7 @@ public class JsonStoreTest
         store.start();
         store.save(record("before", JoinMode.RECORD, "2026-01-01T07:00:00Z", 3600), UTC);
         CourseRecord after = new CourseRecord("test.example", "fixture", "up-and-back",
-            "beefed0", JoinMode.RECORD, "after", "Currawong", "AUS2", null,
+            "beefed0", JoinMode.RECORD, "after", "Currawong", "AUS2", null, null,
             Instant.parse("2026-01-01T08:00:00Z"), Instant.parse("2026-01-01T08:30:00Z"),
             Instant.now(), "0.1.0", List.of(), List.of());
         store.save(after, UTC);
@@ -233,7 +233,7 @@ public class JsonStoreTest
         JsonStore store = new JsonStore(root);
         store.start();
         store.save(new CourseRecord("test.example", "fixture", "up-and-back", "a3f19c",
-            JoinMode.RECORD, "still-out", "Bombora", "AUS1", null,
+            JoinMode.RECORD, "still-out", "Bombora", "AUS1", null, null,
             Instant.parse("2026-01-01T07:00:00Z"), null, Instant.now(), "0.1.0",
             List.of(), List.of()), UTC);
         assertThat(store.best("test.example", "up-and-back", null), hasSize(0));

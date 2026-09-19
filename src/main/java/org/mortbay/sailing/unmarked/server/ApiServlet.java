@@ -136,6 +136,11 @@ public class ApiServlet extends HttpServlet
                 Map<String, Object> body = new LinkedHashMap<>();
                 body.put("version", version);
                 body.put("site", config.site());
+                // What a BOAT reads off this endpoint: how close its approach plot may zoom.
+                // Served here rather than with the course, because it is a property of the
+                // fleet's phones rather than of the club's water — and defaulted on the client,
+                // since the Mark screen has to draw whether or not this server was ever reached.
+                body.put("display", config.display());
                 body.put("programmeErrors", programmes.loadErrors());
                 body.put("storeErrors", store.loadErrors());
                 body.put("auth", Map.of(

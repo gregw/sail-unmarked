@@ -158,16 +158,35 @@ derivations; these are the rules that outlive any of them.
   line — the one question the approach view exists to answer — is the one thing it then cannot say. It
   closes in in **steps**, and the frame is given up for exactly two reasons: one of the fitted things is
   about to leave it, or the view could usefully be a sixth closer in. The second test is one-directional.
-- **What must stay in view is a precise list**, and nothing else decides the fit: the boat, the capped COG
-  cut, the line's midpoint, the nearer end, the triangle, the next-leg arrow and the last three fixes. Each
-  is there for a reason a change must not forget — the midpoint is the *mark* and is what stops the zoom
-  running away as boat and seat converge; the nearer end is what answers *can I fetch this end*; the COG
-  cut is capped because a boat nearly parallel to a line cuts it kilometres away.
+- **What must stay in view is a SHORT list**: the boat, the seat (the part of the line it will cross), the
+  last three fixes, and the COG cut *only while the boat is pointing at the line* — within `COG_FIT_PERP`
+  (2) times its own perpendicular distance off, which is about sixty degrees of square. The triangle and the
+  arrow come in as pixel offsets from the seat, which is what the fit iterates for.
+
+  **The line's own geometry is not in it, and that is the lesson of a real boat on real water.** The
+  midpoint and the nearer end used to be held, on the reasoning that a picture of a line must say how much
+  line there is; on the long lines this is actually raced round, that pins the picture to a mark and an end
+  hundreds of metres from where the boat will cross, and the last few metres are drawn a few pixels across.
+  Measured on a 300 m line at ten metres out: **177 m of visible water before, 56 m now**, and the same
+  either way along the line. What those two answered is answered better elsewhere — DTW counts down to the
+  mark on the row above, and the overview draws the line whole. The COG cut was capped in *line lengths*
+  for the same wrong reason: that gives the loosest frame to exactly the line that needs the tightest.
+
+- **The maximum zoom is measured in BOAT LENGTHS** (`minSpanM`). How much room there is at a start line is
+  a question answered in boats, so the floor is the boat's own length times the club's
+  `display.boatLengthsAcross` (default 3), served by `GET /api/config` and defaulted on the client because
+  the Mark screen draws whether or not the server was reached. `FLOOR_SPAN_M` (15 m) sits under all of it:
+  the system resolves to one metre, so a plot showing eight metres would be drawing detail that is not
+  there.
 - **Nothing that matters is drawn near the border** (`FIT_FRACTION`, `HOLD.edgeFraction`). The two are a
   pair: the fit decides where things start, the hold decides how close they ever get.
 - **The boat and the line are drawn at their REAL SIZE**, which is how the plot shows closing. A glyph of
   fixed pixel size says nothing about range. Both are clamped, and **the line's bounds are derived from the
-  boat's** by the ratio of their lengths, so the clamp cannot put the pair out of proportion.
+  boat's** by the ratio of their lengths, so the clamp cannot put the pair out of proportion. **The boat's
+  length is asked for at join** (`realFor`), ten metres being the fallback rather than the assumption it
+  once was; the line stays three metres for everybody, because that width is the accuracy band and belongs
+  to the sky rather than to the boat. The length is remembered like the sail number, carried in the `join`
+  message and written onto the record, where a handicapper or a protest asks for it first.
 - **The boat is a HULL SEEN FROM ABOVE, not an arrow** (`boatArt`) — an arrow reads as a cursor or a
   bearing marker. **No boom**: a boom is drawn at an angle, and an angle is a claim about where the wind is.
   **One path, one routine, three charts**, drawn to scale on the plot and at fixed size on the overview and

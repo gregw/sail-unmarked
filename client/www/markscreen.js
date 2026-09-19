@@ -235,13 +235,26 @@ export function projector(centre, up, scale, width, height) {
 }
 
 /**
- * The smallest span the plot will zoom to, in metres across the shorter axis.
+ * THE MAXIMUM ZOOM: how little water the plot will ever show across its shorter axis.
  *
- * A floor rather than a target: the whole system resolves to one metre, so a plot showing
- * fifteen metres across would be drawing detail that is not there. Forty is close enough to
- * see the accuracy band as a real width and still far enough that the boat does not fill it.
+ * <b>Measured in the boat's own lengths</b>, because that is the unit a sailor judges room in.
+ * `BOAT_LENGTHS_ACROSS` is the default and the server's `display.boatLengthsAcross` overrides
+ * it, reaching the client through `GET /api/config` when it joins; the boat's length comes off
+ * the join screen. Three lengths is a picture with the boat about a third of the width of it —
+ * close enough to place a bow on a line, wide enough that the line still reads as a line.
+ *
+ * `FLOOR_SPAN_M` is underneath all of it and is not a preference: the whole system resolves to
+ * one metre, so a plot showing eight metres across would be drawing detail that is not there,
+ * and a dinghy fleet configuring three lengths of a four-metre boat would ask for exactly that.
  */
-export const MIN_SPAN_M = 40;
+export const BOAT_LENGTHS_ACROSS = 3;
+export const FLOOR_SPAN_M = 15;
+
+/** The closest view for this boat, in metres across the shorter axis. */
+export const minSpanM = (boatM, lengthsAcross) => Math.max(
+  FLOOR_SPAN_M,
+  (Number(boatM) > 0 ? Number(boatM) : REAL.boatM)
+    * (Number(lengthsAcross) > 0 ? Number(lengthsAcross) : BOAT_LENGTHS_ACROSS));
 
 /**
  * How much of each axis the things that must be seen are fitted into.
@@ -261,23 +274,26 @@ export const MIN_SPAN_M = 40;
 export const FIT_FRACTION = 0.7;
 
 /**
- * How far along the COG the crossing point is allowed to pull the view, in line lengths.
+ * How far along the COG the crossing point may be and still pull the view, as a multiple of the
+ * boat's PERPENDICULAR distance off the line.
  *
  * <b>A boat sailing nearly parallel to a line cuts it a very long way away, and at exactly
  * parallel it never cuts it at all.</b> The cut is one of the things the frame is fitted
  * around, so honouring its position at that angle zooms the plot out until the boat is a dot
- * and the line a hair — for a crossing point nobody is steering at and will not reach. What
- * the picture needs from the projection there is its direction, which a point a bounded
- * distance along it carries just as well.
+ * and the line a hair — for a crossing point nobody is steering at and will not reach.
  *
- * Twice the line's own length, taken between its DEFINED points, because that is the scale on
- * which a line is approached: inside it the cut is a real target and belongs in the frame,
- * outside it the figure on the dashes is what says how far off the boat is pointing, and the
- * ring is free to fall outside the picture. The ring and the dashes are always drawn where the
- * cut really is — capping what is DRAWN would move the warning, which is the one thing on this
- * screen that must not be moved.
+ * <b>Measured against the boat's own distance off, not against the line's length.</b> The two
+ * agree on a club start line and part company completely on the long lines this is raced round:
+ * a cap in line lengths gives a quarter-mile line a frame ten times looser than a gate's, which
+ * is the opposite of what the boat needs — the longer the line, the less of it is worth seeing.
+ * The perpendicular distance is the same quantity the approach is about, so at two a boat
+ * within about sixty degrees of square to the line keeps its crossing point in the frame and
+ * anything shallower gives it up, at every scale and on every line.
+ *
+ * The ring and the dashes are always drawn where the cut really is — capping what is DRAWN
+ * would move the warning, which is the one thing on this screen that must not be moved.
  */
-export const COG_FIT_CAP = 2;
+export const COG_FIT_PERP = 2;
 
 /**
  * The next-leg arrow, in pixels, and where it sits relative to the triangle.
@@ -325,16 +341,35 @@ export const ARROW = { shaft: 38, head: 11, width: 3.6, offset: 0.6 };
 const BOAT_M = 10;
 const LINE_M = 3;
 const BOAT_PX = { min: 13, max: 90 };
-const PER_BOAT = LINE_M / BOAT_M;
 
-export const REAL = {
-  boatM: BOAT_M,
-  lineM: LINE_M,
-  boatPx: BOAT_PX,
-  // Derived, never asserted — see above. `atScale` then yields `lineM * k` and `boatM * k` for
-  // one and the same clamped `k`, with no second number to keep in agreement.
-  linePx: { min: BOAT_PX.min * PER_BOAT, max: BOAT_PX.max * PER_BOAT },
+/**
+ * The real sizes for a boat of a given length.
+ *
+ * <b>Ten metres is the fallback, not the assumption it used to be</b>: the join screen asks
+ * each boat for its length, because a plot drawn to scale is a plot that has to know the scale
+ * of the thing in it, and a thirty-foot keel boat and a dinghy are not the same picture. A boat
+ * that says nothing gets ten, which is what every boat got before there was a field to say it
+ * in.
+ *
+ * The line stays THREE metres for every boat, because that width is not a boat's anything — it
+ * is the accuracy band, which belongs to the sky and to `crossing.js`. What is derived per boat
+ * is the pixel clamp: one clamp, applied to the boat, with the line's bounds following it by
+ * the ratio of their lengths, so the pair can never be drawn out of proportion. Asserting the
+ * two independently is what once froze the boat on its floor while the line went on scaling.
+ */
+export const realFor = (boatM) => {
+  const metres = Number(boatM) > 0 ? Number(boatM) : BOAT_M;
+  const perBoat = LINE_M / metres;
+  return {
+    boatM: metres,
+    lineM: LINE_M,
+    boatPx: BOAT_PX,
+    linePx: { min: BOAT_PX.min * perBoat, max: BOAT_PX.max * perBoat },
+  };
 };
+
+/** The default sizes, for a boat that has not said how long it is. */
+export const REAL = realFor(BOAT_M);
 
 /**
  * The crossing triangle is sized against the LINE, not against the plot.
@@ -656,6 +691,13 @@ export function plot(state, options = {}) {
   const orientation = options.orientation ?? 'north';
   const prepared = state.watched.prepared;
   const boat = state.point;
+  // THE BOAT'S OWN LENGTH decides both how big it is drawn and how close the view may zoom.
+  // Off the join screen, through `RaceClient`; ten metres for a boat that did not say. The
+  // number of lengths to hold across the view is the server's (`display.boatLengthsAcross`),
+  // read when the boat joined and defaulted here, because this screen draws whether or not the
+  // server was ever reached.
+  const real = realFor(state.boatM ?? options.boatM);
+  const closest = minSpanM(real.boatM, options.boatLengthsAcross);
 
   // The foot of the perpendicular: the part of the line the boat is actually closing on.
   const alongUnit = { x: prepared.d.x / prepared.length, y: prepared.d.y / prepared.length };
@@ -669,43 +711,23 @@ export function plot(state, options = {}) {
     y: prepared.port.y + alongUnit.y * distance,
   });
 
-  // WHAT MUST STAY IN VIEW. The boat, the point on the line it is about to cross, THE LINE'S
-  // OWN MIDPOINT, the triangle that says which way through, the arrow saying where the next leg
-  // goes, and the last few fixes behind the boat — enough to see that it is under way and which
-  // way it has come. Everything else was keeping the plot wide for no benefit: the line's ENDS,
-  // which on a quarter-mile start line are a long way from anything that matters, and the rest
-  // of the trail, which is history and can fall off the back.
+  // WHAT MUST STAY IN VIEW, and it is a SHORT list: the boat, the point on the line it is
+  // about to cross, the last few fixes behind it, and the crossing point where its present
+  // course cuts the line — that last one only when the boat is actually pointing at the line.
+  // The triangle and the arrow come in below, because they are pixel sizes and cannot be
+  // fitted until the scale is known.
+  //
+  // <b>THE LINE'S OWN GEOMETRY IS NOT IN IT ANY MORE, and that is the lesson of a real boat on
+  // real water.</b> The midpoint and the nearer end used to be held in view, on the reasoning
+  // that a picture of a line must say how much line there is and where the mark is. On a club
+  // start line it cost little. On the long lines this system is actually raced round it cost
+  // everything: the picture is pinned to a mark and an end that may be two hundred metres away
+  // from where the boat will cross, so the last few metres — the whole reason the approach
+  // screen exists — are drawn a few pixels wide. The questions those two answered are answered
+  // elsewhere and better: DTW counts down to the mark on the screen above, and the overview
+  // draws the line whole.
   const seatAlong = Math.max(0, Math.min(prepared.length, offset));
   const seat = at(seatAlong);
-  // THE MIDPOINT IS WHAT BOUNDS THE ZOOM, and without it the plot closed in too far.
-  //
-  // The seat is the nearest point of the line to the boat, so as a boat closes, the boat and
-  // the seat converge — and a fit built on those two alone zooms in without limit, on a patch
-  // of water that no longer contains the mark. It is invisible in the straight-on case, where
-  // the seat IS the midpoint, and plain the moment a boat comes in off-centre: at the pin end
-  // of a long line the picture closed around the boat and left the mark the whole leg is
-  // measured to outside the frame.
-  //
-  // The midpoint because the midpoint is the mark: it is what the leg length is measured to,
-  // what DTW counts down to, and on an infinite end it is the handle somebody deliberately
-  // placed where the fleet crosses.
-  const mid = at(prepared.length / 2);
-  // AND ONE END OR THE OTHER, whichever is nearer.
-  //
-  // The midpoint alone says where the mark is and nothing about how much line there is. A plot
-  // showing a stroke running off both edges of the picture could be a fifty-metre line or a
-  // quarter-mile one, and the question a boat on an approach is actually asking — can I fetch
-  // the end I am heading for, or am I running out of line — cannot be read off it at all. One
-  // end in view gives the scale of the thing and, with the midpoint, which half the boat is on.
-  //
-  // The NEARER end, because "one or the other" is satisfied either way and the nearer one costs
-  // the least zoom — and is the one worth seeing, since it is the end a boat near that part of
-  // the line is at risk of running past. When the boat is already beyond an end this asks for
-  // nothing new: the seat is clamped to the extent, so it is that same end.
-  const ends = [at(0), at(prepared.length)];
-  const nearerEnd = ends[0] === ends[1] ? ends[0]
-    : (Math.hypot(ends[0].x - boat.x, ends[0].y - boat.y)
-      <= Math.hypot(ends[1].x - boat.x, ends[1].y - boat.y) ? ends[0] : ends[1]);
   const alongCog = (distance) => {
     const radians = ((90 - state.cogDeg) * Math.PI) / 180;
     return {
@@ -714,28 +736,33 @@ export function plot(state, options = {}) {
     };
   };
   const cut = state.projection ? alongCog(state.projection.distanceM) : null;
-  // THE CUT IS CAPPED FOR THE PURPOSE OF THE VIEW, and drawn where it really falls.
-  //
-  // A boat sailing nearly parallel to a line cuts it thousands of metres away, and at exactly
-  // parallel it never cuts it at all — so a fit that honoured the cut's position would zoom
-  // out until the boat was a dot and the line a hair, for a crossing point nobody is steering
-  // at. What the picture needs from the projection at that angle is its DIRECTION, and a point
-  // a bounded distance along the COG carries that just as well.
-  //
-  // Twice the line's own length, measured between its defined points, because that is the
-  // scale on which a line is approached: within it the cut is a real target and belongs in the
-  // frame, beyond it the number is what says how far off the boat is pointing and the ring can
-  // fall outside the picture. The cap is in the HOLD list as well as the fit, or a far cut
-  // would trip "leaving the view" on every frame and the plot would never hold still.
-  const cutForView = state.projection
-    ? alongCog(Math.min(state.projection.distanceM, COG_FIT_CAP * prepared.length))
-    : null;
+  /*
+   * THE CUT IS IN THE FIT ONLY WHILE THE BOAT IS POINTING AT THE LINE, and "pointing at it" is
+   * measured against the boat's own distance off rather than against the line's length.
+   *
+   * A boat sailing nearly parallel cuts the line a very long way away, and at exactly parallel
+   * never at all — so a frame that honoured the cut's position zoomed out until the boat was a
+   * dot, for a crossing point nobody is steering at. Sailing at it, the cut is barely further
+   * than the perpendicular distance and costs the picture nothing.
+   *
+   * `COG_FIT_PERP` is the multiple of the perpendicular distance inside which the cut is worth
+   * holding. At two, a boat within sixty degrees of square to the line keeps its crossing point
+   * in the frame, and anything shallower gives it up — which is the same boat, the same
+   * distance off, deciding the same way at every scale, where a cap in LINE lengths gave a
+   * quarter-mile start line a fit ten times looser than a gate's.
+   *
+   * What is DRAWN is never conditional: the ring and the dashes stay where the cut really
+   * falls, and the figure reads the true distance, because moving the warning is the one thing
+   * this screen must not do. A cut outside the picture has its figure clipped into it instead.
+   */
+  const cutInFit = cut && state.projection
+    && state.projection.distanceM <= COG_FIT_PERP * Math.max(Math.abs(state.perpDistM ?? 0), 1)
+    ? cut : null;
   // THREE dots, not the whole trail. At 5 Hz two minutes of track reaches back a quarter of
   // a mile, and fitting all of it is what kept the plot wide; three is the fewest that still
   // shows a direction rather than a pair of points.
   const recent = (state.trail ?? state.fixes ?? []).slice(-TRAIL_IN_VIEW);
-  const interesting = [boat, seat, mid, nearerEnd,
-    ...(cutForView ? [cutForView] : []), ...recent];
+  const interesting = [boat, seat, ...(cutInFit ? [cutInFit] : []), ...recent];
 
   const view = options.view ?? new PlotView();
   // The bearing WANTED is derived from the course; the bearing SHOWN chases it, so a boat
@@ -813,13 +840,13 @@ export function plot(state, options = {}) {
   };
 
   /** The triangle's height at a given scale, which is what the line's width decides. */
-  const triangleHeightAt = (px) => triangleFor(atScale(REAL.lineM, px, REAL.linePx)).height;
+  const triangleHeightAt = (px) => triangleFor(atScale(real.lineM, px, real.linePx)).height;
 
   const fit = (points) => {
     const xs = points.map((p) => p.x);
     const ys = points.map((p) => p.y);
-    const spanX = Math.max(MIN_SPAN_M, Math.max(...xs) - Math.min(...xs));
-    const spanY = Math.max(MIN_SPAN_M, Math.max(...ys) - Math.min(...ys));
+    const spanX = Math.max(closest, Math.max(...xs) - Math.min(...xs));
+    const spanY = Math.max(closest, Math.max(...ys) - Math.min(...ys));
     return {
       scale: Math.min((width * FIT_FRACTION) / spanX, (height * FIT_FRACTION) / spanY),
       centre: {
@@ -878,13 +905,15 @@ export function plot(state, options = {}) {
   // crosses.
   const others = (state.alternatives ?? []).map((other) => ({
     other,
-    art: crossingArt(other.prepared, other.required, { to, scale, boat, focused: false, reach }),
+    art: crossingArt(other.prepared, other.required,
+      { to, scale, boat, focused: false, reach, real }),
   }));
   for (const { art } of others) out += art.out;
 
   // THE LINE BEING CROSSED, at its real width, with its ends said honestly: a finite end is a
   // dot that can be overrun, an infinite end runs on because it cannot be.
   const art = crossingArt(prepared, state.watched.required, {
+    real,
     to, scale, boat, focused: true, missed: state.state === 'missed', reach,
   });
   out += art.out;
@@ -1032,7 +1061,7 @@ export function plot(state, options = {}) {
   // that at North up it points at its true bearing and at Leg up it points straight up
   // while the boat is on the leg.
   out += boatArt(boatPx.x, boatPx.y, state.cogDeg - up,
-    atScale(REAL.boatM, scale, REAL.boatPx));
+    atScale(real.boatM, scale, real.boatPx));
 
   out += northPointer(up, width);
 
@@ -1073,7 +1102,10 @@ export function crossingArt(prepared, required, options) {
   const starboard = to(at(prepared.length));
   const span = Math.hypot(starboard.x - port.x, starboard.y - port.y) || 1;
   const screenUnit = { x: (starboard.x - port.x) / span, y: (starboard.y - port.y) / span };
-  const lineW = atScale(REAL.lineM, scale, REAL.linePx);
+  // The joining boat's own sizes, so the line's drawn width keeps its proportion to a hull
+  // that is no longer assumed to be ten metres. See `realFor`.
+  const real = options.real ?? REAL;
+  const lineW = atScale(real.lineM, scale, real.linePx);
   const fade = focused ? 0.9 : 0.3;
 
   // BUTT ENDS, not round. A round cap extends a stroke by half its width past the point it was

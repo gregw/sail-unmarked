@@ -219,6 +219,11 @@ ok('...and the accuracy is floored at the system\'s own metre, as the simulator 
 
 $('j_sail').value = 'AUS 9';
 H('j_sail:input')({ target: { value: 'AUS 9' } });
+// HOW LONG THE BOAT IS. Asked for because the approach plot draws the hull to scale and zooms
+// no closer than a few of these — ten metres drawn under a five-metre dinghy is a picture that
+// lies about the one thing that screen is for, which is how much room there is.
+$('j_length').value = '12.5';
+H('j_length:input')({ target: { value: '12.5' } });
 const pick = (field, value) => { H(`j_${field}:change`)({ target: { value } }); };
 pick('club', programme.club);
 pick('series', programme.series);
@@ -276,6 +281,17 @@ ok('answering LEAVE goes back past the sentinel, which is where the gesture mean
 // Re-armed by hand, because the page is still on the course: the assertion above disarmed the
 // guard without the device having left, and what follows is about leaving properly.
 mod.__boat.leaving.arm(true);
+
+ok('the boat\'s declared length reaches the thing that draws it',
+  mod.__boat.device.client.boatLengthM === 12.5);
+ok('...and is kept for next time, being a fact about the boat rather than about today',
+  JSON.parse(globalThis.sessionStorage.getItem('unmarked.join') ?? '{}').lengthM === '12.5');
+ok('...and goes on the record, which is the only artefact that leaves this system',
+  mod.__boat.device.client.record().lengthM === 12.5);
+// The club's setting for how close the plot may zoom comes off `/api/config`, read with the
+// course list rather than on the sailing path: this screen draws whether or not it arrived.
+ok('...while how CLOSE it may zoom is the club\'s, read once when the boat joined',
+  mod.__boat.device.display.boatLengthsAcross === 3);
 
 /* ---------------------------------------------------- sailing, on derived numbers */
 

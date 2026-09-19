@@ -24,7 +24,8 @@ import org.slf4j.LoggerFactory;
  */
 public record UnmarkedConfig(
     @JsonProperty("site") Site site,
-    @JsonProperty("server") Server server)
+    @JsonProperty("server") Server server,
+    @JsonProperty("display") Display display)
 {
     private static final Logger LOG = LoggerFactory.getLogger(UnmarkedConfig.class);
 
@@ -38,6 +39,8 @@ public record UnmarkedConfig(
             site = new Site(null, null);
         if (server == null)
             server = new Server(0, false, null, null);
+        if (display == null)
+            display = new Display(null);
     }
 
     public static UnmarkedConfig load(Path configFile) throws IOException
@@ -57,6 +60,32 @@ public record UnmarkedConfig(
         {
             if (name == null || name.isBlank())
                 name = "Unmarked Racing";
+        }
+    }
+
+    /**
+     * HOW CLOSE THE APPROACH PLOT MAY EVER ZOOM, and the only thing in this file that is about
+     * a screen rather than about this process.
+     *
+     * <p>It is here rather than in a programme file because it is a property of the fleet's
+     * PHONES, not of the club's water: the same course sailed by the same boats wants the same
+     * closest view whichever series it is raced in. It is served by {@code GET /api/config},
+     * read once when a boat joins, and defaulted on the client — the Mark screen is
+     * offline-first, so a boat that never reached this server still draws to a sane scale.
+     *
+     * <p>{@code boatLengthsAcross} is the closest view measured in the joining boat's OWN
+     * length, which is why the join screen asks for one: three boat lengths of a ten-metre keel
+     * boat and three of a five-metre dinghy are different amounts of water, and the useful
+     * quantity at a start line is how much room there is in boats. Below one the boat would not
+     * fit in its own picture, so that is the floor.
+     */
+    public record Display(
+        @JsonProperty("boatLengthsAcross") Double boatLengthsAcross)
+    {
+        public Display
+        {
+            if (boatLengthsAcross == null || boatLengthsAcross < 1)
+                boatLengthsAcross = 3.0;
         }
     }
 

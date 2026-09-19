@@ -75,6 +75,11 @@ export function recall() {
       sail: typeof held.sail === 'string' ? held.sail : '',
       name: typeof held.name === 'string' ? held.name : '',
       club: typeof held.club === 'string' ? held.club : null,
+      // A LENGTH IS A FACT ABOUT THE BOAT, like its sail number, and does not change between
+      // races — so it is remembered with them rather than asked again every afternoon. The TCF
+      // is not: a handicap is a decision somebody may revise, and one carried forward silently
+      // would be scored against.
+      ...(typeof held.lengthM === 'string' && held.lengthM ? { lengthM: held.lengthM } : {}),
     };
   } catch {
     return {};
@@ -84,7 +89,7 @@ export function recall() {
 export function remember(boat) {
   try {
     sessionStorage.setItem(REMEMBERED, JSON.stringify({
-      sail: boat.sail, name: boat.name, club: boat.club ?? null,
+      sail: boat.sail, name: boat.name, club: boat.club ?? null, lengthM: boat.lengthM,
     }));
   } catch {
     // Nothing to be done and nothing worth saying: the page works, it just forgets.
@@ -111,7 +116,13 @@ export class Device {
     this.snapshot = null;
     this.courses = [];
     this.message = null;
-    this.boat = { sail: '', name: '', tcf: '1.000', mode: 'ANONYMOUS', ...recall() };
+    this.boat = { sail: '', name: '', tcf: '1.000', lengthM: '10', mode: 'ANONYMOUS', ...recall() };
+    /*
+     * HOW CLOSE THE APPROACH PLOT MAY ZOOM, in this boat's lengths — the server's setting, read
+     * once with the course list. Defaulted here and never awaited on the sailing path: the Mark
+     * screen is offline-first, so a boat whose config fetch failed draws to the built-in three.
+     */
+    this.display = {};
 
     // How the sailor reads a chart, and what is drawn behind it. `none` to start, which
     // fetches nothing: a screen whose whole claim is that it works with the server switched
@@ -163,6 +174,18 @@ export class Device {
         .filter((course) => course.published.length > 0);
     } catch (error) {
       this.message = `Could not read the public courses: ${error.message}`;
+    }
+    /*
+     * AND HOW THIS FLEET'S SCREENS ARE TO BE DRAWN, which is one number and a forgiving one.
+     * A failure here is not worth a message: the setting has a default, the screens work
+     * without it, and a boat that could not reach the server has a larger problem already
+     * being reported above.
+     */
+    try {
+      const config = await (await fetch('/api/config')).json();
+      this.display = config?.display ?? {};
+    } catch {
+      this.display = {};
     }
     await this.loadRaces();
     return this.courses;
@@ -245,6 +268,9 @@ export class Device {
     const mark = wanted === 'mark' ? this.client.markState(now) : null;
     const shared = {
       orientation: this.orientation, viewMode: this.client.viewMode, ...PLOT, now,
+      // The club's closest zoom, in this boat's lengths. Passed on every render rather than
+      // held by the plot, so a setting read after a join still reaches the next frame.
+      boatLengthsAcross: this.display?.boatLengthsAcross,
       // A screen with nothing behind it is not offered: Chat and Place are absent from the
       // selector unless there is a race to have a channel (§8.2).
       channel: this.dialog.live, unread: this.dialog.unread,
@@ -698,12 +724,25 @@ export class Device {
             { value: 'RACE', label: 'Race — goes to the club, which scores it' },
             { value: 'RECORD', label: 'Record attempt — stands against every other' },
           ], this.boat.mode)}</select>
-          <label for="j_tcf">TCF</label>
-          <input id="j_tcf" value="${esc(this.boat.tcf)}">
+          <div class="pair">
+            <div><label for="j_tcf">TCF</label>
+              <input id="j_tcf" value="${esc(this.boat.tcf)}"></div>
+            <!--
+              THE LENGTH IS ASKED FOR BECAUSE THE APPROACH PLOT DRAWS TO SCALE. The hull is
+              drawn at its real size — that is how the picture says how close the line is
+              without a number — and the closest the plot will ever zoom is measured in this
+              boat's own lengths, since how much room there is at a start line is a question
+              answered in boats rather than in metres. Ten metres until somebody says
+              otherwise, which is what every boat was drawn as before there was a field.
+            -->
+            <div><label for="j_length">Length (m)</label>
+              <input id="j_length" value="${esc(this.boat.lengthM)}" inputmode="decimal"></div>
+          </div>
           <p class="muted" style="font-size:11px; margin-top:4px">
             The handicap is carried, not applied. Turning a TCF into a distance is
             <span class="mono">CLAUDE.md</span> open question 5 and is not answered yet, so no
-            sub-line is being computed for you.</p>
+            sub-line is being computed for you. The length is drawn and zoomed to, and goes on
+            the record.</p>
 
           <!--
             The button SAYS WHAT IS MISSING rather than sitting greyed out with no explanation.
@@ -737,6 +776,7 @@ export class Device {
     keep('j_sail', 'sail', true);
     keep('j_name', 'name', true);
     keep('j_tcf', 'tcf');
+    keep('j_length', 'lengthM', true);
     keep('j_mode', 'mode');
 
     // The drill resets everything BELOW the level that changed. Keeping a course id chosen
@@ -793,6 +833,7 @@ export class Device {
     const request = {
       sailNo: this.boat.sail, name: this.boat.name, club, series, course, variant,
       tcf: Number(this.boat.tcf) > 0 ? Number(this.boat.tcf) : null,
+      lengthM: Number(this.boat.lengthM) > 0 ? Number(this.boat.lengthM) : null,
       // NAMED where the sailor named them, absent where they did not. The server still finds a
       // race from the course and the day for a client that says nothing — which is what an
       // older client does, and §5 rule 1 is why that goes on working.

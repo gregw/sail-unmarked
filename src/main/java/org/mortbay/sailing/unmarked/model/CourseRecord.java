@@ -48,6 +48,15 @@ public record CourseRecord(
     @JsonProperty("sailNumber") String sailNumber,
     /** Declared by the boat when it joined, if it declared one. Applied by nobody here. */
     @JsonProperty("tcf") Double tcf,
+    /**
+     * How long the boat is, in metres, as it declared when it joined.
+     *
+     * <p>Asked for because the boat's own screen needs it — the approach plot draws the hull
+     * to scale and zooms no closer than a few of these — and kept here because it is the first
+     * thing a handicapper or a protest asks about a boat, and this is the only artefact that
+     * leaves the system. Trusted like everything else a boat says about itself (§1.1).
+     */
+    @JsonProperty("lengthM") Double lengthM,
     @JsonProperty("startTime") Instant startTime,
     @JsonProperty("finishTime") Instant finishTime,
     @JsonProperty("submittedAt") Instant submittedAt,

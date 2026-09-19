@@ -2,11 +2,23 @@
 #
 # Small on purpose. Everything about the racing — points, lines, courses, and the
 # detection tuning — lives in the club/series programme files under clubs/, because
-# that is what a club owns and what changes. What is left here is the listener.
+# that is what a club owns and what changes. What is left here is the listener, and the one
+# thing about a BOAT'S screen that is a property of the fleet rather than of the water.
 
 site:
   name: "Unmarked Racing"
   contact: "unmarked@mortbay.org"
+
+# How the BOATS draw, as opposed to how this server runs. One setting so far.
+display:
+  # THE CLOSEST THE APPROACH PLOT WILL EVER ZOOM, in the joining boat's own lengths of line
+  # across the view. The join screen asks each boat for its length, because three lengths of a
+  # ten-metre keel boat and three of a five-metre dinghy are different amounts of water — and
+  # what a sailor wants to know at a start line is how much room there is in BOATS.
+  #
+  # Raise it to keep more line in view on a long start line, lower it to close in harder on the
+  # last few metres. Below one the boat would not fit in its own picture, so one is the floor.
+  boatLengthsAcross: 3
 
 server:
   # 8081 is sailing-pf, 8082 is sail-jinx, 8888 is the sailing-pf admin connector.

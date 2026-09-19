@@ -41,7 +41,11 @@ import {
   boxesClash,
   clipToView,
   labelBox,
-  COG_FIT_CAP,
+  COG_FIT_PERP,
+  BOAT_LENGTHS_ACROSS,
+  FLOOR_SPAN_M,
+  minSpanM,
+  realFor,
   turnBetween,
   LINE_LABEL_PX,
   OTHER_SIDE,
@@ -634,16 +638,18 @@ export function run(check) {
     chartBar({ view: wayOut }).includes('class="on"')
     && !chartBar({ view: wayOut }).includes('disabled'));
 
-  /* ------------------------- the line's own midpoint never leaves the view */
+  /* ------------------------- how close the approach gets, and what bounds it */
 
-  // THE MIDPOINT IS WHAT BOUNDS THE ZOOM. The seat is the nearest point of the line to the
-  // boat, so boat and seat converge as a boat closes and a fit built on those two alone zooms
-  // in without limit — on a patch of water that no longer holds the mark. Invisible sailing
-  // straight at the middle, where the seat IS the midpoint; plain the moment a boat comes in
-  // off-centre. Measured on a 300 m line approached at the pin end, the midpoint left the plot
-  // a hundred metres out and was 419 px off a 400 px picture by twenty.
-  const approach = (eastM, orientation = 'north') => {
-    const flown = new RaceClient(snapshot);
+  /*
+   * WHAT THE PLOT HOLDS IS THE BOAT, THE PART OF THE LINE IT WILL CROSS, AND ITS TRAIL — and
+   * that is the whole list. It used to hold the line's midpoint and its nearer end as well, on
+   * the reasoning that a picture of a line should say how much line there is. Tested on the
+   * water, that reasoning loses: on a long line the mark and the end may be hundreds of metres
+   * from where the boat is crossing, so the picture is pinned wide open and the last few
+   * metres — the whole reason this screen exists — are drawn a few pixels across.
+   */
+  const approach = (eastM, orientation = 'north', options = {}) => {
+    const flown = new RaceClient(snapshot, options.client);
     let when = 0;
     const view = new PlotView();          // held across the approach, as the real client does
     const seen = [];
@@ -653,7 +659,7 @@ export function run(check) {
         accuracyM: 3, satellites: 12, sogKn: 9, cogDeg: 0 });
       const shown = flown.markState(when);
       if (!shown || flown.finished) continue;
-      plot(shown, { orientation, view, width: W, height: Hgt });
+      plot(shown, { orientation, view, width: W, height: Hgt, ...(options.plot ?? {}) });
       const line = shown.watched.prepared;
       const px = projector(view.centre, view.up, view.scale, W, Hgt)({
         x: (line.port.x + line.starboard.x) / 2,
@@ -665,37 +671,63 @@ export function run(check) {
   };
 
   // The line runs 150 m either side of the fixture's origin, so east 140 is all but on the pin.
-  for (const [label, eastM] of [['straight at the middle', 0], ['in at the pin end', 140]]) {
-    for (const orientation of ['north', 'leg', 'perp']) {
-      const frames = approach(eastM, orientation);
-      check(`coming ${label}, ${orientation}: the LINE'S MIDPOINT is in the picture at every `
-        + `range — it is the mark the leg is measured to, and the zoom must not lose it`,
-        frames.length > 70 && frames.every(({ px }) => inView(px.x, px.y)));
-    }
-  }
-
-  // And the close-in behaviour is untouched where it was already right: straight at the middle
-  // the seat and the midpoint are the same point, so the plot goes on closing in exactly as
-  // before. It is only the off-centre approach that is held back, and only as far as the mark.
   const middle = approach(0);
   const pin = approach(140);
-  check('...and the view still closes in on a centred approach, which is what an approach '
-    + 'screen is for', middle[middle.length - 1].across < middle[0].across / 4);
-  // WITH AN END HELD IN VIEW AS WELL, the two approaches now frame IDENTICALLY: whichever part
-  // of the line a boat comes in at, the picture holds the same three things — the mark, the
-  // nearer end and the boat — so the frame no longer depends on where along the line you are.
-  // Before the end was in the fit, the centred approach closed to 75 m of water and the pin-end
-  // one stopped at 165 m; they are both 177 m now on this 300 m line.
-  check('...and comes in at the same scale wherever along the line the boat is, since the '
-    + 'picture holds the same things either way',
-    Math.abs(pin[pin.length - 1].across - middle[middle.length - 1].across) < 2);
+  const closest = minSpanM(REAL.boatM, BOAT_LENGTHS_ACROSS);
+  // MEASURED, on this 300 m line, at ten metres out: 56 m of visible water either way, down
+  // from 177 m when the midpoint and an end were held — and 800 m at the start of the approach,
+  // so the picture closes by fourteen times over one approach instead of four.
+  for (const [label, frames] of [['straight at the middle', middle], ['in at the pin end', pin]]) {
+    check(`coming ${label}, the plot closes right in — the last metres are what the screen `
+      + 'is for, and no part of the line that is not being crossed may hold it open',
+      frames[frames.length - 1].across < 60);
+  }
+  check('...and identically, since the picture no longer depends on where along the line the '
+    + 'boat comes in', Math.abs(pin[pin.length - 1].across - middle[middle.length - 1].across) < 1);
+  check('...having closed in by better than ten times over the approach',
+    middle[middle.length - 1].across < middle[0].across / 10);
+  for (const orientation of ['leg', 'perp']) {
+    check(`...in ${orientation} up as well, since the fit is done in rotated space`,
+      approach(140, orientation).pop().across < 60);
+  }
 
-  /* ------------------ the COG cut is capped for the view and drawn where it really is */
+  /*
+   * THE MAXIMUM ZOOM, WHICH IS MEASURED IN BOAT LENGTHS.
+   *
+   * Without a floor the fit would close in without limit as the boat and the seat converge, on
+   * a patch of water with nothing in it but a hull. The floor is the boat's OWN length times
+   * the club's setting, because how much room there is at a start line is a question answered
+   * in boats rather than in metres — three lengths of a ten-metre keel boat and three of a
+   * five-metre dinghy are different amounts of water, and both are "three boat lengths".
+   */
+  check('the plot never zooms closer than the configured boat lengths of line',
+    middle.every(({ across }) => across >= closest - 0.5));
+  // A twenty-metre boat asks for sixty metres of line where a ten-metre one asks for thirty,
+  // and it is the longer boat's floor that then decides the closest view: 86 m against 56 m.
+  check('...and a LONGER boat is given proportionally more water, since it is its own yardstick',
+    approach(0, 'north', { client: { boat: { lengthM: 20 } } }).pop().across
+      > middle[middle.length - 1].across + 20);
+  // And the club can ask for more of them, which is what `display.boatLengthsAcross` carries:
+  // eight lengths holds 121 m of water open on the same approach.
+  check('...while the club can say how many lengths, which is what config.yaml carries',
+    approach(0, 'north', { plot: { boatLengthsAcross: 8 } }).pop().across
+      > middle[middle.length - 1].across + 20);
+  check('...with a floor under all of it, because a plot cannot draw detail the system does '
+    + 'not resolve', minSpanM(1, 1) === FLOOR_SPAN_M && minSpanM(10, 3) === 30);
+  // A boat that says nothing is the ten metres every boat was drawn as before there was a
+  // field to say it in — and the line stays three metres for everybody, because that width is
+  // the accuracy band and belongs to the sky rather than to the boat.
+  check('...and a boat that declares no length is the ten metres it always was',
+    realFor(null).boatM === REAL.boatM && realFor(0).boatM === 10 && realFor(6).lineM === REAL.lineM);
+  check('...with the line\'s pixel bounds derived from the boat\'s, so no length can put the '
+    + 'pair out of proportion',
+    Math.abs(realFor(20).linePx.min / realFor(20).boatPx.min - 3 / 20) < 1e-9);
+
+  /* ------------------ the COG cut is in the fit only while the boat points at the line */
 
   // A boat sailing nearly parallel to a line cuts it a very long way away, and at exactly
-  // parallel never at all. The cut is one of the things the frame is fitted around, so
-  // honouring its position at that angle zoomed the plot out until the boat was a dot: at 88°
-  // off the line the visible water was three kilometres across.
+  // parallel never at all. Honouring the cut's position there zoomed the plot out until the
+  // boat was a dot, for a crossing point nobody is steering at.
   const shallow = (cogDeg) => {
     const flown = new RaceClient(snapshot);
     let when = 0;
@@ -714,13 +746,27 @@ export function run(check) {
   const parallel = shallow(88);
   check('a boat sailing nearly parallel to a line cuts it thousands of metres away',
     parallel.shown.projection.distanceM > 3000);
-  // The line is 300 m between its defined points, so the cap is 600 m and the view has to
-  // hold that plus the boat, the seat and the decoration — comfortably under a kilometre, and
-  // nothing like the three it was.
-  check('...and the view is capped rather than zooming out to hold it',
-    parallel.acrossM < 1000 && headOn.acrossM < parallel.acrossM);
-  check('...the cap being twice the line\'s own length, which is the scale a line is '
-    + 'approached on', parallel.acrossM > COG_FIT_CAP * 300 * 0.5);
+  // MEASURED AGAINST THE BOAT'S OWN DISTANCE OFF, not against the line's length: the two agree
+  // on a club start line and part company on a long one, where a cap in line lengths gives the
+  // loosest frame to exactly the line that needs the tightest. Given up entirely rather than
+  // capped, so a three-kilometre cut costs the picture nothing at all.
+  check('...and gives it up rather than zooming out to hold it — the same picture as a boat '
+    + 'sailing straight at the line', Math.abs(parallel.acrossM - headOn.acrossM) < 1);
+  check('...the test being the perpendicular distance, which is what the approach is about',
+    parallel.shown.projection.distanceM
+      > COG_FIT_PERP * Math.abs(parallel.shown.perpDistM));
+  // And the boundary is where the rule says it is rather than somewhere near it. At 106 m off
+  // this line, a boat on 60° cuts it at 212 m — exactly twice the perpendicular, so the cut is
+  // held and the view opens to 235 m. Five degrees further off it is given up and the view is
+  // back to 218 m, which is the boat, the seat and the trail alone.
+  const stillHeld = shallow(60);
+  const givenUp = shallow(65);
+  check('...while a boat still pointing at the line keeps its crossing point in the frame',
+    stillHeld.shown.projection.distanceM <= COG_FIT_PERP * Math.abs(stillHeld.shown.perpDistM)
+    && stillHeld.acrossM > givenUp.acrossM + 10);
+  check('...and the frame is the tighter one the moment it stops pointing at it',
+    givenUp.shown.projection.distanceM > COG_FIT_PERP * Math.abs(givenUp.shown.perpDistM)
+    && Math.abs(givenUp.acrossM - parallel.acrossM) < 1);
   // Capping what is DRAWN would move the warning, which is the one thing on this screen that
   // must not be moved: the figure reads the real distance and the ring falls where it falls.
   check('...while the figure on the dashes still reads the true distance',
