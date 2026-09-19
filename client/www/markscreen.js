@@ -1023,7 +1023,22 @@ export function plot(state, options = {}) {
     // when the two would collide the perpendicular keeps its figure and this one does without,
     // which loses nothing: the dashes and the ring still say where the present course cuts.
     if (!boxesClash(perp.box, figure.box)) out += figure.svg;
-    out += `<circle cx="${hit.x.toFixed(1)}" cy="${hit.y.toFixed(1)}" r="6.5" fill="none" stroke="${colour}" stroke-width="2"/>`;
+    /*
+     * A RING WHERE THE PRESENT COURSE CUTS THE LINE — AND A RED CROSS WHERE IT DOES NOT.
+     *
+     * A ring says *here*: it is a place on the line the boat is heading for. Past the end
+     * there is no such place, and the present course scores nothing however well it is
+     * sailed — so the mark changes SHAPE and not merely colour, which is the same rule the
+     * rejected fixes follow. A red ring said the boat was heading somewhere and ought to
+     * hurry; a red cross says the one thing that is true, which is that this course crosses
+     * nothing. That warning is what the one-metre hard edge at a finite end obliges this
+     * screen to give, and it has to carry at a glance from a tiller.
+     */
+    out += state.projection.warning === 'beyond-end'
+      ? `<g stroke="var(--warn)" stroke-width="2.6" stroke-linecap="round">`
+        + `<line x1="${(hit.x - 7).toFixed(1)}" y1="${(hit.y - 7).toFixed(1)}" x2="${(hit.x + 7).toFixed(1)}" y2="${(hit.y + 7).toFixed(1)}"/>`
+        + `<line x1="${(hit.x + 7).toFixed(1)}" y1="${(hit.y - 7).toFixed(1)}" x2="${(hit.x - 7).toFixed(1)}" y2="${(hit.y + 7).toFixed(1)}"/></g>`
+      : `<circle cx="${hit.x.toFixed(1)}" cy="${hit.y.toFixed(1)}" r="6.5" fill="none" stroke="${colour}" stroke-width="2"/>`;
   }
 
   // THE FIXES, coloured by the side they were resolved to and hollow past an end. The
@@ -1140,7 +1155,6 @@ export function crossingArt(prepared, required, options) {
     }
   }
 
-  const seat = to(at(Math.max(0, Math.min(prepared.length, offset))));
   const n = forwardNormal(screenUnit.x, screenUnit.y);
   const sign = required === 'reverse' ? -1 : 1;
   const crossNormal = { x: n.x * sign, y: n.y * sign };
@@ -1148,6 +1162,32 @@ export function crossingArt(prepared, required, options) {
   // `coursedraw.triangle` — that one is deliberately a fixed size, which is right on a chart
   // and wrong on a line drawn at its real width.
   const size = triangleFor(lineW);
+
+  /*
+   * THE TRIANGLE'S BASE MAY NEVER HANG PAST A FINITE END, and that is not a tidiness rule.
+   *
+   * Its base lies ALONG the line, so a triangle seated at the last metre of one puts half its
+   * width out beyond the end — and what that draws is a line that goes on a little further
+   * than it does. On this screen that is the one lie the drawing must not tell: the extent
+   * test says a crossing past the end is a miss, and a boat deciding whether it can fetch the
+   * pin is reading the picture to find out where the pin IS. The butt line cap is here for the
+   * same reason, and would be undone by a triangle overhanging it.
+   *
+   * Clamped in pixels, against the ends as drawn, so it holds at every scale. Only at FINITE
+   * ends: an infinite end is a bearing rather than a place, drawn running out of the picture,
+   * so there is nothing there to overhang. A line drawn shorter than the triangle is wide —
+   * a gate side seen from a long way off — has no answer that keeps the base on it, so the
+   * triangle is centred, which is the least wrong and stays symmetrical about the mark.
+   */
+  const perMetre = span / prepared.length;
+  const lo = prepared.portInfinite ? -Infinity : size.half;
+  const hi = prepared.starboardInfinite ? Infinity : span - size.half;
+  const along = Math.max(0, Math.min(prepared.length, offset)) * perMetre;
+  const seatAlong = lo > hi ? span / 2 : Math.max(lo, Math.min(hi, along));
+  const seat = {
+    x: port.x + screenUnit.x * seatAlong,
+    y: port.y + screenUnit.y * seatAlong,
+  };
   const mark = sizedTriangle(seat, screenUnit, crossNormal, size);
   // Filled where the boat is going, outlined where it might have. The shape says the sense
   // either way; the fill says which one this screen is about.

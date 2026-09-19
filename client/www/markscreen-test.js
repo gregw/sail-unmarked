@@ -22,6 +22,7 @@ import { BASEMAPS } from './geo.js';
 import { ROLE_COLOUR } from './coursedraw.js';
 import { clock } from './raceclient.js';
 import {
+  crossingArt,
   HOLD,
   NM_FROM_M,
   BOAT,
@@ -307,6 +308,28 @@ export function run(check) {
   const pastEnd = rejectMark({ x: 50, y: 50 }, 'side change was past the starboard end');
   check('a MISS keeps the red cross, because a miss is what it is',
     pastEnd.includes('var(--warn)') && (pastEnd.match(/<line/g) || []).length === 2);
+
+  /*
+   * AND THE COG'S OWN MARK FOLLOWS THE SAME RULE: SHAPE SAYS WHETHER IT IS A PLACE.
+   *
+   * A ring where the present course cuts the line says *here* — somewhere on the line the boat
+   * is heading for. Past the end there is no such place and the course scores nothing however
+   * well it is sailed, so the mark becomes a red cross rather than a red ring. A ring in a
+   * warning colour still says the boat is heading somewhere and should hurry.
+   */
+  const cogMark = (warning) => plot({
+    ...mark,
+    projection: { ...mark.projection, warning },
+  }, { orientation: 'north', view: new PlotView() });
+  const crosses = (svg) => (svg.match(/<g stroke="var\(--warn\)" stroke-width="2.6"/g) || []).length;
+  check('where the course crosses the line, the cut is a ring',
+    crosses(cogMark(null)) === 0 && cogMark(null).includes('r="6.5" fill="none"'));
+  check('...still a ring when it is merely running close to the end, which IS a place',
+    crosses(cogMark('near-end')) === 0 && cogMark('near-end').includes('stroke="var(--toside)"'));
+  check('...and a RED CROSS once it falls past the end, because there is no crossing there',
+    crosses(cogMark('beyond-end')) === 1);
+  check('...replacing the ring rather than joining it, or the picture would say both',
+    !cogMark('beyond-end').includes('r="6.5" fill="none" stroke="var(--warn)"'));
 
   const wobble = rejectMark({ x: 50, y: 50 }, 'far side not confirmed');
   check('a candidate that never confirmed is neither, and is drawn as neither',
@@ -791,6 +814,51 @@ export function run(check) {
   };
   const shape = apexOf(drawn);
   check('the line carries a triangle saying which way it must be crossed', !!shape);
+
+  /*
+   * AND ITS BASE NEVER HANGS PAST A FINITE END, because a triangle that does draws a line
+   * that goes on further than it does. The extent test calls a crossing past the end a miss,
+   * and a boat deciding whether it can fetch the pin reads this picture to find out where the
+   * pin is — so the drawing must not add half a triangle to the line's own length. The butt
+   * line cap is there for the same reason and would be undone by an overhanging triangle.
+   */
+  const onSeg = (eastM, options = {}) => {
+    const finite = { latitude: 0, longitude: 0, infinite: false };
+    const held = prepareLine({
+      id: 'l',
+      port: { ...at(-150, 0), infinite: !!options.portInfinite },
+      starboard: { ...at(150, 0), infinite: !!options.starboardInfinite },
+      portInfinite: !!options.portInfinite,
+      starboardInfinite: !!options.starboardInfinite,
+    }, at(0, 0));
+    void finite;
+    // Straight down the line's own axis, so "past the end" is a comparison of x alone.
+    const project = (p) => ({ x: 200 + p.x * (options.scale ?? 1), y: 165 - p.y * (options.scale ?? 1) });
+    const art = crossingArt(held, 'forward', {
+      to: project, scale: options.scale ?? 1, boat: { x: eastM, y: -30 },
+    });
+    const m = /<polygon points="([^"]+)"/.exec(art.out);
+    const pts = m[1].split(' ').map((q) => q.split(',').map(Number));
+    return {
+      corners: [pts[0][0], pts[1][0]],
+      port: project({ x: -150, y: 0 }).x,
+      starboard: project({ x: 150, y: 0 }).x,
+    };
+  };
+
+  for (const eastM of [-150, -149, -140, 0, 140, 149, 150]) {
+    const seen = onSeg(eastM);
+    check(`a boat ${eastM} m along the line leaves the triangle's base ON it, not over its end`,
+      Math.min(...seen.corners) >= seen.port - 0.05
+      && Math.max(...seen.corners) <= seen.starboard + 0.05);
+  }
+
+  // AN INFINITE END IS A BEARING, NOT A PLACE: it is drawn running out of the picture, so
+  // there is no end there to overhang and nothing to clamp against. Clamping it anyway would
+  // pull the triangle off the part of the line the boat is actually crossing.
+  const openEnd = onSeg(150, { starboardInfinite: true });
+  check('...while at an INFINITE end there is nothing to hang past, so it is not held back',
+    Math.max(...openEnd.corners) > openEnd.starboard);
   // The fixture crosses a west-east line FORWARD, which is northward, which is up the screen
   // at North up — so the apex must sit above the base. The check to re-run if ever in doubt.
   check('...pointing the way the crossing goes, which here is up the screen',

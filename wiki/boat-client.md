@@ -102,15 +102,28 @@ fixes.
 **The sailor never asks for the Mark screen.** On a boat the hands are busy, and which screen matters
 right now is a decision the application is better placed to make than the person steering. So the screen
 follows the situation (`RaceClient.view`), and the rule is the **OR of a radius and a time** — 100 m, or
-30 seconds at the speed being made. A fixed radius hands a drifting boat the Mark screen four minutes out
-and a skiff thirty seconds out for the same metres; a pure time-to-line is meaningless the moment a boat
+25 seconds at the speed being made. A fixed radius hands a drifting boat the Mark screen four minutes out
+and a skiff ten seconds out for the same metres; a pure time-to-line is meaningless the moment a boat
 slows or points away. Each covers the other's blind spot.
 
-Three details around it, each of which was a bug first and each of which a change must preserve:
+**The two numbers are chosen to AGREE for the boats this is raced by**: 25 seconds is a hundred metres at
+about seven knots, so for most of a club fleet most of the time both tests say the same thing and the
+screen comes up where a sailor expects it. The time test then earns its keep only at the ends of the
+range — measured, it takes the screen at 100 m up to 7 kn, 129 m at 10, 193 m at 15 and 257 m at 20.
 
-- **The screen is given back at 160 m, not 100.** Without the gap a boat holding station near a start line
-  flips between screens on GPS noise alone. The gap moves with the threshold rather than staying fixed.
-- **The hysteresis resets on every advance.** A new mark is a new approach.
+Four details around it, each of which was a bug first and each of which a change must preserve:
+
+- **The screen is given back at 160 m, not 100** — and at 48 seconds, not 30. Both tests need a gap, and
+  the missing one on the *time* test is what made the screen flash on the water: a boat coming in fast took
+  the screen on time, failed the distance-only hold on the very next fix, went back to the course, took it
+  again on time. Held at the same 1.6 ratio, because what a gap has to beat is the jitter in the quantity
+  it is testing, and a boat's speed is the noisier of the two.
+- **And a minimum hold of five seconds** (`APPROACH.holdMs`) under both. Hysteresis answers a quantity that
+  *drifts* across a threshold and can do nothing about one that *jumps* — a speed that halves because a fix
+  was refused, a distance that steps when the boat is re-seated on the other side of a gate. A screen that
+  comes up and goes away inside a second is worse than either screen. It gates AUTO only: a sailor who
+  presses Course gets it at once, forcing being an instruction rather than a vote.
+- **The hysteresis resets on every advance**, and the minimum hold with it. A new mark is a new approach.
 - **The dwell does not prime the hysteresis.** Holding the Mark screen for six seconds after a latch is
   its own reason to be there, and must not also count as "the boat is near this mark".
 
@@ -191,10 +204,25 @@ derivations; these are the rules that outlive any of them.
   bearing marker. **No boom**: a boom is drawn at an angle, and an angle is a claim about where the wind is.
   **One path, one routine, three charts**, drawn to scale on the plot and at fixed size on the overview and
   the rig.
+- **The COG cut is a ring where the course crosses the line and a RED CROSS where it does not.** A ring
+  says *here* — a place on the line the boat is heading for. Past a finite end there is no such place and
+  the present course scores nothing however well it is sailed, so the mark changes shape rather than only
+  colour, which is the rule the rejected fixes already follow: shape carries what happened, colour carries
+  whether it matters. It is still drawn where the cut really falls.
+
 - **The line carries a triangle** — the editor's own notation, base on the line, apex the way you must cross
   — because the required sense is the one thing about a virtual mark that cannot be guessed from looking at
   it. `forwardNormal` is reused from `coursedraw` rather than re-derived. Just beyond its apex, a grey arrow
-  along the next leg: *cross here, going that way, then head there*. **The F marks the one place with
+  along the next leg: *cross here, going that way, then head there*.
+
+  **Its base never hangs past a finite end.** The base lies *along* the line, so a triangle seated at the
+  last metre of one puts half its width beyond the end and draws a line that goes on further than it does —
+  the one lie this screen must not tell, since the extent test calls a crossing out there a miss and a boat
+  deciding whether it can fetch the pin reads this picture to find out where the pin is. (The butt line cap
+  is there for the same reason and would be undone by an overhanging triangle.) Clamped in pixels against
+  the ends as drawn, so it holds at every scale; **only at finite ends**, an infinite one being a bearing
+  with nothing there to overhang; and centred rather than clamped on a line drawn narrower than the triangle
+  is wide, which has no answer that keeps the base on it. **The F marks the one place with
   nothing beyond it**, keyed off "there is no next leg", never off "the next mark is the finish".
 - **On a latch the scale deliberately does not move**; the arrow goes green and grows. Re-scaling at the
   moment of a crossing throws away the picture somebody is looking at for the one reason they are looking at

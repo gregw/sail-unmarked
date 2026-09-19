@@ -290,8 +290,12 @@ ok('...and goes on the record, which is the only artefact that leaves this syste
   mod.__boat.device.client.record().lengthM === 12.5);
 // The club's setting for how close the plot may zoom comes off `/api/config`, read with the
 // course list rather than on the sailing path: this screen draws whether or not it arrived.
+// Compared against what the SERVER says rather than against a number written here — the whole
+// point of the setting is that a club may change it, and a driver that pinned today's value
+// would fail the morning somebody did.
+const served = (await json('/api/config')).display?.boatLengthsAcross;
 ok('...while how CLOSE it may zoom is the club\'s, read once when the boat joined',
-  mod.__boat.device.display.boatLengthsAcross === 3);
+  served > 0 && mod.__boat.device.display.boatLengthsAcross === served);
 
 /* ---------------------------------------------------- sailing, on derived numbers */
 
@@ -320,8 +324,13 @@ async function until(test, seconds = 40) {
 }
 
 await settle(600);
+// THE MINIMUM HOLD IS REAL AND IS WAITED FOR. The boat was picked up and put down 250 m from
+// the line in one instant, which no boat does — and if the Mark screen had the display when
+// that happened, it keeps it for five seconds, because a screen that vanishes the moment a
+// reading jumps is the flapping this exists to prevent. So the claim is that the course screen
+// COMES BACK, not that it is already back.
 ok('a stopped boat is on the course screen, not the approach — nothing is close',
-  !device().includes('class="ttl'));
+  await until(() => !device().includes('class="ttl'), 10));
 // The derivation has its floor here: stationary, the movement between fixes is inside the
 // stated accuracy, so nothing claims the boat is making way on noise.
 ok('...and the speed derived from a boat that is not moving is nothing at all',
@@ -336,8 +345,19 @@ const moving = await until(() => (mod.__boat.receiver.last.sogKn ?? 0) > 5, 10);
 ok('once it is making way, the speed is derived from consecutive positions', moving);
 ok('...and so is a heading, which is what the hull is drawn pointing along',
   mod.__boat.receiver.last.cogDeg != null);
-ok('...at about the speed it is really doing, since a TTL is distance over this number',
-  Math.abs((mod.__boat.receiver.last.sogKn ?? 0) - sim.sogKn) < 6);
+/*
+ * AND SETTLES ON THE RIGHT NUMBER, which is what is asserted rather than the first reading
+ * over five knots.
+ *
+ * The very first derived speed after a boat starts moving is taken across the moment it
+ * started — the pair of fixes either side of it straddle a stationary spell and a moving one,
+ * at whatever cadence the harness's timers actually managed — so it can read high. That is
+ * arithmetic about one interval, and `receiver-test.js` is where it is pinned, against a clock
+ * that file controls. What this driver is for is the WIRING: that the phone's own positions,
+ * through the real receiver, end up as a speed that tracks the boat.
+ */
+ok('...settling at about the speed it is really doing, since a TTL is distance over it',
+  await until(() => Math.abs((mod.__boat.receiver.last.sogKn ?? 0) - sim.sogKn) < 6, 10));
 
 const gotMark = await until(() => device().includes('class="ttl'), 40);
 ok('THE MARK SCREEN COMES UP ON ITS OWN, on a real phone\'s fixes — nothing was tapped', gotMark);

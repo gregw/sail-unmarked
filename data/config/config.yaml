@@ -18,7 +18,7 @@ display:
   #
   # Raise it to keep more line in view on a long start line, lower it to close in harder on the
   # last few metres. Below one the boat would not fit in its own picture, so one is the floor.
-  boatLengthsAcross: 3
+  boatLengthsAcross: 4
 
 server:
   # 8081 is sailing-pf, 8082 is sail-jinx, 8888 is the sailing-pf admin connector.

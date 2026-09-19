@@ -50,7 +50,7 @@ const KN_TO_MS = M_PER_NM / 3600;
  * When the Mark screen takes over from the course overview, and when it gives it back.
  *
  * <b>Distance alone is the wrong quantity, and time alone is worse.</b> A fixed radius
- * hands a drifting boat the Mark screen four minutes out and a skiff thirty seconds out,
+ * hands a drifting boat the Mark screen four minutes out and a skiff ten seconds out,
  * for the same number of metres; but a pure time-to-line is meaningless the moment a boat
  * slows, stops, or is pointing away from the mark, and it would flick the screen about on
  * every lull. So it is the OR of the two, and each covers the other's blind spot: the
@@ -64,7 +64,51 @@ const KN_TO_MS = M_PER_NM / 3600;
 export const APPROACH = {
   enterM: 100,
   exitM: 160,
-  enterS: 30,
+  /**
+   * The time test, chosen so that the two tests agree for the boats this is raced by.
+   *
+   * <b>Twenty-five seconds is a hundred metres at about seven knots</b>, which is what a club
+   * keel boat does reaching at a mark — so for most of the fleet, most of the time, the radius
+   * and the clock say the same thing and the screen comes up where a sailor expects it. The
+   * time test then earns its keep at the ends of that range and nowhere else: a skiff at
+   * twenty knots is given the screen 250 m out, where a hundred-metre radius would hand it
+   * over ten seconds before the line, and a boat drifting at two knots is not given it four
+   * minutes early.
+   */
+  enterS: 25,
+  /**
+   * The time test's own hysteresis, and its absence is what made the screen FLASH.
+   *
+   * The Mark screen is taken on either test — within `enterM` metres, or within `enterS`
+   * seconds at the speed being made — and was held on the distance one alone. So a boat coming
+   * in fast from three hundred metres took the screen on time, failed the distance-only hold
+   * on the very next fix, went back to the course, took it again on time, and flapped between
+   * the two several times a second until it got inside 160 m. Reported from a boat, which is
+   * the only place it shows: at a desk the flap is over before anybody sees it.
+   *
+   * Held at the same 1.6 ratio the distance pair uses, for the same reason — what the gap has
+   * to beat is the jitter in the quantity being tested, and the speed a boat is making is by
+   * far the noisier of the two.
+   */
+  exitS: 40,
+  /**
+   * The least time the Mark screen keeps the display once AUTO has brought it up.
+   *
+   * A belt to the hysteresis's braces, and it answers a different failure: hysteresis stops a
+   * quantity that is drifting across a threshold from flapping, and it can do nothing about a
+   * quantity that JUMPS — a speed that halves because a fix was refused, a perpendicular
+   * distance that steps when the boat is re-seated on the other side of a gate. Whatever the
+   * cause, a screen that comes up and goes away again inside a second is worse than either
+   * screen: it is unreadable, and it teaches the sailor not to trust the one that matters.
+   *
+   * Five seconds is about the least that reads as a decision rather than a glitch, and it is
+   * cheap: the cost of being wrong is five seconds of the approach screen while a boat sails
+   * away from a mark, which is a screen showing the mark it has just left.
+   *
+   * It gates AUTO only. A sailor who presses Course gets the course instantly — forcing is an
+   * instruction, not a vote.
+   */
+  holdMs: 5000,
   /**
    * How long the Mark screen is held after a crossing latches.
    *
@@ -300,6 +344,8 @@ export class RaceClient {
     this.dwellUntil = 0;
     this.crossed = null;
     this.showingMark = false;
+    // When the Mark screen took the display, for its minimum hold. See `APPROACH.holdMs`.
+    this.markSince = null;
     // AUTO: the application decides. See `view`.
     this.viewMode = 'auto';
     this.relocations = 0;
@@ -579,8 +625,10 @@ export class RaceClient {
     // treated as already "on" the next mark and keep it at the EXIT threshold — which is
     // wider than the enter one — so a mark three hundred metres away would take the screen
     // the moment the last one was cleared, and on a short course it would never give it
-    // back at all.
+    // back at all. The minimum hold goes with it: a new mark is a new approach, and holding
+    // the screen for the mark just crossed would be the dwell by another name.
     this.showingMark = false;
+    this.markSince = null;
     this.arm();
   }
 
@@ -650,6 +698,7 @@ export class RaceClient {
     this.crossed = null;
     this.dwellUntil = 0;
     this.showingMark = false;
+    this.markSince = null;
     this.watchedLine = null;
     this.arm();
     return target;
@@ -1122,11 +1171,22 @@ export class RaceClient {
     const seconds = near / speed;
 
     if (this.showingMark) {
-      // Hysteresis: having taken the screen, hold it further out than it was taken at.
-      this.showingMark = near <= this.approach.exitM;
+      // Hysteresis, on BOTH tests: having taken the screen on either one, hold it on the
+      // looser version of either. Holding on distance alone is what made a boat coming in
+      // fast flap between the two screens — it took the screen on time and lost it on
+      // distance, on alternate fixes. And a minimum hold under both, because neither gap
+      // helps against a quantity that jumps rather than drifts. See `APPROACH`.
+      const held = this.markSince != null && now - this.markSince < this.approach.holdMs;
+      this.showingMark = held
+        || near <= this.approach.exitM
+        || seconds <= this.approach.exitS;
     } else {
       this.showingMark = near <= this.approach.enterM || seconds <= this.approach.enterS;
     }
+    // When the screen was taken, for the minimum hold. Cleared the moment it is given up, so
+    // the next approach is timed from when it actually starts.
+    if (this.showingMark) this.markSince ??= now;
+    else this.markSince = null;
     // Tracked above whatever is returned, so a forced view does not leave the rule stale: the
     // moment AUTO is handed back it answers for where the boat is NOW, not for where it was
     // when somebody pressed a button.

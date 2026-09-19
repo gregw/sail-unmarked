@@ -491,6 +491,60 @@ export function run(check) {
   check('a boat coming in fast gets the Mark screen before it is inside the radius',
     quick.approachM() > quick.approach.enterM && quick.view(quick.fix.time.getTime()) === 'mark');
 
+  /*
+   * AND IT DOES NOT FLASH, which is what this cost on the water.
+   *
+   * The screen is taken on EITHER test — inside the radius, or inside the seconds at the speed
+   * being made — and was held on the distance one alone. So a boat coming in fast from three
+   * hundred metres took the screen on time, failed the distance-only hold on the very next
+   * fix, went back to the course, took it again on time, and flapped between the two several
+   * times a second all the way in. Both tests have a hysteresis now.
+   */
+  // At fifteen knots the time test takes the screen at about 190 m, which is outside the 160 m
+  // the distance test would hold it at — so every fix from there in used to be a fresh argument
+  // between the two rules.
+  const flap = fresh(WINDWARD_LEEWARD);
+  sail(flap, { e: 0, n: -900 }, { e: 0, n: -180 }, { stepM: 30, dtSeconds: 4 });
+  const took = flap.approachM();
+  check('the time test takes the screen while the boat is still well outside the radius',
+    flap.view(flap.fix.time.getTime()) === 'mark' && took > flap.approach.exitM);
+  const screens = [];
+  for (let i = 0; i < 3; i += 1) {
+    sail(flap, { e: 0, n: -180 + i * 5 }, { e: 0, n: -180 + (i + 1) * 5 }, { stepM: 5, dtSeconds: 1 });
+    screens.push({ view: flap.view(flap.fix.time.getTime()), near: flap.approachM() });
+  }
+  check('...and HOLDS it all the way in rather than flapping against the distance rule',
+    screens.every((f) => f.view === 'mark')
+    && screens[screens.length - 1].near > flap.approach.exitM);
+
+  /*
+   * AND A MINIMUM HOLD UNDER BOTH, because hysteresis answers a quantity that DRIFTS across a
+   * threshold and can do nothing about one that jumps — a speed that halves because a fix was
+   * refused, a distance that steps when the boat is re-seated on the other side of a gate. A
+   * screen that comes up and goes away inside a second is worse than either screen.
+   */
+  const stepped = fresh(WINDWARD_LEEWARD);
+  sail(stepped, { e: 0, n: -140 }, { e: 0, n: -60 }, { stepM: 20, dtSeconds: 2 });
+  const cameUp = stepped.fix.time.getTime();
+  check('the Mark screen is up', stepped.view(cameUp) === 'mark');
+  // The same client asked about a boat that is suddenly nowhere near: the rule says course,
+  // the hold says not yet.
+  stepped.point = { x: stepped.point.x, y: stepped.point.y - 900 };
+  // A second later, and six seconds later. Written as real seconds rather than as offsets from
+  // `holdMs`, because an offset BEFORE the screen came up is inside any hold you like — which
+  // is how a test of this passes against a client that has no hold at all.
+  check('...and is held for five seconds even when the rule has stopped asking for it',
+    stepped.approachM() > stepped.approach.exitM && stepped.view(cameUp + 1000) === 'mark');
+  check('...and given up once that is spent, because it is a floor and not a dwell',
+    stepped.view(cameUp + 6000) === 'overview');
+  // FORCING IS AN INSTRUCTION, NOT A VOTE: the hold gates AUTO and nothing else.
+  const impatient = fresh(WINDWARD_LEEWARD);
+  sail(impatient, { e: 0, n: -140 }, { e: 0, n: -60 }, { stepM: 20, dtSeconds: 2 });
+  const upAt = impatient.fix.time.getTime();
+  impatient.setViewMode('overview');
+  check('...while a sailor who presses Course gets it at once, hold or no hold',
+    impatient.view(upAt + 100) === 'overview');
+
   // A LINE THAT RUNS ALONG THE LEG, which is what a gate's half-infinite sides do — and what
   // broke this. Perpendicular distance is the distance to the line's infinite EXTENSION, so a
   // boat four kilometres down the leg between two such lines is still only the gate's
