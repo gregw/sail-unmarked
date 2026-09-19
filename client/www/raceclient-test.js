@@ -292,6 +292,61 @@ export function run(check) {
   check('...finishing on the line it started on', either.finished
     && either.crossings[either.crossings.length - 1].line === 'north');
 
+  /* --------------------------------------------------- stepping through, in practice */
+
+  // PRACTISING IS SAILING ONE MARK, then the next one — not sailing the course. Without a skip
+  // the only way to put mark 4 live is to round three marks first.
+  const practice = fresh(WINDWARD_LEEWARD, { joinMode: 'ANONYMOUS' });
+  check('a practice boat can be moved on to the next mark without sailing to it',
+    practice.skip(1)?.letter === '1' && practice.at === 1);
+  check('...and back', practice.skip(-1)?.letter === 'S' && practice.at === 0);
+  check('...but not off the front of an open course', practice.skip(-1) === null);
+  practice.skip(1);
+  practice.skip(1);
+  check('...nor off the back of one', practice.at === 2 && practice.skip(1) === null);
+  // The buttons name where they land, so they ask the client rather than working it out.
+  check('...and the client says where a skip would go, for a button that has to say so',
+    practice.skipTarget(-1).letter === '1' && practice.skipTarget(1) === null);
+
+  // A SKIP TOUCHES THE POINTER AND NOTHING ELSE: no crossing is recorded, so a practice record
+  // says what was actually crossed and the marks that were skipped are simply absent.
+  check('...leaving the record with nothing in it, because nothing was crossed',
+    practice.crossings.length === 0 && practice.startAt === null);
+
+  // A RACE CANNOT BE STEPPED THROUGH, and the refusal is here rather than in a button the
+  // screen happens not to draw: this object is what decides a race.
+  for (const mode of ['RACE', 'RECORD']) {
+    const racing = fresh(WINDWARD_LEEWARD, { joinMode: mode });
+    check(`a boat sailing as ${mode} cannot skip a mark`,
+      racing.skip(1) === null && racing.at === 0);
+  }
+
+  // On a cycle the skip runs round the ring, and position −1 is the start choice: skipping
+  // back to it is how the offer of every entry line comes back.
+  const drill = fresh(CYCLE, { joinMode: 'ANONYMOUS' });
+  check('a cycle starts at the choice of entry lines', drill.starting);
+  check('...which a skip steps off, without starting any clock',
+    drill.skip(1)?.letter === '0' && !drill.starting && drill.entryIndex === null
+    && drill.startAt === null);
+  check('...and steps back onto, because the offer is a place to be',
+    drill.skip(-1)?.letter === 'S' && drill.starting);
+  drill.skip(1);
+  drill.skip(1);
+  check('...and the ring wraps rather than stopping', drill.at === 1
+    && drill.skipTarget(1)?.letter === 'S');
+
+  // A FINISHED RUN IS ONE PAST THE END, so back resumes it — the finish is the mark most worth
+  // practising twice, and the finish time goes with it rather than standing over a boat that
+  // is sailing again.
+  const again = fresh(WINDWARD_LEEWARD, { joinMode: 'ANONYMOUS' });
+  sail(again, { e: 0, n: -120 }, { e: 0, n: 120 });
+  sail(again, { e: 0, n: 120 }, { e: 0, n: 420 });
+  sail(again, { e: 0, n: 420 }, { e: 0, n: -120 });
+  check('a practice run that finished can be resumed', again.finished
+    && again.skip(-1)?.letter === 'F' && !again.finished && again.at === 2);
+  check('...and the finish time goes with it, rather than standing over a boat still sailing',
+    again.finishAt === null && !again.complete());
+
   /* ------------------------------------------------------------ quality control */
 
   const noisy = fresh(WINDWARD_LEEWARD);

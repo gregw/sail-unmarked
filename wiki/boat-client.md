@@ -365,6 +365,17 @@ for. Levels start **empty** and populate as the level above is answered, and the
 missing rather than sitting greyed out in silence — a default is a suggestion, and a suggestion nobody made is
 how a boat ends up sailing yesterday's course on a race morning.
 
+**A level with ONE answer answers itself; a level with several asks.** The two rules are
+different and the difference is the point: defaulting to the first of several reads as a
+suggestion, and "first" is whatever the map iterated — not the club's main race, not the
+nearest. One answer is not a question at all, so a club with a single series, a series running a
+single race today, a race with one division or a course with one published design settles
+itself, and the button under it never says *Choose a series* about a series nobody could choose
+differently. It is the editor's `stageOf` rule, which is the value of a hierarchy over a flat
+list: it collapses to nothing when there is nothing to choose. Settled into `this.boat` rather
+than into the markup, because the join reads its course from there. **`NO_RACE` does not make a
+single race into two answers** — it is opting out of the question, not another race.
+
 **The club is the exception, and is remembered rather than defaulted.** A sail number, a boat name and a club
 are facts about whoever is holding the phone; the series, course and variant are the decision being made.
 `sessionStorage` for now, wrapped in a try — storage is not always there to be had, and a join screen that
@@ -380,6 +391,22 @@ fixes** — on a phone in a bracket for four hours, reporting to nobody is batte
 **And if there is no conversation to be had at all, the boat sails anyway**: `Device.join` falls back to the
 REST `/api/join`. The message stays on the screen, because a boat sailing without a committee should know that
 is what it is doing.
+
+**PRACTICE MAY STEP THROUGH THE COURSE; A RACE MAY NOT** (`RaceClient.resolveSkip`). Practising
+is sailing one mark over and over and then the next one, and without a skip the only way to put
+mark 4 live is to round three marks first. Two buttons on the deck name the mark they land on,
+because the reason for pressing one is to arrive at a particular mark, and they are absent
+rather than disabled at the ends of the sequence. The refusal lives in the client, not in a
+button the screen happens not to draw: this is the object that decides a race, and a race whose
+marks could be stepped past would produce a record saying a boat rounded what it did not.
+
+A skip moves the pointer and touches nothing else — not the clock, not the crossings, not which
+entry line a lap is measured from — so a practice record says exactly what was crossed. Two ends
+are worth naming: **a cycle's start choice is position −1**, so skipping back to it brings the
+offer of every entry line back, and skipping forward off it leaves no `entryIndex`, which is
+honest because no lap is being timed; and **a finished run is one past the end**, so back resumes
+it and takes the finish time with it, a result that stood while the boat went on sailing being a
+result about nothing.
 
 **The handicap is carried, not applied**: the join screen collects a TCF and does nothing with it, because
 turning a TCF into a distance is open question 5.

@@ -194,7 +194,19 @@ ok('...and says the crossings will come from this device and no other',
   device().includes('device and no other'));
 ok('...printing the position and the accuracy it was stated to, which is what decides trust',
   /±\d+ m/.test(device()));
-ok('...and the course can now be taken', /id="j_go" disabled>Choose a club</.test(device()));
+// A LEVEL WITH ONE ANSWER ANSWERS ITSELF. This fixture publishes one course, of one variant,
+// in one series of one club — so there is nothing to choose anywhere on the drill and every
+// level settles, leaving the button offering to sail rather than asking four questions whose
+// answers could not have been different. The other half of the rule — several answers is a
+// question, asked with an empty field — is driven in `drive-clientpage.mjs`, which publishes
+// two courses to have something to ask about.
+ok('...and with one of everything published, the whole drill answers itself',
+  /id="j_go">Join and sail</.test(device()));
+ok('...having settled the levels rather than merely looked settled, since the join reads these',
+  mod.__boat.device.boat.club === programme.club
+  && mod.__boat.device.boat.series === programme.series
+  && mod.__boat.device.boat.course === taken.course
+  && mod.__boat.device.boat.variant === taken.variant);
 
 // A PHONE REPORTS NO SATELLITE COUNT and that must not read as a bad fix: the quality gate
 // treats a missing count as no evidence either way rather than as a failure.

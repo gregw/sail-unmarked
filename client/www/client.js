@@ -565,3 +565,5 @@ requestAnimationFrame(frame);
 
 /** Exposed for the headless drivers only; nothing in the page reads it. */
 export const __state = state;
+/** The device itself, for the drivers that have to ask it to redraw. Same rule: page-read never. */
+export const __device = device;

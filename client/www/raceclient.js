@@ -576,6 +576,77 @@ export class RaceClient {
   }
 
   /**
+   * PRACTICE MAY SKIP THROUGH THE SEQUENCE; A RACE MAY NOT.
+   *
+   * Practising is not sailing the course — it is sailing one mark, over and over, and then the
+   * next one. Without this the only way to put mark 4 live is to round marks 1, 2 and 3 first,
+   * which on a harbour circuit is half an afternoon to practise one gate.
+   *
+   * <b>Refused outright unless the boat joined as practice</b> (`ANONYMOUS`), and that is a
+   * check here rather than a button the screen happens not to draw. This object is what
+   * decides a race; a race whose marks could be stepped past from the outside would be a race
+   * whose record says a boat rounded what it did not.
+   *
+   * <b>A skip moves the pointer and touches nothing else</b> — not the clock, not the
+   * crossings, not which entry line a lap is measured from. So a practice record says exactly
+   * what was crossed, and the marks that were skipped are simply absent from it, which is what
+   * happened.
+   *
+   * The positions it steps through are the sequence, with two ends worth naming:
+   * <ul>
+   *   <li><b>A cycle's start choice is position −1</b>, and skipping back to it is how you get
+   *       the offer of every entry line again. Skipping FORWARD off it leaves `entryIndex`
+   *       unset, which is honest: no lap is being timed, so the cycle simply goes round.</li>
+   *   <li><b>A finished run is one past the end</b>, so back resumes it — the finish is the
+   *       mark most worth practising twice. The finish time goes with it, because a result
+   *       that stood while the boat went on sailing would be a result about nothing.</li>
+   * </ul>
+   */
+  resolveSkip(delta) {
+    if (this.joinMode !== 'ANONYMOUS') return null;
+    const n = this.steps.length;
+    if (!n || !delta) return null;
+    // The choice is only a place to be while no lap has been begun: once a boat has started,
+    // the line it started on is settled and going back to "which line?" would unask it.
+    const first = (this.startChoice && this.entryIndex == null) ? -1 : 0;
+    const from = this.starting ? -1 : (this.finished ? n : this.at);
+    let to = from + delta;
+    if (this.finished && delta < 0) to = n - 1;
+    if (to < first) return null;
+    if (to > n - 1) {
+      if (!this.snapshot.closed || this.finished) return null;
+      to = first;
+    }
+    return { to, letter: to < 0 ? 'S' : this.steps[to].letter };
+  }
+
+  /** Where `skip(delta)` would go, for a button that has to say whether it can. */
+  skipTarget(delta) {
+    return this.resolveSkip(delta);
+  }
+
+  /** Put another mark live without sailing to it. Practice only — see `resolveSkip`. */
+  skip(delta) {
+    const target = this.resolveSkip(delta);
+    if (!target) return null;
+    this.starting = target.to < 0;
+    if (target.to >= 0) this.at = target.to;
+    if (this.finished) {
+      this.finished = false;
+      this.finishAt = null;
+    }
+    // A new mark is a new approach, judged from scratch — the same reason `advance` says it.
+    // The dwell and the held crossing go too: they are a picture of a crossing that is no
+    // longer the one on the screen.
+    this.crossed = null;
+    this.dwellUntil = 0;
+    this.showingMark = false;
+    this.watchedLine = null;
+    this.arm();
+    return target;
+  }
+
+  /**
    * The point the boat is actually steering at, and the bearing and distance to it.
    *
    * <b>The midpoint of the next line, which is not the same number as the perpendicular

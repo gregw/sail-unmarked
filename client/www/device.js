@@ -359,8 +359,27 @@ export class Device {
   }
 
   bottomRow() {
+    /*
+     * PRACTICE GETS TO STEP THROUGH THE COURSE, AND A RACE DOES NOT.
+     *
+     * Practising is sailing one mark over and over, then the next one — and without these the
+     * only way to put mark 4 live is to round three marks first. The client refuses the skip
+     * outright unless the boat joined as practice (`RaceClient.resolveSkip`), so this is the
+     * screen agreeing with a rule rather than the rule being a screen that happens not to draw
+     * a button.
+     *
+     * They NAME THE MARK THEY GO TO rather than saying "prev" and "next", because the whole
+     * point of pressing one is to arrive at a particular mark, and a boat that can see where a
+     * button lands does not have to press it to find out. Absent rather than disabled at the
+     * ends of the sequence: a dead control on a five-button row is ink that says nothing, and
+     * the sequence's ends are obvious from the letters themselves.
+     */
+    const back = this.client?.skipTarget(-1) ?? null;
+    const on = this.client?.skipTarget(1) ?? null;
     return `
       <div class="deck">
+        ${back ? `<button class="plain skip" id="skip_back">&lsaquo; ${esc(back.letter)}</button>` : ''}
+        ${on ? `<button class="plain skip" id="skip_on">${esc(on.letter)} &rsaquo;</button>` : ''}
         ${this.hooks.extras?.() ?? ''}
         ${this.dialog.live && !this.dialog.outcome
           // RETIRING IS NEVER INFERRED (§8.6): a boat retires because a sailor pressed retire,
@@ -371,6 +390,15 @@ export class Device {
   }
 
   wireBottom() {
+    for (const [id, delta] of [['skip_back', -1], ['skip_on', 1]]) {
+      this.el(id)?.addEventListener('click', () => {
+        this.client.skip(delta);
+        // A different mark is a different picture: the held frame is a fit around the one the
+        // boat was approaching, and carrying it over would open the new one at the old scale.
+        this.plotView = new PlotView();
+        this.render();
+      });
+    }
     this.el('leave')?.addEventListener('click', () => this.leave());
     this.el('retire')?.addEventListener('click', () => {
       this.dialog.retire('retired');
@@ -475,28 +503,44 @@ export class Device {
       `<option value="${esc(v.value)}"${v.value === chosen ? ' selected' : ''}>${esc(v.label)}</option>`).join('');
 
     /*
-     * NOTHING BELOW THE CLUB IS CHOSEN FOR YOU, and each level is empty until the one above it
-     * has been answered.
+     * NO LEVEL IS DEFAULTED, BUT A LEVEL WITH ONE ANSWER ANSWERS ITSELF.
      *
-     * It used to default every level to the first thing in the list, so the screen opened with
-     * a complete course already selected — which reads as a suggestion, and on a race morning
-     * a suggestion nobody made is how a boat sails yesterday's course. Worse, the first item is
-     * whatever the map happened to iterate first: not the club's main race, not the nearest,
-     * not the most recent. An empty field asks the question; a filled one answers it wrongly
-     * and quietly.
+     * Those are two rules and the difference between them is the whole point. Defaulting to the
+     * FIRST of several reads as a suggestion, and on a race morning a suggestion nobody made is
+     * how a boat sails yesterday's course — worse, "first" is whatever the map happened to
+     * iterate: not the club's main race, not the nearest, not the most recent. So several
+     * answers is a question, asked with an empty field.
      *
-     * The CLUB is the exception, and is remembered rather than defaulted — see `recall`. It is
-     * a fact about the boat, not a decision about today.
+     * One answer is not a question at all. A club with a single series, a series running a
+     * single race today, a race with a single division, a course with one published design: in
+     * every case the field would open, show one line and close again having changed nothing,
+     * and the button under it would have said "Choose a series" about a series nobody could
+     * choose differently. It is the same rule the editor's template picker follows (`stageOf`)
+     * and for the same reason — a hierarchy is worth having because it collapses to nothing
+     * when there is nothing to choose.
      *
-     * A remembered club that is no longer on offer falls back to unchosen: a `<select>` whose
-     * value matches no option shows blank, which would be a screen saying nothing and blaming
-     * nobody.
+     * Settled here rather than in the markup, because the answer has to reach `this.boat`: the
+     * join reads its course from there, and a level that merely LOOKED chosen would hand the
+     * server nothing.
+     *
+     * The CLUB is remembered as well as settled — see `recall` — because it is a fact about the
+     * boat rather than a decision about today. A remembered club that is no longer on offer
+     * falls back to unchosen, since a `<select>` whose value matches no option shows blank.
      */
+    const settle = (field, values, valueOf = (v) => v) => {
+      if (!this.boat[field] && values.length === 1) this.boat[field] = valueOf(values[0]);
+      return this.boat[field];
+    };
+
     const clubs = [...new Set(this.courses.map((c) => c.club))];
-    const club = clubs.includes(this.boat.club) ? this.boat.club : '';
+    // Guarded on there BEING clubs: this screen is drawn before `/api/public` has answered, and
+    // wiping a remembered club against an empty list would forget the boat for a moment.
+    if (clubs.length && !clubs.includes(this.boat.club)) this.boat.club = null;
+    const club = settle('club', clubs) ?? '';
     const series = club
       ? [...new Set(this.courses.filter((c) => c.club === club).map((c) => c.series))] : [];
-    const chosenSeries = series.includes(this.boat.series) ? this.boat.series : '';
+    if (this.boat.series && !series.includes(this.boat.series)) this.boat.series = null;
+    const chosenSeries = settle('series', series) ?? '';
     /*
      * A BOAT JOINS A RACE WHERE THERE IS ONE, and a course only where there is not.
      *
@@ -512,6 +556,15 @@ export class Device {
     const today = Device.today();
     const all = (this.races?.[`${club}/${chosenSeries}`] ?? []);
     const racesToday = all.filter((race) => race.date === today);
+    /*
+     * ONE RACE TODAY IS ONE ANSWER, and `NO_RACE` does not make it two.
+     *
+     * That option is not another race, it is opting out of the question — *there is nobody
+     * running a race on this* — so counting it would mean a club running its one Saturday race
+     * never got the benefit of the rule. It stays in the list, so a boat that wants to sail the
+     * course without the committee still says so in one gesture.
+     */
+    settle('race', racesToday, (race) => race.id);
     const chosenRace = racesToday.find((r) => r.id === this.boat.race) ?? null;
     const courseOnly = this.boat.race === NO_RACE || racesToday.length === 0;
 
@@ -519,6 +572,9 @@ export class Device {
     // course and the variant, and the boat never picks geometry it was not entered for.
     const divisions = Object.entries(chosenRace?.divisions ?? {})
       .map(([name, division]) => ({ name, ...division }));
+    // A one-division race is the ordinary club race, and asking which division a boat is in
+    // when there is only one is asking somebody to agree with a fact.
+    if (chosenRace) settle('division', divisions, (d) => d.name);
     const chosenDivision = divisions.find((d) => d.name === this.boat.division) ?? null;
 
     // What the race says this division sails, crossed with what is actually published: a
@@ -533,8 +589,12 @@ export class Device {
 
     const courses = chosenSeries && courseOnly
       ? this.courses.filter((c) => c.club === club && c.series === chosenSeries) : [];
+    settle('course', courses, (c) => c.course);
     const chosenCourse = courses.find((c) => c.course === this.boat.course) ?? null;
     const variants = chosenCourse?.published ?? [];
+    // The single published design is the one thing this course can hand over — which is exactly
+    // what a race's division means by leaving its variant unsaid, decided here the same way.
+    if (chosenCourse) settle('variant', variants, (v) => v.variant);
     const chosenVariant = variants.find((v) => v.variant === this.boat.variant) ?? null;
     const blocked = this.hooks.blocked?.() ?? null;
 

@@ -148,6 +148,13 @@
 
 /* What is under the screens: leaving the course, and whatever the page adds beside it. */
 .deck { display: flex; gap: 8px; padding: 0 12px 16px; }
+/*
+ * The practice skips are the two narrow ones: they carry a letter rather than words, and on a
+ * row that already holds Retire and Leave course they must not take the width those need. Set
+ * in the mono face because what they say is a mark's letter, which is what the plot letters it
+ * with — the same fact in the same type.
+ */
+.deck .skip { flex: 0 0 auto; font-family: var(--mono); letter-spacing: 0.08em; }
 
 /* The join screen. */
 .join { padding: 14px 12px; }

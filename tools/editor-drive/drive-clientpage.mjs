@@ -32,23 +32,31 @@ const [programme] = await json('/api/programmes');
 const KEY = `${programme.club}/${programme.series}`;
 const file = await json(`/api/programmes/${KEY}`);
 
-let taken = null;
+/*
+ * TWO courses are published here, on purpose, and the second one is what makes the join screen
+ * ask a question at all. A level with one answer answers itself — so with a single course
+ * published the whole drill settles and there is nothing left to drive. Publishing a second
+ * gives the course level a genuine choice, which is the half of the rule this file proves; the
+ * settling half is proved by the levels above it, which have one answer each.
+ */
+const published = [];
 for (const [course, body] of Object.entries(file.courses)) {
   for (const variant of Object.keys(body.variants ?? { main: {} })) {
     try {
       const result = await post(`/api/lifecycle/${KEY}/snapshots`, { course, variant });
-      if (result.snapshot?.steps?.length >= 2) taken = { course, variant };
+      if (result.snapshot?.steps?.length >= 2) published.push({ course, variant });
     } catch { /* incomplete, or a template — neither is this driver's business */ }
-    if (taken) break;
+    if (published.length === 2) break;
   }
-  if (taken) break;
+  if (published.length === 2) break;
 }
-if (!taken) {
-  ok('the fixture holds a course that can be published', false);
+const taken = published[0] ?? null;
+if (published.length < 2) {
+  ok('the fixture holds two courses that can be published', false);
   report();
 }
-await post(`/api/lifecycle/${KEY}/publications`, { publish: [{ course: taken.course, variant: taken.variant }] });
-file.courses[taken.course].public = true;
+await post(`/api/lifecycle/${KEY}/publications`, { publish: published.map(({ course, variant }) => ({ course, variant })) });
+for (const { course } of published) file.courses[course].public = true;
 await fetch(`/api/programmes/${KEY}`, {
   method: 'PUT', headers: { 'content-type': 'application/json' },
   body: JSON.stringify({ points: file.points, lines: file.lines, courses: file.courses }),
@@ -72,12 +80,24 @@ ok('the page comes up on the join screen', /<div class="join">/.test(device()));
 ok('...and asking who the boat is before where it is going',
   device().includes('id="j_sail"') && device().includes('id="j_name"'));
 
-ok('...with nothing below the club chosen for it, so no course is suggested that nobody picked',
-  /<select id="j_series" disabled>/.test(device())
-  && /<select id="j_course" disabled>/.test(device())
-  && /<select id="j_variant" disabled>/.test(device()));
-ok('...and the button naming what is still missing rather than sitting greyed out in silence',
-  /id="j_go" disabled>Choose a club</.test(device()));
+/*
+ * A LEVEL WITH ONE ANSWER ANSWERS ITSELF; A LEVEL WITH SEVERAL ASKS.
+ *
+ * The fixture has one club and one series, so those settle — a field that opened, showed one
+ * line and closed again having changed nothing is a question nobody could answer differently.
+ * Two courses are published, so THAT level stays a question, asked with an empty field: a
+ * default there would read as a suggestion, and on a race morning a suggestion nobody made is
+ * how a boat sails yesterday's course.
+ */
+// Read off the rendered form, which is where a settled level has to show: the value is in the
+// device's own `boat` (drive-boat.mjs asserts that half directly), and this is the screen.
+ok('the levels with one answer settle themselves',
+  device().includes(`<option value="${programme.club}" selected>`)
+  && device().includes(`<option value="${programme.series}" selected>`));
+ok('...and the level with a real choice does not, so nothing is suggested that nobody picked',
+  /<select id="j_course"><option value="" selected>Choose a course</.test(device()));
+ok('...with the button naming what is still missing rather than sitting greyed out in silence',
+  /id="j_go" disabled>Choose a course</.test(device()));
 
 $('j_sail').value = 'AUS 1';
 H('j_sail:input')({ target: { value: 'AUS 1' } });
@@ -87,22 +107,24 @@ H('j_name:input')({ target: { value: 'Bombora' } });
 // THE DRILL, one level at a time, because that is now the only way through: each `change`
 // re-renders and the next level's options appear only then.
 const pick = (field, value) => { H(`j_${field}:change`)({ target: { value } }); };
-pick('club', programme.club);
-ok('choosing a club opens the series, and nothing further', !/<select id="j_series" disabled>/.test(device())
-  && /<select id="j_course" disabled>/.test(device()));
-pick('series', programme.series);
-// Asserted HERE rather than on the first render: the course list does not exist until a series
-// has been chosen, which is the whole point of the cascade.
+// Both published courses are on offer and nothing else is: what a boat may join is exactly
+// what the club made public AND published, because what it is handed is a snapshot.
 ok('...offering only courses that are public AND published, since a client is handed a snapshot',
-  device().includes(taken.course));
+  published.every(({ course }) => device().includes(course))
+  && !device().includes('no-such-course'));
 pick('course', taken.course);
-ok('...and each level in turn opens the one below it',
-  !/<select id="j_variant" disabled>/.test(device()));
-ok('...the button still refusing while the last one is unanswered',
-  /id="j_go" disabled>Choose a variant</.test(device()));
-pick('variant', taken.variant);
+// The chosen course has ONE published design, so the variant settles the moment the course is
+// answered — which is the same fact a race's division states by leaving its variant unsaid.
+ok('...and answering it settles the single design under it, without a second question',
+  device().includes(`<option value="${taken.variant}" selected>`)
+  && /id="j_go">Join and sail</.test(device()));
 ok('...and offering to sail once the whole path is chosen',
   /id="j_go">Join and sail</.test(device()));
+
+// The mode is left at its default, which is practice — so what this file drives from here on is
+// a boat practising, and the skip buttons below belong to it.
+ok('...as practice, which is what the mode selector opens on',
+  /<option value="ANONYMOUS" selected>/.test(device()));
 
 // WHAT IS REMEMBERED IS THE BOAT, NOT THE COURSE. A sail number and a club are facts about
 // whoever is holding the phone; the series, course and variant are the decision being made, and
@@ -117,6 +139,36 @@ H('j_go:click')();
 await settle(1500);
 
 ok('joining puts the course on the screen', device().includes('<svg class="plot"'));
+
+/* ----------------------------------------------------- stepping through, in practice */
+
+// PRACTISING IS SAILING ONE MARK, then the next one. The buttons NAME the mark they land on,
+// because the reason for pressing one is to arrive at a particular mark.
+const liveLetter = () => mod.__state.client.live()?.letter ?? null;
+const first = liveLetter();
+const onward = mod.__state.client.skipTarget(1)?.letter ?? null;
+ok('a practice boat is offered the next mark without having to sail to it',
+  onward != null && device().includes(`id="skip_on">${onward}`));
+ok('...and nothing back from the first, which is where the sequence starts',
+  mod.__state.client.skipTarget(-1) === null && !device().includes('id="skip_back"'));
+
+H('skip_on:click')();
+await settle(400);
+ok('...pressing it puts that mark live', liveLetter() === onward && liveLetter() !== first);
+ok('...and offers the way back, named for where it goes',
+  device().includes(`id="skip_back">&lsaquo; ${first}`));
+H('skip_back:click')();
+await settle(400);
+ok('...which returns to the mark it came from', liveLetter() === first);
+
+// A RACE CANNOT BE STEPPED THROUGH. The client refuses it (`raceclient-test.js` pins that), and
+// the screen agrees rather than being the only thing stopping it.
+mod.__state.client.joinMode = 'RACE';
+mod.__device.render();
+ok('...and a boat sailing as RACE is offered no such thing',
+  !device().includes('id="skip_on"') && !device().includes('id="skip_back"'));
+mod.__state.client.joinMode = 'ANONYMOUS';
+mod.__device.render();
 ok('...always showing where the next mark is and how far', device().includes('BTW')
   && device().includes('DTW') && device().includes('Elapsed'));
 ok('...and NAMING the line it is steering for, which is what an instruction talks about',
