@@ -231,6 +231,13 @@ changes nothing about where a boat had to sail, and bumping the revision for it 
 course into two that cannot be compared. Built from a canonical string rather than serialised JSON,
 so adding a field cannot silently change every revision.
 
+**A record also names the RACE it was entered in, where there was one** — and that field is the
+one thing in a record the boat is not the authority on. It is stamped by the server from the
+session when the record arrives over the dialog, never read off the boat's own message: everything
+else here is a boat's account of itself and is trusted as such (dialog §1.1), but being in a race
+is an entry a committee accepted, and a boat that could name its own race could put itself in a
+results table nobody can check. Null for a record attempt or for practice.
+
 Records are filed `records/{club}/{course}/{date}/{boatId}-{HHmmss}{±hhmm}.json`. The start time is
 in the *name* so a boat may sail the same course twice in a day, and so a resubmission of the same
 run — the ordinary case, when the full track arrives later over wifi — supersedes rather than
@@ -250,6 +257,37 @@ sailed; taking the day from the boat would let one race day land in two director
 > And Jackson's `ADJUST_DATES_TO_CONTEXT_TIME_ZONE` would throw an offset away silently — an
 > `OffsetDateTime` field reading `…T00:23:12+10:00` comes back as the same instant on the wrong day,
 > with no error. Not needed here, because the club's zone and an `Instant` give the day between them.
+
+---
+
+## Reading results back
+
+**Nothing about a result is persisted; results are computed on read.** There is no results file,
+no index and no cache — what is on disk is what the boats sent, and the pages are a query over it.
+A stored result would be a second copy of the truth, free to disagree with the records it came
+from.
+
+| | |
+|---|---|
+| `GET /api/results/{club}/{series}` | the index: races with what was sent in for each, and the variants anybody has attempted |
+| `GET /api/results/{club}/{series}/race/{race}` | one race, as a finishing order |
+| `GET /api/results/{club}/{series}/variant/{course}/{variant}` | record attempts, grouped by revision |
+| `results.html` / `results.js` | the pages, open to everybody like every other read |
+
+**Two kinds of result, ranked on different things.** A **race** is a fleet sailing together on one
+afternoon, so it reads as a finishing order and its records are found by the race's own date and
+the courses its divisions name, filtered on the stamped race id — records are filed with no race
+in the path, deliberately, because a record is a run at a course and a race is something that
+sometimes happens on one. A **record attempt** stands against every other attempt at the same
+geometry whenever it was made, so those are grouped by variant and then by **revision**, which is
+the rule `JsonStore.best` already enforces: a course edited between two attempts is two courses,
+and ranking across the edit would compare different water.
+
+**The pages score nothing.** They order by elapsed time, print corrected time beside it where a
+boat declared a TCF — a multiplication anybody can check — and give no place to a boat that did
+not finish while still listing it, because a table that dropped the boats it could not rank is one
+nobody can reconcile against the fleet that started. Places, penalties, drops and protests belong
+to the club's software, which has rules for all four.
 
 ---
 

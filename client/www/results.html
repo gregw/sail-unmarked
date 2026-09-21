@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!--
+  WHAT THE BOATS SENT IN. Two kinds of result, ranked on two different things — see the note
+  above each section — and both read from a store this page never writes to.
+
+  Open to anybody, like every other read here: a club publishes its racing, and a result only
+  the club can see is a club publishing to itself.
+-->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Results &mdash; Unmarked Racing</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.bar { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; margin-bottom: 10px; }
+.bar select { font-family: var(--body); font-size: 14px; padding: 4px 6px;
+  background: var(--panel2); color: var(--ink); border: 1px solid var(--panel2); border-radius: 4px; }
+
+/* A results table is read by scanning ONE column — the time — so the numbers are mono and
+   right-aligned and everything else gets out of their way. */
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--muted); font-weight: 400; text-align: left; padding: 4px 8px 4px 0;
+  border-bottom: 1px solid var(--panel2);
+}
+td { padding: 5px 8px 5px 0; border-bottom: 1px solid var(--panel2); }
+td.num, th.num { text-align: right; font-family: var(--mono); }
+tr:last-child td { border-bottom: none; }
+.place { font-family: var(--mono); color: var(--muted); }
+
+/* A row somebody can open. The count is on the outside because it is what decides whether
+   opening it is worth the tap. */
+.row {
+  display: flex; gap: 10px; align-items: baseline; width: 100%; text-align: left;
+  background: none; border: none; border-bottom: 1px solid var(--panel2);
+  color: var(--ink); font-family: var(--body); font-size: 15px; padding: 8px 2px; cursor: pointer;
+}
+.row:hover { color: var(--line); }
+.row .sp { flex: 1; }
+.row .when, .row .count { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+.open { padding: 8px 2px 14px; }
+.rev { margin-top: 12px; }
+.rev:first-child { margin-top: 2px; }
+.rev h3 {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; color: var(--muted);
+  font-weight: 400; margin-bottom: 4px;
+}
+.dnf { color: var(--muted); }
+</style>
+</head>
+<body>
+
+<p class="kicker">Unmarked Racing</p>
+<h1>Results</h1>
+
+<div class="panel">
+  <div class="bar">
+    <label class="mono" style="font-size:11px; color:var(--muted)" for="club">CLUB</label>
+    <select id="club"></select>
+    <label class="mono" style="font-size:11px; color:var(--muted)" for="series">SERIES</label>
+    <select id="series"></select>
+    <span class="sp" style="flex:1"></span>
+    <a href="index.html" style="font-size:12px">&larr; home</a>
+  </div>
+  <p class="muted" style="font-size:12px">
+    Times are the boat's own, from its own clock, interpolated at each crossing. Nothing here
+    scores: there is no drop race, no penalty and no protest in this system, and a club's own
+    software has rules for all three. What this can be right about is what happened on the
+    water, which is what these tables are.
+  </p>
+</div>
+
+<!--
+  A RACE is a fleet sailing together on one afternoon, so it is read as a finishing order.
+-->
+<h2>Races</h2>
+<div id="races" class="panel"><span class="muted">Loading&hellip;</span></div>
+
+<!--
+  A RECORD ATTEMPT stands against every other attempt at the same geometry, whenever it was
+  made — so these are grouped by variant and then by REVISION, because a course edited between
+  two attempts is two courses and ranking across the edit would compare different water.
+-->
+<h2>Record attempts</h2>
+<div id="variants" class="panel"><span class="muted">Loading&hellip;</span></div>
+
+<script type="module" src="results.js"></script>
+
+</body>
+</html>

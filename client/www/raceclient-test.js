@@ -303,13 +303,12 @@ export function run(check) {
   const tracked = fresh(WINDWARD_LEEWARD);
   sail(tracked, { e: 0, n: -400 }, { e: 0, n: -120 });
   check('the boat leaves a track on the leg it is sailing', tracked.legTrack.length > 3);
-  // DECIMATED BY DISTANCE, not by time: a boat parked on a start line for five minutes adds one
-  // point, where every fix would add three hundred and draw nothing anybody can see.
-  check('...decimated, so a long leg is a few hundred points rather than a few thousand',
-    tracked.legTrack.length < tracked.fixes.length
-    && tracked.legTrack.every((p, i) => i === 0
-      || Math.hypot(p.x - tracked.legTrack[i - 1].x, p.y - tracked.legTrack[i - 1].y)
-        >= LEG_TRACK.everyM - 0.001));
+  // EVERY FIX, because the shape of the leg is what this is for and the shape lives between
+  // the dots. It was decimated at twenty-five metres, which on the water drew a dozen points
+  // down a whole leg. What bounds it now is a cap in POINTS, not a spacing.
+  check('...at every fix, so the shape of the leg survives rather than a dozen dots of it',
+    tracked.legTrack.length === tracked.fixes.length
+    && LEG_TRACK.everyM === 0 && LEG_TRACK.max > 1000);
 
   sail(tracked, { e: 0, n: -120 }, { e: 0, n: 120 });
   const latchedAt = tracked.crossings[tracked.crossings.length - 1];
@@ -317,8 +316,11 @@ export function run(check) {
     tracked.legTrack.length >= 1
     && Math.hypot(tracked.legTrack[0].x - latchedAt.point.x,
       tracked.legTrack[0].y - latchedAt.point.y) < 0.001);
+  const afterCross = tracked.legTrack.length;
+  sail(tracked, { e: 0, n: 120 }, { e: 0, n: 200 });
   check('...so the track behind the boat belongs to the leg it is on and no further back',
-    tracked.legTrack.length < 5);
+    tracked.legTrack.length > afterCross
+    && tracked.legTrack.length < tracked.fixes.length);
 
   /* --------------------------------------------------- stepping through, in practice */
 

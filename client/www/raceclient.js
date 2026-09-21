@@ -133,16 +133,21 @@ export const TRAIL = 120;
  * whole leg, on a picture that may be a mile across, where a fix every five seconds says as
  * much as a fix every fifth of one and there is no room to draw the difference.
  *
- * So it is decimated by DISTANCE rather than by time: a boat parked on a start line for five
- * minutes adds one point, and a boat reaching at twenty knots adds them as fast as it earns
- * them. `everyM` is a few boat lengths, which is under a pixel at most overview scales; `max`
- * is a cap for a long passage leg, and dropping the oldest is right because the point of this
- * is the recent shape of the leg rather than its beginning.
+ * <b>EVERY FIX, drawn as one pixel each.</b> It was decimated at twenty-five metres, on the
+ * reasoning that a point closer than a pixel draws nothing — and on the water that came out
+ * coarse: at overview scale a leg is a few hundred metres, so a point every twenty-five is a
+ * dozen dots with the shape of the leg missing from between them, and the shape is the whole
+ * of what this is for. A fix is a fix, and the picture of what a boat did is the fixes.
+ *
+ * `everyM` therefore admits everything at zero and stays as the knob for turning that back on
+ * if a long passage leg ever asks for it. `max` is the real bound: a cap in POINTS, which at
+ * five a second is a quarter of an hour of leg, with the oldest dropped because the recent
+ * shape of the leg is what somebody is reading.
  *
  * It starts AT the line: the first point of each leg is the interpolated crossing itself, so
  * the trail touches the mark it came from rather than starting a fix later, somewhere past it.
  */
-export const LEG_TRACK = { everyM: 25, max: 400 };
+export const LEG_TRACK = { everyM: 0, max: 4000 };
 
 /**
  * How many of those the approach view is required to keep on screen.
@@ -668,7 +673,8 @@ export class RaceClient {
    */
   trackLeg(point) {
     const last = this.legTrack[this.legTrack.length - 1];
-    if (last && Math.hypot(point.x - last.x, point.y - last.y) < LEG_TRACK.everyM) return;
+    if (last && LEG_TRACK.everyM > 0
+      && Math.hypot(point.x - last.x, point.y - last.y) < LEG_TRACK.everyM) return;
     this.legTrack.push({ x: point.x, y: point.y });
     if (this.legTrack.length > LEG_TRACK.max) this.legTrack.shift();
   }

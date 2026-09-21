@@ -1672,9 +1672,16 @@ export const OVERVIEW_INK = {
    */
   cog: 0.85,
   cogWidth: 1.5,
-  /** The track sailed since the last line. The boat's own, in the boat's own ink. */
-  trail: 0.8,
-  trailWidth: 2,
+  /**
+   * The track sailed since the last line: EVERY fix, one pixel each, in the boat's own ink.
+   *
+   * Dots rather than a line, because that is what the track is — a line joining them claims
+   * the boat went straight between one and the next, which at a fix a second it did not. One
+   * pixel is enough at overview scale and is what keeps a whole leg of them from becoming a
+   * band of ink wider than the course it is drawn on.
+   */
+  trail: 0.9,
+  trailWidth: 1,
 };
 
 /**
@@ -1916,11 +1923,15 @@ export function overview(client, options = {}) {
    * the boat is going rather than where it has been. Solid, thin, and under the hull.
    */
   if ((client.legTrack ?? []).length > 1) {
+    // ONE PATH, NOT ONE ELEMENT PER FIX: a leg at five fixes a second is thousands of them, and
+    // thousands of circles is a document the browser has to lay out rather than a shape it has
+    // to fill. Each dot is a zero-length segment, which a round cap renders as a disc of the
+    // stroke's own width — the SVG way of saying "a dot here" without a new element.
     const d = client.legTrack
-      .map((p, i) => { const q = to(p); return `${i ? 'L' : 'M'}${q.x.toFixed(1)},${q.y.toFixed(1)}`; })
-      .join(' ');
+      .map((p) => { const q = to(p); return `M${q.x.toFixed(1)},${q.y.toFixed(1)}L${q.x.toFixed(1)},${q.y.toFixed(1)}`; })
+      .join('');
     out += `<path d="${d}" fill="none" stroke="var(--ink)" stroke-width="${OVERVIEW_INK.trailWidth}"`
-      + ` stroke-linecap="round" stroke-linejoin="round" opacity="${OVERVIEW_INK.trail}"/>`;
+      + ` stroke-linecap="round" opacity="${OVERVIEW_INK.trail}"/>`;
   }
 
   if (client.point) {

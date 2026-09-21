@@ -57,6 +57,21 @@ public record CourseRecord(
      * leaves the system. Trusted like everything else a boat says about itself (§1.1).
      */
     @JsonProperty("lengthM") Double lengthM,
+    /**
+     * WHICH RACE THIS RUN WAS ENTERED IN, and the division it was entered as.
+     *
+     * <p><b>Stamped by the server from the session, never read off the boat's own message.</b>
+     * Which race a boat is in is an entry the committee accepted, so it is one of the few facts
+     * here the boat is not the authority on — and a boat that named a race it was not in would
+     * otherwise appear in that race's results. Everything else in this record is the boat's own
+     * account of itself and is trusted as such (dialog §1.1).
+     *
+     * <p>Null for a run with no race behind it, which is the ordinary case for a record attempt
+     * and for practice: this system publishes courses, and a race is a thing that sometimes
+     * happens on one.
+     */
+    @JsonProperty("race") String race,
+    @JsonProperty("division") String division,
     @JsonProperty("startTime") Instant startTime,
     @JsonProperty("finishTime") Instant finishTime,
     @JsonProperty("submittedAt") Instant submittedAt,
@@ -70,6 +85,22 @@ public record CourseRecord(
             join = JoinMode.ANONYMOUS;
         crossings = (crossings == null) ? List.of() : List.copyOf(crossings);
         fixes = (fixes == null) ? List.of() : List.copyOf(fixes);
+    }
+
+    /**
+     * The same record, entered in a race — which only the server may say. See {@link #race}.
+     *
+     * <p>A copy rather than a setter because this is a record in both senses: what a boat did
+     * is not edited after the fact, and the one thing added here is added by the only party
+     * that knows it.
+     */
+    public CourseRecord enteredIn(String inRace, String inDivision)
+    {
+        if (inRace == null && inDivision == null)
+            return this;
+        return new CourseRecord(club, series, course, courseRevision, join, boatId, boatName,
+            sailNumber, tcf, lengthM, inRace, inDivision, startTime, finishTime, submittedAt,
+            appVersion, crossings, fixes);
     }
 
     /** Elapsed seconds on the boat's own clock, or empty until it has finished. */

@@ -15,7 +15,7 @@ named is the answer.
 | Document | What it settles | Status |
 |---|---|---|
 | [`wiki/unmarked-racing-brief.html`](wiki/unmarked-racing-brief.html) | *what this is*: the screens, the formats, the diagrams. Open it in a browser — the SVGs beside it are referenced from it | provisional by its own declaration; §6's YAML is superseded |
-| [`wiki/course-model.md`](wiki/course-model.md) | lines and ends, sense vs extent, letters, leg length, ids, the record, the lifecycle as built | settled |
+| [`wiki/course-model.md`](wiki/course-model.md) | lines and ends, sense vs extent, letters, leg length, ids, the record, reading results back, the lifecycle as built | settled |
 | [`wiki/course-lifecycle.html`](wiki/course-lifecycle.html) | course / variant / snapshot, named vs ad-hoc, dirty state, publish, templates — the reasoning | settled |
 | [`wiki/client-server-dialog.md`](wiki/client-server-dialog.md) | what a boat and the server say to each other; §14 is what is built | decided, substantially built |
 | [`wiki/boat-client.md`](wiki/boat-client.md) | the two pages, the seam, the screens and the QC rules | built |
@@ -108,6 +108,7 @@ unmarked/
     screens.js                          the channel, race progress, the alerts and the start row
     schema.js / schemas/*.v1.json       the wire's schemas, and a validator small enough to ship
     race.html / race.js                 RUNNING a race: the committee's screen
+    results.html / results.js           what the boats sent in: races and record attempts
     client.html / client.js             THE TEST RIG, with the device sitting on its chart
     raceclient.js                       what a boat holds while sailing: live step, screen
     markscreen.js                       the Mark screen and the course overview, per brief §5
@@ -257,4 +258,4 @@ Course screen. Both run on a real phone's GNSS at `boat.html`. **Live place** do
   `record({track: true})` builds the fat one and the store supersedes rather than accumulates — but
   nothing yet waits for wifi and re-posts it.
 - **The handicap is carried, not applied** (open question 5).
-- **The WebSocket, `ask`, `window` and muting** — see [dialog §14.9](wiki/client-server-dialog.md).
+- **The WebSocket, `ask`, `window` and muting** — see [dialog §14.10](wiki/client-server-dialog.md).

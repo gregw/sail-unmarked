@@ -166,7 +166,22 @@ globalThis.document = {
     if (handlers.get(`document:${t}`) === fn) handlers.delete(`document:${t}`);
   },
   getElementById: (id) => { if (!els.has(id)) els.set(id, mk(id)); return els.get(id); },
-  querySelectorAll: (sel) => (sel === '[data-tab]' ? tabs : []),
+  /*
+   * The editor's tab strip is furniture this stub stands in for wholesale. Everything else is
+   * answered by asking every element that has markup in it — which is what a DOCUMENT query is
+   * in a browser, and the results page really does use one: it wires its openable rows with
+   * `document.querySelectorAll('[data-open]')` rather than from inside one container, because
+   * the rows live in two panels and there is one rule for opening them.
+   */
+  querySelectorAll(sel) {
+    if (sel === '[data-tab]') return tabs;
+    const out = [];
+    for (const element of [...els.values()]) {
+      if (!element.innerHTML) continue;
+      out.push(...element.querySelectorAll(sel));
+    }
+    return out;
+  },
 };
 // A window with a SIZE, because the phone clamps itself to one and a drag against `undefined`
 // lands at NaN — which is a position no test would catch and no browser would show.

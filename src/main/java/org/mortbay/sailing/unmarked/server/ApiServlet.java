@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -64,6 +65,10 @@ import org.slf4j.LoggerFactory;
  *   POST /api/records                                    a boat posts what it did
  *   GET  /api/records/{club}/{course}/{date}             a day's runs at a course
  *   GET  /api/best/{club}/{course}                       record attempts, quickest first
+ *
+ *   GET  /api/results/{club}/{series}                    what there is to read: races, variants
+ *   GET  /api/results/{club}/{series}/race/{race}        one race, as a finishing order
+ *   GET  /api/results/{club}/{series}/variant/{c}/{v}    record attempts, by revision
  * </pre>
  *
  * <h2>The shape of this API is the architecture</h2>
@@ -262,6 +267,21 @@ public class ApiServlet extends HttpServlet
             if (path.length == 3 && path[0].equals("best"))
             {
                 send(resp, store.best(path[1], path[2], req.getParameter("revision")));
+                return;
+            }
+            if (path.length == 3 && path[0].equals("results"))
+            {
+                results(resp, path[1], path[2]);
+                return;
+            }
+            if (path.length == 5 && path[0].equals("results") && path[3].equals("race"))
+            {
+                raceResults(resp, path[1], path[2], path[4]);
+                return;
+            }
+            if (path.length == 6 && path[0].equals("results") && path[3].equals("variant"))
+            {
+                variantResults(resp, path[1], path[2], path[4], path[5]);
                 return;
             }
             resp.sendError(404);
@@ -1327,6 +1347,213 @@ public class ApiServlet extends HttpServlet
         if (pathInfo == null || pathInfo.isBlank() || pathInfo.equals("/"))
             return new String[0];
         return pathInfo.substring(1).split("/");
+    }
+
+    /**
+     * WHAT THERE IS TO READ: this series' races, and the designs anybody has raced against.
+     *
+     * <p>Two lists because there are two kinds of result, and they are ranked on different
+     * things. A RACE is a fleet sailing together on one afternoon, so its results are that
+     * afternoon's and are read as a finishing order. A RECORD ATTEMPT stands against every
+     * other attempt at the same geometry, whenever it was made, which is why those are grouped
+     * by variant and then by revision — the store will not rank across an edit, because a
+     * course edited between two attempts is two courses.
+     *
+     * <p>Counts only. The rows themselves are a click away, because a club with a season of
+     * racing behind it would otherwise be sending its whole store to draw an index.
+     */
+    private void results(HttpServletResponse resp, String club, String series) throws IOException
+    {
+        Programme programme = programmes.programme(club, series).orElse(null);
+        if (programme == null)
+        {
+            resp.sendError(404, "No such series");
+            return;
+        }
+        List<Map<String, Object>> races = new ArrayList<>();
+        programme.races().forEach((id, race) ->
+        {
+            List<CourseRecord> sailed = recordsFor(programme, club, race, id);
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("race", id);
+            row.put("name", race.name());
+            row.put("date", race.date() == null ? null : race.date().toString());
+            row.put("format", race.format());
+            row.put("divisions", race.divisions().keySet());
+            row.put("records", sailed.size());
+            row.put("finished", sailed.stream().filter(r -> r.elapsedSeconds().isPresent()).count());
+            races.add(row);
+        });
+        // Newest first: what somebody wants from a season of racing is last Saturday.
+        races.sort(Comparator.comparing((Map<String, Object> r) ->
+            String.valueOf(r.get("date"))).reversed());
+
+        List<Map<String, Object>> variants = new ArrayList<>();
+        // Shadowing the field would be a bug waiting to happen: `ledger` is the store.
+        CourseLedger.Ledger taken = ledger.read(club);
+        programme.courses().forEach((courseId, course) -> course.variants().forEach((variantId, variant) ->
+        {
+            List<Map<String, Object>> revisions = new ArrayList<>();
+            for (CourseLedger.Entry entry : taken.of(series, courseId, variantId))
+            {
+                long attempts = store.best(club, courseId, entry.revision()).size();
+                if (attempts == 0)
+                    continue;
+                Map<String, Object> rev = new LinkedHashMap<>();
+                rev.put("revision", entry.revision());
+                rev.put("label", entry.label());
+                rev.put("takenAt", entry.takenAt());
+                rev.put("attempts", attempts);
+                revisions.add(rev);
+            }
+            if (revisions.isEmpty())
+                return;
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("course", courseId);
+            row.put("courseName", course.name());
+            row.put("variant", variantId);
+            row.put("variantName", variant.name());
+            row.put("revisions", revisions);
+            variants.add(row);
+        }));
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("club", club);
+        body.put("series", series);
+        body.put("races", races);
+        body.put("variants", variants);
+        send(resp, body);
+    }
+
+    /**
+     * One race, as a finishing order.
+     *
+     * <p><b>Ordered by elapsed time, and corrected time is offered beside it rather than
+     * instead of it.</b> This server does not score (see the class header): it has no rules for
+     * a drop race, a penalty or a protest, and a club's own software does. What it can say
+     * without pretending otherwise is what each boat's own clock recorded, which is the one
+     * thing it is uniquely able to be right about — so the elapsed times are the result here
+     * and the TCF arithmetic is shown for what it is, a multiplication anybody can check.
+     */
+    private void raceResults(HttpServletResponse resp, String club, String series, String raceId)
+        throws IOException
+    {
+        Programme programme = programmes.programme(club, series).orElse(null);
+        Race race = programme == null ? null : programme.races().get(raceId);
+        if (race == null)
+        {
+            resp.sendError(404, "No such race");
+            return;
+        }
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (CourseRecord record : recordsFor(programme, club, race, raceId))
+            rows.add(resultRow(record));
+        rows.sort(finishOrder());
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("race", raceId);
+        body.put("name", race.name());
+        body.put("date", race.date() == null ? null : race.date().toString());
+        body.put("format", race.format());
+        body.put("results", rows);
+        send(resp, body);
+    }
+
+    /**
+     * Record attempts at one variant, by revision, quickest first within each.
+     *
+     * <p>Grouped by revision rather than ranked across them, because that is the rule the store
+     * already enforces and it is the right one: two boats that sailed the same variant either
+     * side of a mark being moved did not sail the same course, and a table that put them in one
+     * column would be a table nobody could argue in front of a protest committee.
+     */
+    private void variantResults(HttpServletResponse resp, String club, String series,
+        String course, String variant) throws IOException
+    {
+        List<Map<String, Object>> groups = new ArrayList<>();
+        for (CourseLedger.Entry entry : ledger.read(club).of(series, course, variant))
+        {
+            List<Map<String, Object>> rows = new ArrayList<>();
+            for (CourseRecord record : store.best(club, course, entry.revision()))
+                rows.add(resultRow(record));
+            if (rows.isEmpty())
+                continue;
+            Map<String, Object> group = new LinkedHashMap<>();
+            group.put("revision", entry.revision());
+            group.put("label", entry.label());
+            group.put("takenAt", entry.takenAt());
+            group.put("results", rows);
+            groups.add(group);
+        }
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("course", course);
+        body.put("variant", variant);
+        body.put("revisions", groups);
+        send(resp, body);
+    }
+
+    /**
+     * The records a race was sailed under.
+     *
+     * <p>Found by the DAY and the COURSES the race names, and then filtered on the race the
+     * server stamped onto each record as it arrived. Records are filed by club, course and day
+     * with no race in the path — deliberately, because a record is a run at a course and a race
+     * is a thing that sometimes happens on one — so this is the join, and it is a small one: a
+     * race has a date and a handful of divisions.
+     */
+    private List<CourseRecord> recordsFor(Programme programme, String club, Race race, String raceId)
+    {
+        if (race.date() == null)
+            return List.of();
+        List<CourseRecord> found = new ArrayList<>();
+        java.util.Set<String> seen = new java.util.LinkedHashSet<>();
+        for (Race.Division division : race.divisions().values())
+        {
+            if (division.course() == null || !seen.add(division.course()))
+                continue;
+            for (CourseRecord record : store.day(club, division.course(), race.date()))
+            {
+                if (raceId.equals(record.race()) && record.join().published())
+                    found.add(record);
+            }
+        }
+        return found;
+    }
+
+    /** One line of a results table: who, how long, and whether the track came with it. */
+    private Map<String, Object> resultRow(CourseRecord record)
+    {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("boatId", record.boatId());
+        row.put("boatName", record.boatName());
+        row.put("sailNumber", record.sailNumber());
+        row.put("division", record.division());
+        row.put("tcf", record.tcf());
+        row.put("lengthM", record.lengthM());
+        row.put("join", record.join());
+        row.put("course", record.course());
+        row.put("revision", record.courseRevision());
+        row.put("startTime", record.startTime());
+        row.put("finishTime", record.finishTime());
+        row.put("crossings", record.crossings().size());
+        // WHETHER THE TRACK CAME WITH IT, because that is the difference between a time
+        // somebody can examine and a time they can only believe. See `CourseRecord.auditable`.
+        row.put("auditable", record.auditable());
+        OptionalLong elapsed = record.elapsedSeconds();
+        row.put("elapsedSeconds", elapsed.isPresent() ? elapsed.getAsLong() : null);
+        row.put("correctedSeconds", elapsed.isPresent() && record.tcf() != null
+            ? Math.round(elapsed.getAsLong() * record.tcf()) : null);
+        return row;
+    }
+
+    /** Finishers first and quickest first; anybody still out, or retired, after them. */
+    private Comparator<Map<String, Object>> finishOrder()
+    {
+        return Comparator.comparingLong(row ->
+        {
+            Object elapsed = row.get("elapsedSeconds");
+            return elapsed instanceof Number n ? n.longValue() : Long.MAX_VALUE;
+        });
     }
 
     private void send(HttpServletResponse resp, Object value) throws IOException

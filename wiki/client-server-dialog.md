@@ -7,7 +7,7 @@ after they have drifted apart in version.**
 > `tools/editor-drive/drive-race.mjs` defines one, joins a boat, schedules a start, postpones it,
 > re-schedules it, reports fixes and crossings, changes the course, has it acknowledged, retires
 > the boat and chains it into the next race of the day. What is deliberately NOT built is listed
-> in §14.9 below: the WebSocket (the polling transport
+> in §14.10 below: the WebSocket (the polling transport
 > carries the same envelopes), `ask`, `window`, muting, and any authentication at all. §13 lists
 > the two things deliberately DEFERRED — both defences against bad actors, both waiting until
 > there is something worth attacking.
@@ -1049,6 +1049,7 @@ somewhere to read the answer the acks would be bookkeeping nobody looks at.
 | `drive-racepage.mjs` | the committee's screen: the progress textures, the arming, the flag that applies, DNF |
 | `drive-alert.mjs` | **nothing interrupts an approach** — the same flag published twice, once away from a line and once on one |
 | `drive-racedef.mjs` | the editor's Races tab: that a race REACHES THE FILE, the chain written from the end a person thinks from, and the two ways a chain goes wrong |
+| `drive-results.mjs` | the results pages end to end — and that the race on a record is stamped from the SESSION, so a boat cannot enter itself in a race it never joined |
 | `DialogTest.java` | that every schema is in the build, and that the Java validator agrees with the JavaScript one about the subset |
 
 > **The page-level drivers exist because the protocol driver alone would ship the wiring bugs.** The one
@@ -1056,7 +1057,20 @@ somewhere to read the answer the acks would be bookkeeping nobody looks at.
 > requested a render. Two guards now, because either alone is a trap: **nothing to do is not a change**,
 > and a caller already rendering passes `notify = false`.
 
-### 14.9 What is left as TODO, deliberately
+### 14.9 The record carries the race, and the server puts it there
+
+A record arriving over the dialog is stamped with the session's race and division before it is
+filed. Everything else in it is the boat's own account of itself and is trusted as such (§1.1) —
+but which race a boat is in is an entry the committee accepted, so it is the server's to say, and
+reading it off the boat's own message would let a boat put itself in a results table nobody can
+check. It is the same line §7.1 draws between authenticating authority and trusting data, applied
+to one field.
+
+Null where there is no race behind the join, which is §8.2's case and the ordinary one for a
+record attempt. The results pages are what read it back — see
+[`course-model.md`](course-model.md).
+
+### 14.10 What is left as TODO, deliberately
 
 | | |
 |---|---|

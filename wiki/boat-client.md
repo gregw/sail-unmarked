@@ -299,11 +299,15 @@ the selector is on the overview as well and sets one setting.
   faint, because that is the thing everything else is read against.
 - **It shows the boat's own track back to the last line** (`RaceClient.legTrack`), which is the one
   question the course drawing cannot answer: not where the leg goes but where the boat has actually
-  been on it. Kept apart from the Mark screen's trail and **decimated by distance** (`LEG_TRACK`) — a
-  boat parked on a start line for five minutes adds one point — and it starts at the *interpolated
-  crossing*, so it touches the mark it came from. Reset by a crossing, a skip and a relocation: the
-  segment across a dropout is not a sailed track, which is the same reason the detectors are re-armed.
-  Drawn in the boat's own ink, because the course's colours mean leg role and the cyan dashes mean COG.
+  been on it. **Every fix, one pixel each, as dots rather than a line** — a line claims the boat went
+  straight from one fix to the next, which it did not. It was decimated at 25 m and that drew a dozen
+  points down a whole leg with the shape missing from between them; `LEG_TRACK.everyM` is 0 now and
+  remains the knob, with `max` as the real bound (a cap in points, a quarter-hour of leg at 5 Hz).
+  Drawn as one path of zero-length round-capped segments, because thousands of circles is a document
+  the browser lays out where this is a shape it fills. It starts at the *interpolated crossing*, so it
+  touches the mark it came from, and is reset by a crossing, a skip or a relocation — the segment
+  across a dropout is not a sailed track, the same reason the detectors are re-armed. In the boat's own
+  ink, because the course's colours mean leg role and the cyan dashes mean COG.
 - **The live line is marked in the live triangle's own colour**, and counts as live while *any* of its
   crossings is: it is the same piece of water either way.
 - **The COG runs out as far as the picture goes**, forward only. Here the question is what the boat is
@@ -369,6 +373,11 @@ and in `mvn test` from one file.
 ## The rig (`client.html`, `boatsim.js`)
 
 A test client that shared state with the thing it tests is a demonstration, not a test.
+
+**The simulated boat turns in half the radius it used to** (`TURN_RATE_DEG_S`, 40°/s). What that number
+really sets is a radius — speed over turn rate — and at the old twenty a boat doing twenty-five knots
+arced out nearly forty metres past a mark before it was pointing at the next one, which is time spent
+steering the simulator rather than watching the screen it exists to exercise.
 
 **GNSS error WANDERS; it does not shimmer.** Independent draws per fix make the plotted dots hop about the
 truth like nothing any receiver has produced. A real receiver sits a little way off and *stays* there, so the

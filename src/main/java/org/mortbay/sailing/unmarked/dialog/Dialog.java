@@ -252,7 +252,17 @@ public class Dialog
                 try
                 {
                     CourseRecord record = RECORDS.convertValue(
-                        message.body().get("record"), CourseRecord.class);
+                        message.body().get("record"), CourseRecord.class)
+                        /*
+                         * STAMPED WITH THE RACE FROM THE SESSION, not from the message.
+                         *
+                         * Everything else in a record is the boat's own account of itself and
+                         * is trusted as such (§1.1) — but which race it is in is an entry the
+                         * committee accepted, so it is the server's to say. Reading it off the
+                         * boat's own message would let a boat put itself in a race it never
+                         * joined, which is the one line of a results table nobody could check.
+                         */
+                        .enteredIn(session.race, session.division);
                     // Filed under the CLUB's race day, which is what the club's timezone is
                     // for — not the boat's, so a visitor on another zone lands on the same day
                     // as everybody who sailed with them.
@@ -405,6 +415,12 @@ public class Dialog
         session.club = club;
         session.series = series;
         session.tags = division == null ? List.of() : List.of(Race.tagFor(division));
+        // WHICH RACE THIS BOAT IS IN, kept so the record can be stamped with it when it
+        // arrives. It is held here rather than re-derived then, because the race a boat was
+        // entered in is settled at the moment it joined: the day may have rolled over, the
+        // definition may have been edited, and neither changes what it sailed.
+        session.race = race == null ? null : race.id();
+        session.division = division;
         if (race != null)
             session.room = room(programme, race);
         sessions.put(session.id, session);
@@ -1095,6 +1111,9 @@ public class Dialog
         public String club;
         public String series;
         public List<String> tags = List.of();
+        /** The race this boat joined, and as what. The server's fact, not the boat's. */
+        public String race;
+        public String division;
         public Double tcf;
         public String revision;
         Room room;

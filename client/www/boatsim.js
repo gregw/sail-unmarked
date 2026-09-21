@@ -143,9 +143,17 @@ export const WHITE_FRACTION = 0.06;
  * two values and would put a right-angle in the track, neither of which any receiver ever
  * sees. More to the point, the Mark screen's whole job near a line is to show the COG
  * projection moving as the helm steers, and a heading that only ever takes two values
- * cannot demonstrate that. Twenty degrees a second is a brisk tack in a dinghy.
+ * cannot demonstrate that.
+ *
+ * <b>What this number really sets is the TURNING RADIUS</b>, which is speed over turn rate: at
+ * forty degrees a second a boat doing six knots comes round in about four and a half metres and
+ * one doing twenty-five in about nineteen. It was twenty, which is a brisk tack in a dinghy and
+ * a radius twice that — and on a short course that is the rig arcing out past the next mark
+ * before it is pointing at it, which is time spent steering the simulator rather than watching
+ * the screen it exists to exercise. A tighter turn is the lesser lie here: this is the boat the
+ * rig sails, not a claim about how any real one handles.
  */
-export const TURN_RATE_DEG_S = 20;
+export const TURN_RATE_DEG_S = 40;
 
 /**
  * The simulated boat.
