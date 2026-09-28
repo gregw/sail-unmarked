@@ -912,6 +912,13 @@ function renderLines() {
     if (line.starboard?.infinite) out += faint(bx, by, bx + ux * reach, by + uy * reach);
 
     out += `<line x1="${ax.toFixed(1)}" y1="${ay.toFixed(1)}" x2="${bx.toFixed(1)}" y2="${by.toFixed(1)}" stroke="${on ? 'var(--ok)' : 'var(--line)'}" stroke-width="${on ? 4 : 2.5}" opacity="0.9"/>`;
+    // A WIDE, INVISIBLE STROKE ALONG IT to click, on the Lines tab: two and a half pixels is a
+    // line to see, not one to hit. Under the ends and the middle, which are drawn last.
+    if (state.tab === 'lines') {
+      out += `<g class="lhit" data-line="${esc(id)}" style="cursor:pointer"><line x1="${ax.toFixed(1)}"`
+        + ` y1="${ay.toFixed(1)}" x2="${bx.toFixed(1)}" y2="${by.toFixed(1)}" stroke="transparent"`
+        + ` stroke-width="14" stroke-linecap="round"/></g>`;
+    }
 
     // The wiki notation: a dot for a finite end, an arrowhead out along the line for an
     // infinite one, sitting at the defining point where the solid line gives way.
@@ -1346,6 +1353,58 @@ function renderBearings() {
   return out;
 }
 
+/**
+ * WHAT A LINE IS BECOMING while one of its ends is dragged: its length, its heading port to
+ * starboard, and the heading square to it that a forward crossing sails — each with its
+ * reciprocal, because a line has no preferred way round until a course gives it one.
+ *
+ * Beside the end under the pointer, since that is where the eye is, and for every line the
+ * dragged thing is an end of: an inline end is one line's, a named point may be several lines'.
+ * Kept inside the chart, or a line ending near an edge would put its numbers off it.
+ */
+function renderEndReadout() {
+  const drag = state.dragging;
+  if (!drag || (drag.kind !== 'end' && drag.kind !== 'point')) return '';
+  const deg = (v) => ((v % 360) + 360) % 360;
+  const three = (v) => deg(v).toFixed(0).padStart(3, '0');
+  let out = '';
+  let stack = 0;
+  for (const [id, line] of GEO.lines) {
+    const side = drag.kind === 'end'
+      ? (id === drag.id ? drag.side : null)
+      : (line.port?.at === drag.id ? 'port' : line.starboard?.at === drag.id ? 'starboard' : null);
+    if (!side) continue;
+    const port = endPosition(line.port);
+    const starboard = endPosition(line.starboard);
+    if (!port || !starboard) continue;
+    const metres = distanceM(port, starboard);
+    const heading = bearingDeg(port, starboard);
+    // Port to the west and starboard to the east is crossed forward heading north: the forward
+    // crossing is the line's heading turned 90° to port.
+    const crossing = heading - 90;
+    const rows = [
+      metres < 1852 ? `${metres} m` : `${(metres / 1852).toFixed(2)} nm`,
+      `line ${three(heading)}&deg;/${three(heading + 180)}&deg;`,
+      `&perp; ${three(crossing)}&deg;/${three(crossing + 180)}&deg;`,
+    ];
+    const [ex, ey] = state.view.toPx(side === 'port' ? port : starboard);
+    const w = 158;
+    const h = 20 + rows.length * 18;
+    const x = Math.min(Math.max(4, ex + 18), state.view.width - w - 4);
+    const y = Math.min(Math.max(4, ey + 18 + stack * (h + 6)), state.view.height - h - 4);
+    stack += 1;
+    out += `<g class="endreadout" pointer-events="none">`
+      + `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w}" height="${h}" rx="5" fill="var(--sea)"`
+      + ` fill-opacity="0.9" stroke="var(--toside)" stroke-width="1" stroke-opacity="0.5"/>`
+      + `<text x="${(x + 10).toFixed(1)}" y="${(y + 16).toFixed(1)}" font-family="var(--mono)" font-size="11"`
+      + ` fill="var(--muted)">${esc(id)}</text>`
+      + rows.map((row, i) => `<text x="${(x + 10).toFixed(1)}" y="${(y + 34 + i * 18).toFixed(1)}"`
+        + ` font-family="var(--mono)" font-size="15" fill="var(--toside)">${row}</text>`).join('')
+      + '</g>';
+  }
+  return out;
+}
+
 function renderPoints() {
   const used = inUse();
   let out = '';
@@ -1396,6 +1455,7 @@ function render() {
     renderPoints() +
     renderTransform() +
     HANDLES +
+    renderEndReadout() +
     state.view.scaleBar();
 
   // Grown under the pointer by setting the transform directly, rather than by
@@ -1458,6 +1518,7 @@ function render() {
       if (state.tab === 'lines' && state.picking) return;
       ev.stopPropagation();
       beginEdit();
+      takeLine(g.dataset.line);
       const line = GEO.lines.get(g.dataset.line);
       const end = line?.[g.dataset.side];
       state.dragging = {
@@ -1486,11 +1547,21 @@ function render() {
       render();
     });
   }
+  // A click on the line itself selects it. Not stopped: a press that turns into a drag is still
+  // the chart's pan, and a press while an end is being picked is that pick's answer.
+  for (const g of svg.querySelectorAll('.lhit')) {
+    g.addEventListener('mousedown', () => {
+      if (state.picking || state.selectedLine === g.dataset.line) return;
+      takeLine(g.dataset.line);
+      render();
+    });
+  }
   for (const g of svg.querySelectorAll('.hgrip')) {
     g.addEventListener('mousedown', (ev) => {
       if (readOnly()) return;
       ev.stopPropagation();
       beginEdit();
+      takeLine(g.dataset.line);
       state.dragging = { kind: 'hwidth', line: g.dataset.line };
       render();
     });
@@ -1500,6 +1571,7 @@ function render() {
       if (state.tab === 'lines' && state.picking) return;
       ev.stopPropagation();
       beginEdit();
+      takeLine(g.dataset.line);
       const line = GEO.lines.get(g.dataset.line);
       state.dragging = {
         kind: 'line',
@@ -2231,6 +2303,20 @@ function selectLine(id) {
   const ends = [endPosition(line?.port), endPosition(line?.starboard)].filter(Boolean);
   if (ends.length) state.view.fit(ends, FRAME_FRACTION);
   render();
+}
+
+/**
+ * Select a line FROM THE CHART: clicked, or taken hold of by an end, its middle or its width grip.
+ *
+ * Only on the Lines tab, where the form is the line's; elsewhere a line is part of a course and
+ * the form is somebody else's. And it does NOT re-frame the view the way choosing from the list
+ * does — the line is already where the pointer is, and moving the chart under a drag would put
+ * the thing being dragged somewhere else.
+ */
+function takeLine(id) {
+  if (state.tab !== 'lines' || !id || state.selectedLine === id) return;
+  state.selectedLine = id;
+  state.picking = null;
 }
 
 function lineLength(line) {

@@ -60,4 +60,45 @@ H('window:mouseup')({ clientX: 560, clientY: 380 });
 await settle(800);
 ok('the midpoint handle still drags the whole line', before && where() !== before);
 
+/* ------------------------------------------- what the line is becoming */
+
+// While an end is dragged the line's length and headings ride beside it, and go when it lets go.
+H(`${ends()[0].id}:mousedown`)({ stopPropagation() {} });
+H('window:mousemove')({ clientX: 600, clientY: 300 });
+const readout = /<g class="endreadout"[\s\S]*?<\/g>/.exec(svg())?.[0] ?? '';
+ok('dragging an end shows the line\'s length', / (m|nm)</.test(readout));
+ok('...its heading and reciprocal', /line \d{3}&deg;\/\d{3}&deg;/.test(readout));
+ok('...and the heading square to it, and its reciprocal', /&perp; \d{3}&deg;\/\d{3}&deg;/.test(readout));
+const [h1, h2] = (/line (\d{3})&deg;/.exec(readout) ?? []).slice(1).concat(/&perp; (\d{3})&deg;/.exec(readout)?.[1]).map(Number);
+ok('...which is the line turned 90° to port, the way a forward crossing sails', ((h1 - 90 + 360) % 360) === h2);
+H('window:mouseup')({ clientX: 600, clientY: 300 });
+await settle(600);
+ok('...and it goes when the end is let go', !svg().includes('endreadout'));
+
+/* ---------------------------------------------- the chart chooses the line */
+
+// Taking hold of a line on the chart is choosing it: the form follows, without the list.
+const selected = () => /id="l_id" value="([^"]*)"/.exec($('form').innerHTML)?.[1];
+const hits = () => $('map').querySelectorAll('.lhit');
+const other = hits().find((g) => g.dataset.line !== LINE)?.dataset.line;
+ok('every line on the Lines tab has something wide enough to click', hits().length > 1 && !!other);
+hits().find((g) => g.dataset.line === other).fire('mousedown', {});
+H('window:mouseup')({ clientX: 0, clientY: 0 });
+await settle(600);
+ok('clicking a line on the chart selects it in the form', selected() === other);
+ok('...and in the list above it', chosenIn('items') === other);
+
+H(`${mids()[0].id}:mousedown`)({ stopPropagation() {} });
+H('window:mouseup')({ clientX: 560, clientY: 380 });
+await settle(600);
+ok('taking hold of a line by its middle selects it too', selected() === LINE);
+
+hits().find((g) => g.dataset.line === other).fire('mousedown', {});
+H('window:mouseup')({ clientX: 0, clientY: 0 });
+await settle(600);
+H(`${ends()[0].id}:mousedown`)({ stopPropagation() {} });
+H('window:mouseup')({ clientX: 560, clientY: 380 });
+await settle(600);
+ok('...and so does taking hold of one of its ends', selected() === LINE);
+
 report();

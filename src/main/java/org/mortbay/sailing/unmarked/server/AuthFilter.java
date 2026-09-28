@@ -19,7 +19,7 @@ import org.slf4j.LoggerFactory;
  * and a reason when it fails.
  *
  * <p>It runs after the security handler, so by the time it sees a request the sign-in has
- * happened and the claims are on the session. Lifted from sail-jinx.
+ * happened and the claims are on the session.
  */
 public class AuthFilter implements Filter
 {

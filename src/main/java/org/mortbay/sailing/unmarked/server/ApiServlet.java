@@ -91,8 +91,7 @@ import org.slf4j.LoggerFactory;
  * switched off without a boat on the water noticing.
  *
  * <p>Everything readable is readable by anybody. A club publishes its results, and results
- * only people with accounts can read are results nobody reads — the same judgement
- * sail-jinx makes.
+ * only people with accounts can read are results nobody reads.
  *
  * <p><b>The officer's writes are behind a login; the boat's are deliberately not.</b> Every
  * non-GET on {@code /api/programmes}, {@code /api/lifecycle} and {@code /api/conduct} needs a

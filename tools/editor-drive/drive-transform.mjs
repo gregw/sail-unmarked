@@ -110,7 +110,9 @@ ok('...but the geometry is not where it was',
 
 /* ----------------------------------------------- headings, while it is moving */
 
-const labels = (html) => (html.match(/\d{3}&deg;\/\d{3}&deg;/g) || []);
+// Leg bearings only: the readout beside a dragged end carries the LINE's headings, which are not legs.
+const labels = (html) => (html.replace(/<g class="endreadout"[\s\S]*?<\/g>/g, '')
+  .match(/\d{3}&deg;\/\d{3}&deg;/g) || []);
 const track = (html) => /stroke-dasharray="6 4"/.test(html);
 
 ok('the track is up when nothing is moving', track($('map').innerHTML));

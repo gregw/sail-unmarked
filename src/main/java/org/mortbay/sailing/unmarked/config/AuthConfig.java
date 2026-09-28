@@ -15,9 +15,8 @@ import org.slf4j.LoggerFactory;
 /**
  * Who may run a club's racing from this server, loaded from {@code data/config/auth.yaml}.
  *
- * <p>Lifted from sail-jinx, which has this working, and narrowed to what this system asks of
- * it. The shape is deliberately the same so a club running both does not have two different
- * ideas of how to register an OAuth client.
+ * <p>Narrowed to what this system asks of a login: one OpenID Connect client, registered once
+ * with the provider, and optionally one domain whose accounts may sign in.
  *
  * <p><b>AUTHENTICATE AUTHORITY, TRUST DATA</b> — dialog §7.1, and the whole of why
  * this is asymmetric. A boat's positions and instants are trusted by design, so a login on a

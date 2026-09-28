@@ -67,9 +67,9 @@ public final class Ids
     public static final Pattern SCOPED = Pattern.compile(TOKEN + "(?:/" + TOKEN + ")*");
 
     /**
-     * A club id, which is a <b>domain</b> — {@code myc.org.au}. Dots are the whole point:
-     * clubs are keyed by domain here, in sail-jinx and in sailing-pf, so records about the
-     * same club line up across all three.
+     * A club id, which is a <b>domain</b> — {@code myc.org.au}. Dots are the whole point: a
+     * domain is the club's key wherever it is recorded, so records about the same club line
+     * up across every system that keys it that way.
      */
     public static final Pattern DOMAIN = Pattern.compile(TOKEN + "(?:\\." + TOKEN + ")*");
 

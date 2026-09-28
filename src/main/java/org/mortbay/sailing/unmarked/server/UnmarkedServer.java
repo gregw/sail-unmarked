@@ -214,8 +214,8 @@ public class UnmarkedServer
     /**
      * The client that redeems the authorisation code, with one handler taken out.
      *
-     * <p>Copied from sail-jinx, where it was earned: when the client id and secret do not match,
-     * Google's token endpoint answers <b>401 with a JSON body naming the problem</b> and no
+     * <p>When the client id and secret do not match, Google's token endpoint answers
+     * <b>401 with a JSON body naming the problem</b> and no
      * {@code WWW-Authenticate} header, because it is reporting a refusal rather than offering a
      * challenge. Jetty's {@code WWWAuthenticationProtocolHandler} sees a 401, looks for the
      * header it implies, and fails the exchange with a protocol violation — discarding the body

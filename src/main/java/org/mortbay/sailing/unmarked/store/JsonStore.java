@@ -31,8 +31,8 @@ import org.slf4j.LoggerFactory;
 
 /**
  * On-disk JSON persistence for what boats sent and what happened in a race: records,
- * archived course geometry, and race conduct. No database, following sail-jinx and
- * sailing-pf.
+ * archived course geometry, and race conduct. No database: files a person can read, copy
+ * and back up.
  *
  * <p>Layout under {@code <root>/store/}:
  * <pre>
@@ -56,8 +56,8 @@ import org.slf4j.LoggerFactory;
  * design somebody sailed has to survive being edited afterwards, or its records become
  * uninterpretable.
  *
- * <p>Three properties are not optional here, for the same reason as in sail-jinx, and one
- * more that is particular to this application:
+ * <p>Three properties are not optional for a store of evidence, and one more that is
+ * particular to this application:
  * <ul>
  *   <li><b>Atomic writes.</b> Written to a sibling {@code .tmp} and moved into place, so a
  *       crash or a full disk can never leave a half-written record where a good one was.</li>

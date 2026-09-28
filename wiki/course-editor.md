@@ -171,6 +171,14 @@ call `endEdit()` themselves before rendering; a later blur is a no-op.
 - **An inline end is dragged on the chart, and a line loose at both ends moves bodily** — by the drag,
   not to the cursor. A named end needs no handle, its point being draggable already. Neither grip appears
   on the Points tab: the tab is the scope.
+- **Dragging an end says what the line is becoming** (`renderEndReadout`): its length, its heading port to
+  starboard, and the heading square to it that a forward crossing sails, each with its reciprocal, in a
+  panel beside the end — for every line a dragged named point is an end of, too. It goes on release.
+- **The chart chooses the line** (`takeLine`): clicking a line — along a wide invisible stroke, since the
+  drawn one is too thin to hit — or taking hold of its end, its middle or its width grip selects it in the
+  list and the form. Without re-framing the view, as choosing from the list does: the line is already
+  under the pointer, and moving the chart mid-drag would put it somewhere else. A click while an end is
+  being picked is that pick's answer instead. On the Points tab a point is selected the same way.
 - Dragging a shared line's end from the Courses tab asks the same question a shared point does
   (`moveLine`); `detachLine` is the answer's ad-hoc branch, and the copy's **ends come across as they
   are**, so a named end stays named. Only the thing actually detached is detached.

@@ -21,7 +21,7 @@ display:
   boatLengthsAcross: 4
 
 server:
-  # 8081 is sailing-pf, 8082 is sail-jinx, 8888 is the sailing-pf admin connector.
+  # 8081, 8082 and 8888 are taken by the other sailing services that share this host.
   port: 8083
 
   # Reconstruct the externally-visible URL from X-Forwarded-* headers. Set true when

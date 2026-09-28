@@ -100,8 +100,8 @@ public record UnmarkedConfig(
      * what the server thinks its own address is.
      *
      * <p>{@code requestLog} writes one line per request to the ordinary log — the journal,
-     * under systemd. On by default, for the same reason as in sail-jinx: it is what tells
-     * you whether a request reached this server at all, which is the first question
+     * under systemd. On by default, because it is what tells you whether a request reached
+     * this server at all, which is the first question
      * whenever something in front of it is misbehaving. It matters more here, because the
      * clients are phones on marginal connections and "did the record arrive" is the
      * question that will actually be asked.

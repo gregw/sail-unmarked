@@ -17,8 +17,7 @@ import jakarta.servlet.http.HttpServletResponse;
  * same screens.
  *
  * <p>Resolves {@code <!-- INCLUDE foo.html -->} in HTML responses so pages can share a nav
- * fragment without a templating engine. Borrowed from sailing-pf and sail-jinx: same
- * convention, smaller surface.
+ * fragment without a templating engine.
  */
 public class StaticResourceServlet extends HttpServlet
 {

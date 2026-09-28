@@ -21,9 +21,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  *
  * <p>Filed by club and series, because that is how courses are actually organised — a
  * club's whole summer, or one series inside a season. The club is identified by its
- * <b>domain</b>, following sail-jinx and sailing-pf, which key clubs the same way: a
- * domain is globally unique, readable, independent of any source system, and club names
- * are not unique nationally.
+ * <b>domain</b>: a domain is globally unique, readable, independent of any source system,
+ * and club names are not unique nationally.
  *
  * <pre>
  *   data/config/clubs/myc.org.au/2026-summer.yaml

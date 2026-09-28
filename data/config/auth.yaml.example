@@ -14,11 +14,37 @@
 # and instants are trusted by construction, so a login there would put a name to a claim
 # nothing can check; an officer's acts are decisions imposed on a fleet, and "who did this"
 # has an answer that matters. Authenticate authority, trust data.
+#
+# ---------------------------------------------------------------------------------------------
+# GETTING A CLIENT ID AND SECRET FROM A GOOGLE CLOUD PROJECT
+#
+#   1. Go to https://console.cloud.google.com/ and create a project for the club, or choose an
+#      existing one. No API needs enabling: signing in uses only OpenID Connect, which every
+#      project has.
+#
+#   2. APIs & Services -> OAuth consent screen (shown as "Google Auth Platform" in newer
+#      consoles). Give an app name and a support email. For the audience:
+#        Internal  if the club has Google Workspace and only its own accounts should sign in;
+#        External  for any Google account — then while the app is in "Testing" only the
+#                  accounts listed as test users can sign in, so either add the officers there
+#                  or press "Publish app". Only openid, email and profile are asked for, which
+#                  are non-sensitive, so publishing needs no Google verification.
+#
+#   3. APIs & Services -> Credentials -> Create credentials -> OAuth client ID.
+#        Application type:          Web application
+#        Authorized redirect URIs:  https://<this server's host name>/auth/callback
+#                                   and, for a laptop, http://localhost:8083/auth/callback
+#      The path must be redirectPath below, and the whole URI must match exactly — scheme, host,
+#      port and path. Behind nginx it is the PUBLIC https address, not the port Jetty listens on.
+#
+#   4. Copy the Client ID and Client secret into clientId and clientSecret below. Newer consoles
+#      show the secret only once, at creation: download the JSON then, or add a new secret later
+#      under the client's page. Restart the server to pick up this file.
+# ---------------------------------------------------------------------------------------------
 
 enabled: true
 
-# Any OpenID Connect provider that publishes a discovery document. Google is the default and is
-# what sail-jinx uses, so a club running both registers one client.
+# Any OpenID Connect provider that publishes a discovery document. Google is the default.
 issuer: "https://accounts.google.com"
 
 # From the provider's console. The secret is why this file is gitignored.
@@ -28,7 +54,8 @@ clientSecret: "PUT-THE-REAL-ONE-HERE"
 # Must match the redirect URI registered with the provider, exactly.
 redirectPath: "/auth/callback"
 
-# Optional. Blank or absent means ANY account the provider will vouch for — which is what
+# Optional. Blank or absent means ANY account the provider will vouch for (with an External
+# consent screen, any Google account) — which is what
 # "restrict to any authenticated user" means and is a real setting, not a placeholder. Naming a
 # domain narrows it to a club's own Workspace, checked against the `hd` claim the provider
 # asserts rather than against anything the browser said.

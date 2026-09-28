@@ -35,9 +35,8 @@ import static org.hamcrest.Matchers.oneOf;
  * <p>A stub issuer stands in for Google: it serves the discovery document and mints an unsigned
  * id token, which is enough to complete a sign-in without a network or a real client secret —
  * Jetty's {@code JwtDecoder} base64-decodes the token and {@code OpenIdCredentials} checks the
- * issuer, audience and expiry, never a signature. The pattern is sail-jinx's, along with the
- * rest of this; what is being tested is that the constraint is genuinely in front of the right
- * things, not that Google works.
+ * issuer, audience and expiry, never a signature. What is being tested is that the constraint
+ * is genuinely in front of the right things, not that Google works.
  *
  * <p>The assertions worth reading first are the ones about what is NOT protected. A login that
  * keeps the wrong people out is easy to write and easy to check; a login that quietly also

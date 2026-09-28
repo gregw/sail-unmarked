@@ -5,9 +5,8 @@
  * and tools/run-crossing-test.mjs runs them in the Maven build. Both import this file
  * rather than copying it, so they cannot drift — add a check here and it runs in both.
  *
- * The convention is sail-jinx's scoring-test.html, for the same reason: the logic that
- * decides a result lives in JavaScript because that is where it runs, so its spec has
- * to run in the build or it rots.
+ * The logic that decides a result lives in JavaScript because that is where it runs, so
+ * its spec has to run in the build or it rots.
  */
 
 import {
