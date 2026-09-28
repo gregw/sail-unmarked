@@ -1,7 +1,6 @@
 # Sail Unmarked
 
-*Sail racing around virtual marks. Every mark is a line to be crossed, not a point to be
-rounded.*
+*Sail racing around virtual marks. The marks are virtual but the racing is real.*
 
 ---
 
@@ -20,7 +19,7 @@ Two reasons for a line rather than a point:
 - **No rounding radius to dispute.** GPS error cannot put a boat inside or outside a circle,
   because there is no circle.
 
-It also removes the work of laying marks, and makes some formats possible that were not:
+It also removes the work of laying marks, allows courses to go where you can't lay a mark, and makes some new race formats possible:
 
 | Format | What it changes |
 |---|---|

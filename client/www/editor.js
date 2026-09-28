@@ -30,7 +30,7 @@
 
 import { ROLE_COLOUR, roleColour } from './coursedraw.js';
 import { ARROW_CENTROID, LABEL, TRIANGLE, arrowHead, darken, forwardNormal, seats, stripes, track, triangle } from './coursedraw.js';
-import { envelope, geometry, outward, widthHandle, widthThrough, zone } from './handicap.js';
+import { geometry, outward, widthHandle, widthThrough, zone } from './handicap.js';
 import {
   BASEMAPS,
   MapView,
@@ -1390,7 +1390,7 @@ function render() {
   svg.innerHTML =
     state.view.tileLayer(state.basemap) +
     lines +
-    renderHandicaps(currentVariant()) +
+    renderHandicaps() +
     renderCourse() +
     renderBearings() +
     renderPoints() +
@@ -4129,30 +4129,17 @@ function handicapShape(variant) {
 }
 
 /**
- * Every handicap line's zone, striped: on the Courses tab each handicapped step's, as the course
- * places it; elsewhere every handicap line's own rectangle, with a grip on the selected one's
- * side to drag its width by. The grip is on the Lines tab alone, because the width is the line's
- * and from a course a line belongs to somebody else's courses too — which is the question the
- * tab rule exists to ask.
+ * Every handicap line's zone, striped, WHEREVER THE LINE IS DRAWN — on every tab, whether or not
+ * a course names it. The zone is the line's own rectangle, square to it, so it is the same shape
+ * in a course as out of one, and a width is something to see while the line is being placed, not
+ * only once it is in use. The grip to drag the width by is on the Lines tab's selected line alone:
+ * the width is the line's, and from a course the line belongs to other courses too, which is the
+ * question the tab rule exists to ask.
  */
-function renderHandicaps(variant) {
+function renderHandicaps() {
   const px = (position) => { const [x, y] = state.view.toPx(position); return { x, y }; };
-  let out = '';
-  if (variant) {
-    const shape = handicapShape(variant);
-    const g = shape && shape.steps.some((step) => step.handicapWidthM != null) ? geometry(shape) : null;
-    const drawn = new Set();
-    shape?.steps.forEach((step, i) => {
-      const line = step.crossings[0].line;
-      const corners = g ? envelope(shape, i, g) : null;
-      if (!corners || drawn.has(line)) return;
-      drawn.add(line);
-      out += stripes(corners.map(px), { colour: 'var(--toside)' });
-    });
-    return out;
-  }
-  if (state.tab !== 'lines' && state.tab !== 'points') return '';
   const used = inUse();
+  let out = '';
   for (const [id, line] of GEO.lines) {
     if (used && !used.lines.has(id)) continue;
     const width = trackWidth(id);

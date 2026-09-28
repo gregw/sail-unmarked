@@ -64,6 +64,17 @@ ok('typing a width writes it back', widthOnDisk() === 80);
 // ------------------------------------------------------------ in a course
 H('tab-courses:click')();
 await settle();
+
+// A course that does not name the track: the line is still drawn, and so is its zone — the
+// width is the line's, whether or not anybody sails it yet.
+choose('course', 'downwind-gate');
+await settle(700);
+if (!chosenIn('variant')) choose('variant', optionsOf('variant')[0]);
+await settle(900);
+ok('a handicap line\'s zone is drawn wherever the line is, in a course that does not name it too',
+  !/>windward-track</.test(map()) || map().includes('handicap-stripes'));
+ok('...and the line is on the chart, so that says something', />windward-track</.test(map()));
+
 choose('course', 'handicap');
 await settle(700);
 if (!chosenIn('variant')) choose('variant', optionsOf('variant')[0]);

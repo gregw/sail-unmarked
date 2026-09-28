@@ -97,9 +97,10 @@ pixels, and is a control nobody has to be taught. The rules that hold it togethe
   two lines to cross. The fold is part of the form's render key.
 - **A handicap width is set on the LINE** — the Lines tab's form, or a grip halfway along one side of
   the line's striped zone (`coursedraw.stripes`), every stripe one of the lines a boat could be given.
-  A line with a width is a track wherever it is named; a step naming one shows `hcp`, and the Courses
-  tab stripes the zone but offers no grip, since the line belongs to other courses too and changing it
-  from one is the question the tab rule asks. The header gives the TCFs a variant can take beside its
+  A line with a width is a track wherever it is named, and its zone is striped wherever the line is
+  drawn, on every tab and whether or not a course names it yet. A step naming one shows `hcp`, and the
+  Courses tab offers no grip, since the line belongs to other courses too and changing it from one is
+  the question the tab rule asks. The header gives the TCFs a variant can take beside its
   length, as the server works them out; the rest of what makes a track acceptable — that it is not a
   start or finish, the turn, the way it runs — is the server's to say, in the variant's problems. The
   step's triangle lies along a boat's line and points out along the track, because the track is where
