@@ -47,6 +47,8 @@
 
 import { BASEMAPS, MapView, wheelZoomStep } from './geo.js';
 import { boatArt, esc, hhmmss } from './markscreen.js';
+import { stripes } from './coursedraw.js';
+import { envelope, geometry } from './handicap.js';
 import { duration } from './screens.js';
 import { showWhoami } from './whoami.js';
 
@@ -284,14 +286,24 @@ function renderChart() {
         + ` opacity="${how.opacity}"${how.dash ? ` stroke-dasharray="${how.dash}"` : ''}/>`;
     }
 
-    // The lines themselves, and the letter of each step on them.
+    // The lines themselves, and the letter of each step on them. A step handicapped by distance
+    // has no one line: every boat has its own, somewhere in the striped parallelogram, and the
+    // track they are placed along is not crossed by anybody.
+    const shape = geometry(snapshot);
     steps.forEach((step, index) => {
+      const corners = step.handicapWidthM != null ? envelope(snapshot, index, shape) : null;
+      if (corners) {
+        out += stripes(corners.map((p) => { const [x, y] = state.view.toPx(p); return { x, y }; }),
+          { colour, opacity: 0.45, outline: 0.8 });
+      }
       for (const crossing of step.crossings ?? []) {
         if (crossing.port?.latitude == null) continue;
         const [px, py] = state.view.toPx(crossing.port);
         const [sx, sy] = state.view.toPx(crossing.starboard);
-        out += `<line x1="${px.toFixed(1)}" y1="${py.toFixed(1)}" x2="${sx.toFixed(1)}"`
-          + ` y2="${sy.toFixed(1)}" stroke="${colour}" stroke-width="3.5" stroke-linecap="butt"/>`;
+        if (!corners) {
+          out += `<line x1="${px.toFixed(1)}" y1="${py.toFixed(1)}" x2="${sx.toFixed(1)}"`
+            + ` y2="${sy.toFixed(1)}" stroke="${colour}" stroke-width="3.5" stroke-linecap="butt"/>`;
+        }
         const mx = (px + sx) / 2;
         const my = (py + sy) / 2;
         out += `<text x="${mx.toFixed(1)}" y="${(my - 7).toFixed(1)}" text-anchor="middle"`

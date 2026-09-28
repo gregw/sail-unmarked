@@ -29,7 +29,8 @@
  */
 
 import { ROLE_COLOUR, roleColour } from './coursedraw.js';
-import { ARROW_CENTROID, LABEL, TRIANGLE, arrowHead, darken, forwardNormal, seats, track, triangle } from './coursedraw.js';
+import { ARROW_CENTROID, LABEL, TRIANGLE, arrowHead, darken, forwardNormal, seats, stripes, track, triangle } from './coursedraw.js';
+import { envelope, geometry, widthHandle, widthThrough } from './handicap.js';
 import {
   BASEMAPS,
   MapView,
@@ -353,7 +354,12 @@ function variantFromSnapshot(snap) {
     });
     if (parts.length > 1)
       return { line: null, cross: null, gate: parts, entry: !!step.entry, notes: null };
-    return { ...(parts[0] ?? { line: null, cross: 'forward', gate: [] }), entry: !!step.entry, notes: null };
+    return {
+      ...(parts[0] ?? { line: null, cross: 'forward', gate: [] }),
+      entry: !!step.entry,
+      handicapWidthM: step.handicapWidthM ?? null,
+      notes: null,
+    };
   });
   return {
     id: snap.revision, name: snap.label, template: false, closed: !!snap.closed,
@@ -1371,6 +1377,7 @@ function render() {
   svg.innerHTML =
     state.view.tileLayer(state.basemap) +
     lines +
+    renderHandicaps(currentVariant()) +
     renderCourse() +
     renderBearings() +
     renderPoints() +
@@ -1463,6 +1470,15 @@ function render() {
         grab: null,
         amount: 0,
       };
+      render();
+    });
+  }
+  for (const g of svg.querySelectorAll('.hgrip')) {
+    g.addEventListener('mousedown', (ev) => {
+      if (readOnly()) return;
+      ev.stopPropagation();
+      beginEdit();
+      state.dragging = { kind: 'hwidth', line: g.dataset.line, step: Number(g.dataset.step) };
       render();
     });
   }
@@ -2615,6 +2631,16 @@ function dirtyDot(course) {
 }
 
 /** A variant's length for display. Server-computed, so there is one rule and not two. */
+/**
+ * The TCFs a handicapped variant can take, as the server works them out — beside the length,
+ * because it is the length that sets them. Nothing for a course nobody handicapped.
+ */
+function tcfRange(courseId, variantId) {
+  const life = lifeOf(courseId, variantId);
+  if (life.tcfMin == null || life.tcfMax == null) return '';
+  return ` &middot; TCF ${Number(life.tcfMin).toFixed(3)}&ndash;${Number(life.tcfMax).toFixed(3)}`;
+}
+
 function nm(courseId, variantId) {
   const value = state.lengths?.[courseId]?.[variantId];
   return value == null ? '&mdash; nm' : `${value.toFixed(2)} nm`;
@@ -3996,6 +4022,11 @@ function renderSteps(variant) {
             ${variant.closed && j === 0
               ? `<button data-step="${i}" class="s_entry${step.entry ? ' on' : ''}" title="a boat may begin and end a lap here">&#8635;</button>`
               : ''}
+            ${!gate && handicappable(variant, i)
+              ? `<button data-step="${i}" class="s_hcap${step.handicapWidthM != null ? ' on' : ''}" title="${step.handicapWidthM != null
+                ? `handicapped by distance: each boat's line is ${step.handicapWidthM} m wide, placed along this line by its TCF — drag the handle on the chart to change the width`
+                : 'handicap by distance: each boat is given its own line, placed along this one by its TCF'}">${step.handicapWidthM != null ? `hcp ${step.handicapWidthM}` : 'hcp'}</button>`
+              : ''}
             ${j === 0
               ? `<button data-step="${i}" class="s_up" title="earlier">&uarr;</button>
                  <button data-step="${i}" class="s_down" title="later">&darr;</button>`
@@ -4038,10 +4069,107 @@ function renderSteps(variant) {
   // crossing twice. That is what keeps the scoring from having to decide which of several
   // crossings closed the loop, and it puts the burden on course design instead.
   on('s_entry', (i) => { variant.sequence[i].entry = !variant.sequence[i].entry; });
+  on('s_hcap', (i) => {
+    const step = variant.sequence[i];
+    setHandicapWidth(variant, step.line, step.handicapWidthM != null ? null : defaultWidth(step.line));
+  });
   on('s_up', (i) => { if (i > 0) variant.sequence.splice(i - 1, 0, variant.sequence.splice(i, 1)[0]); });
   on('s_down', (i) => {
     if (i < variant.sequence.length - 1) variant.sequence.splice(i + 1, 0, variant.sequence.splice(i, 1)[0]);
   });
+}
+
+/**
+ * Whether a step may be handicapped by distance: a single line that is not a start or a finish.
+ *
+ * Offered only where it could be accepted. The server says the rest — that one use of a line
+ * is somewhere a start, that the turn is too gentle — because those depend on the whole course.
+ */
+function handicappable(variant, i) {
+  const step = variant.sequence[i];
+  if (!step || step.gate?.length || !step.line) return false;
+  if (variant.closed) return !step.entry;
+  return i > 0 && i < variant.sequence.length - 1;
+}
+
+/**
+ * Set — or with null, clear — the handicap width of EVERY step of this variant naming the line.
+ *
+ * One line is one piece of water, and a boat's line on it is one width however many times the
+ * course passes it; the server refuses a course where two passings disagree, so the editor
+ * never makes one.
+ */
+function setHandicapWidth(variant, lineId, widthM) {
+  for (const step of variant.sequence ?? []) {
+    if (step.gate?.length || step.line !== lineId) continue;
+    if (widthM == null) delete step.handicapWidthM;
+    else step.handicapWidthM = widthM;
+  }
+}
+
+/**
+ * The width a newly handicapped line starts at: whatever another passing of it already has, or
+ * a third of the track's own length — a starting shape to drag, drawn in proportion to the
+ * water it sits on, and not a number anybody should keep without looking at it.
+ */
+function defaultWidth(lineId) {
+  const variant = currentVariant();
+  const held = (variant?.sequence ?? []).find((s) => s.line === lineId && s.handicapWidthM != null);
+  if (held) return held.handicapWidthM;
+  const line = GEO.lines.get(lineId);
+  const port = endPosition(line?.port);
+  const starboard = endPosition(line?.starboard);
+  if (!port || !starboard) return 50;
+  return Math.max(10, Math.round(distanceM(port, starboard) / 3));
+}
+
+/**
+ * The variant shaped as enough of a snapshot for `handicap.js` to draw its parallelograms from:
+ * each step's lines resolved, and its handicap width. Null while anything is still unplaced.
+ */
+function handicapShape(variant) {
+  const steps = [];
+  for (const step of variant?.sequence ?? []) {
+    const crossings = [];
+    for (const alternative of alts(step)) {
+      const line = GEO.lines.get(alternative.line);
+      const port = endPosition(line?.port);
+      const starboard = endPosition(line?.starboard);
+      if (!port || !starboard) return null;
+      crossings.push({ line: alternative.line, cross: alternative.cross, port, starboard });
+    }
+    if (!crossings.length) return null;
+    steps.push({ crossings, handicapWidthM: step.gate?.length ? null : (step.handicapWidthM ?? null) });
+  }
+  return steps.length ? { closed: !!variant.closed, steps } : null;
+}
+
+/**
+ * Every handicapped line's parallelogram, striped, with a grip to drag its width by — one grip
+ * per LINE, since every passing of it shares the width.
+ */
+function renderHandicaps(variant) {
+  const shape = handicapShape(variant);
+  if (!shape || !shape.steps.some((step) => step.handicapWidthM != null)) return '';
+  const g = geometry(shape);
+  if (!g) return '';
+  const px = (position) => { const [x, y] = state.view.toPx(position); return { x, y }; };
+  let out = '';
+  const gripped = new Set();
+  shape.steps.forEach((step, i) => {
+    const corners = envelope(shape, i, g);
+    if (!corners) return;
+    out += stripes(corners.map(px), { colour: 'var(--toside)' });
+    const line = step.crossings[0].line;
+    if (readOnly() || gripped.has(line)) return;
+    gripped.add(line);
+    const at = px(widthHandle(shape, i, g));
+    out += `<g class="hgrip" data-line="${esc(line)}" data-step="${i}" style="cursor:ew-resize">`
+      + `<title>${esc(`drag to change how wide each boat's line is: ${step.handicapWidthM} m`)}</title>`
+      + `<circle cx="${at.x.toFixed(1)}" cy="${at.y.toFixed(1)}" r="6" fill="var(--sea)"`
+      + ` fill-opacity="0.92" stroke="var(--toside)" stroke-width="1.5"/></g>`;
+  });
+  return out;
 }
 
 function entryAt(variant, i, j) {
@@ -4090,7 +4218,8 @@ function syncCourseForm() {
   }
 
   const length = el('c_len');
-  if (length) length.innerHTML = nm(state.selectedCourse, state.selectedVariant);
+  if (length) length.innerHTML = nm(state.selectedCourse, state.selectedVariant)
+    + tcfRange(state.selectedCourse, state.selectedVariant);
   const track = el('c_track');
   if (track) track.checked = state.showTrack;
   const unused = el('c_unused');
@@ -4394,6 +4523,9 @@ function coursesPayload() {
           // Only meaningful on a closed course, and dropped with it — a step cannot be
           // left carrying a marking that says something untrue about an open one.
           entry: !!(v.closed && step.entry),
+          // A gate is never handicapped, so a width left on a step that became one is dropped
+          // rather than written for the server to complain about.
+          handicapWidthM: step.gate?.length ? null : (step.handicapWidthM ?? null),
           notes: step.notes ?? null,
         })),
         notes: v.notes ?? null,
@@ -4653,6 +4785,14 @@ function wire() {
       } else if (state.dragging.kind === 'end') {
         const line = GEO.lines.get(state.dragging.id);
         if (line) Object.assign(line[state.dragging.side], at);
+      } else if (state.dragging.kind === 'hwidth') {
+        // The width follows the pointer out from the track, along the parallelogram's side,
+        // and every passing of the line takes it — to the metre, like everything else.
+        const variant = currentVariant();
+        const shape = handicapShape(variant);
+        const width = shape ? widthThrough(geometry(shape), state.dragging.step, at) : null;
+        if (width != null) setHandicapWidth(variant, state.dragging.line, Math.max(1, Math.round(width)));
+        formsChanged();
       } else if (state.dragging.kind === 'line') {
         const line = GEO.lines.get(state.dragging.id);
         if (line) {
@@ -4693,6 +4833,12 @@ function wire() {
       panning = null;
       // Put it back before asking. The move is applied by the mover, which may apply it
       // here, to a fresh ad-hoc copy, or to nothing at all.
+      // A width is the variant's own and reaches nobody else's course: nothing to ask.
+      if (drag.kind === 'hwidth') {
+        render();
+        endEdit();
+        return;
+      }
       let done;
       if (drag.kind === 'point') {
         const point = GEO.points.get(drag.id);

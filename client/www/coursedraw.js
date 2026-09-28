@@ -384,3 +384,50 @@ export function arrowHead(at, angle, size = 5) {
   const right = { x: at.x - ux * size * 0.7 + uy * size * 0.8, y: at.y - uy * size * 0.7 - ux * size * 0.8 };
   return `${xy(tip)} ${xy(left)} ${xy(right)}`;
 }
+
+/**
+ * How a handicap's parallelogram is drawn: the stripes every so many pixels, and how faint.
+ *
+ * Faint on purpose. It is not a line anybody crosses — it is everywhere somebody else's line
+ * might be — and it has to read as a region under the course rather than as more course.
+ */
+export const STRIPES = { spacingPx: 6, opacity: 0.32, outline: 0.5, widthPx: 1 };
+
+/**
+ * EVERYWHERE A BOAT'S LINE CAN LIE at a handicapped step, as a striped parallelogram.
+ *
+ * `corners` are the four screen points `handicap.js`'s `envelope` gives, in order: near end to
+ * port, far end to port, far end to starboard, near end to starboard. Each stripe joins the
+ * two long sides at the same fraction along them, so it is one of the lines a boat could be
+ * given — the stripes are the possible lines themselves, not a texture laid over the shape.
+ *
+ * One drawing for the editor, the race screen and the boat's own overview, as every other
+ * part of a course is.
+ */
+export function stripes(corners, options = {}) {
+  if (!corners || corners.length !== 4) return '';
+  const colour = options.colour ?? 'var(--line)';
+  const spacing = options.spacingPx ?? STRIPES.spacingPx;
+  const [nearPort, farPort, farStarboard, nearStarboard] = corners;
+  const lengthPx = Math.max(
+    Math.hypot(farPort.x - nearPort.x, farPort.y - nearPort.y),
+    Math.hypot(farStarboard.x - nearStarboard.x, farStarboard.y - nearStarboard.y),
+  );
+  // Capped, so a parallelogram zoomed to fill a big screen is a few hundred strokes and not
+  // thousands.
+  const count = Math.min(400, Math.max(2, Math.round(lengthPx / spacing)));
+  const lerp = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+  let d = '';
+  for (let k = 0; k <= count; k += 1) {
+    const t = k / count;
+    const a = lerp(nearPort, farPort, t);
+    const b = lerp(nearStarboard, farStarboard, t);
+    d += `M${a.x.toFixed(1)},${a.y.toFixed(1)}L${b.x.toFixed(1)},${b.y.toFixed(1)}`;
+  }
+  const outline = corners.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  return `<g class="handicap-stripes" pointer-events="none">`
+    + `<polygon points="${outline}" fill="none" stroke="${colour}" stroke-width="${STRIPES.widthPx}"`
+    + ` opacity="${options.outline ?? STRIPES.outline}"/>`
+    + `<path d="${d}" fill="none" stroke="${colour}" stroke-width="${STRIPES.widthPx}"`
+    + ` opacity="${options.opacity ?? STRIPES.opacity}"/></g>`;
+}

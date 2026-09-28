@@ -135,7 +135,13 @@ export class Dialog {
       this.envelope('join', request),
     ]);
     const refused = hello.find((m) => m.type === 'rejected');
-    if (refused) throw new Error(refused.body?.text ?? refused.body?.code ?? 'refused');
+    if (refused) {
+      // The code goes with the sentence, so a caller can tell a refusal it must not route
+      // round — a handicap the course cannot place — from a server that could not be had.
+      const error = new Error(refused.body?.text ?? refused.body?.code ?? 'refused');
+      error.code = refused.body?.code ?? null;
+      throw error;
+    }
     const joined = hello.find((m) => m.type === 'joined');
     if (!joined) throw new Error('The server did not answer the join.');
     this.start();
@@ -575,9 +581,9 @@ export class Dialog {
  * turns a time into a result. Which is also why it can be wrong in the ordinary way a screen is
  * wrong — a boat whose fixes stopped ages last — without anything being at stake.
  *
- * Corrected time is elapsed × TCF where a TCF is known, which is the one handicap arithmetic
- * this system does. That is not the open question: turning a TCF into a DISTANCE is
- * (`wiki/open-questions.md`, question 5), and nothing here does that.
+ * Corrected time is elapsed × TCF where a TCF is known — except for a boat on a course
+ * handicapped by distance, which sailed its TCF in the lines it was given (`handicap.js`), so
+ * its elapsed time is already corrected and multiplying again would handicap it twice.
  */
 export function ladder(fleet, { tags = null, now = Date.now() } = {}) {
   const rows = (fleet ?? [])
@@ -588,7 +594,9 @@ export function ladder(fleet, { tags = null, now = Date.now() } = {}) {
       return {
         ...boat,
         elapsedMs,
-        correctedMs: elapsedMs != null && tcf != null ? Math.round(elapsedMs * tcf) : null,
+        correctedMs: elapsedMs == null ? null
+          : boat.distanceCorrected ? elapsedMs
+          : tcf != null ? Math.round(elapsedMs * tcf) : null,
         ageMs: boat.at ? Math.max(0, now - Date.parse(boat.at)) : null,
       };
     });

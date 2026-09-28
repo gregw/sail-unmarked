@@ -21,6 +21,7 @@ import org.mortbay.sailing.unmarked.course.ProgrammeLibrary;
 import org.mortbay.sailing.unmarked.model.Course;
 import org.mortbay.sailing.unmarked.model.CourseRecord;
 import org.mortbay.sailing.unmarked.model.CourseSnapshot;
+import org.mortbay.sailing.unmarked.model.Handicap;
 import org.mortbay.sailing.unmarked.model.Programme;
 import org.mortbay.sailing.unmarked.model.Race;
 import org.mortbay.sailing.unmarked.store.CourseLedger;
@@ -390,6 +391,15 @@ public class Dialog
             return null;
         }
 
+        // A handicapped course places each boat's line by its TCF, so one it cannot place is
+        // refused here rather than discovered on the water (§8.2).
+        String handicap = Handicap.refusal(snapshot, message.number("tcf"));
+        if (handicap != null)
+        {
+            out.add(reject("handicap", handicap));
+            return null;
+        }
+
         Race race = raceFor(programme, message.text("race"), courseId, variant);
         /*
          * THE BOAT'S OWN ANSWER FIRST, and the guess only where it did not give one.
@@ -411,6 +421,7 @@ public class Dialog
         session.boatId = session.sailNo == null || session.sailNo.isBlank()
             ? session.id : session.sailNo;
         session.tcf = message.number("tcf");
+        session.distanceCorrected = snapshot.tcfMin() != null;
         session.revision = revision;
         session.club = club;
         session.series = series;
@@ -931,6 +942,7 @@ public class Dialog
                 entry.put("name", session.name);
                 entry.put("tags", session.tags);
                 entry.put("tcf", session.tcf);
+                entry.put("distanceCorrected", session.distanceCorrected);
                 entry.put("startedAt", session.startedAt);
                 entry.put("finishedAt", session.finishedAt);
                 entry.put("outcome", session.outcome);
@@ -1117,6 +1129,8 @@ public class Dialog
         public String race;
         public String division;
         public Double tcf;
+        /** Joined a course handicapped by distance, so its TCF is already in what it sails. */
+        public boolean distanceCorrected;
         public String revision;
         Room room;
         final Deque<Envelope> queue = new ArrayDeque<>();
@@ -1218,6 +1232,7 @@ public class Dialog
             entry.put("finishedAt", finishedAt);
             entry.put("elapsedMs", elapsedMs());
             entry.put("tcf", tcf);
+            entry.put("distanceCorrected", distanceCorrected);
             entry.put("outcome", outcome);
             entry.put("at", fixAt);
             return entry;

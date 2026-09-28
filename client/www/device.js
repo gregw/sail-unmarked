@@ -26,6 +26,7 @@ import {
   OVERVIEW_ZOOM, OverviewView, PlotView, Turner, esc, markScreen, overviewPanel, viewBar,
 } from './markscreen.js';
 import { RaceClient } from './raceclient.js';
+import { personalise } from './handicap.js';
 import { Dialog } from './dialog.js';
 import { alertBanner, alertModal, chatPanel, placePanel, startRow } from './screens.js';
 
@@ -623,6 +624,11 @@ export class Device {
     if (chosenCourse) settle('variant', variants, (v) => v.variant);
     const chosenVariant = variants.find((v) => v.variant === this.boat.variant) ?? null;
     const blocked = this.hooks.blocked?.() ?? null;
+    // What this join would be handed, whichever way it was chosen — and whether it places a
+    // line per boat, in which case the TCF is not carried but sailed, within a range.
+    const offered = courseOnly ? chosenVariant : racePublished;
+    const tcfRange = offered?.tcfMin != null && offered?.tcfMax != null
+      ? `${Number(offered.tcfMin).toFixed(3)} to ${Number(offered.tcfMax).toFixed(3)}` : null;
 
     const ready = !!(club && chosenSeries && !blocked
       && (courseOnly ? (chosenCourse && chosenVariant) : (chosenRace && chosenDivision
@@ -738,10 +744,13 @@ export class Device {
             <div><label for="j_length">Length (m)</label>
               <input id="j_length" value="${esc(this.boat.lengthM)}" inputmode="decimal"></div>
           </div>
-          <p class="muted" style="font-size:11px; margin-top:4px">
-            The handicap is carried, not applied. How a TCF becomes a distance is not decided
-            yet, so no sub-line is being computed for you. The length is drawn and zoomed to,
-            and goes on the record.</p>
+          <p class="${tcfRange ? '' : 'muted'}" style="font-size:11px; margin-top:4px">
+            ${tcfRange
+    ? `This course is handicapped by distance: your TCF places your own line at its
+              handicapped marks, so everybody finishes on corrected time together. It takes a TCF
+              from ${esc(tcfRange)}.`
+    : 'The TCF is carried to the record, and the results correct your elapsed time by it.'}
+            The length is drawn and zoomed to, and goes on the record.</p>
 
           <!--
             The button SAYS WHAT IS MISSING rather than sitting greyed out with no explanation.
@@ -853,6 +862,13 @@ export class Device {
       return;
     } catch (error) {
       this.message = `Could not join: ${error.message}`;
+      // A course that cannot place a line for this TCF says so over the dialog and over REST
+      // alike, so there is nothing to fall back to — only a TCF to correct.
+      if (error.code === 'handicap') {
+        this.message = error.message;
+        this.renderJoin();
+        return;
+      }
     }
     /*
      * AND IF THERE IS NO CONVERSATION TO BE HAD, SAIL ANYWAY.
@@ -866,7 +882,8 @@ export class Device {
     try {
       const response = await fetch(
         `/api/join/${encodeURIComponent(club)}/${encodeURIComponent(series)}/${encodeURIComponent(course)}`
-        + `?variant=${encodeURIComponent(variant)}`, { method: 'POST' });
+        + `?variant=${encodeURIComponent(variant)}`
+        + (request.tcf != null ? `&tcf=${encodeURIComponent(request.tcf)}` : ''), { method: 'POST' });
       if (!response.ok) throw new Error(`${response.status} ${(await response.text()).slice(0, 200)}`);
       this.snapshot = await response.json();
       this.message = `${this.message} — sailing the course with no race behind it.`;
@@ -884,7 +901,14 @@ export class Device {
    * only way to be sure nothing was left over from the last one is not to keep any of it.
    */
   start() {
-    this.client = new RaceClient(this.snapshot, {
+    /*
+     * A COURSE HANDICAPPED BY DISTANCE IS SAILED AS THIS BOAT'S OWN COURSE: each handicapped
+     * step's track replaced by the line placed for its TCF (`handicap.js`). Worked out here, on
+     * the boat, from the published snapshot — the server has already refused a TCF it could not
+     * place, and has nothing more to say about where this boat's lines are.
+     */
+    const sailed = personalise(this.snapshot, Number(this.boat.tcf) > 0 ? Number(this.boat.tcf) : null);
+    this.client = new RaceClient(sailed, {
       boat: { ...this.boat }, joinMode: this.boat.mode,
     });
     this.plotView = new PlotView();

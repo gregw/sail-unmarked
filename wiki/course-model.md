@@ -290,20 +290,58 @@ to the club's software, which has rules for all four.
 
 ---
 
-## Distance factor: sub-lines, slid along themselves
+## Distance-corrected handicap: each boat's own line
 
-**Designed, not built.** A course designates certain lines as **handicap-adjustable**, and a boat is
-assigned its own **sub-line** on one: typically a half-infinite line running along the leg direction
-from a finite end, so that **the finite end is the knob** — pushing it further out forces the boat to
-sail further before there is any line there to cross.
+A course can take the handicap out of the time and put it into the distance: every boat starts
+together, sails a course whose length is its TCF times the nominal one, and the first boat home
+wins on handicap. Implemented in `model/Handicap.java` (what makes a course correctable, and the
+TCFs it can take) and `client/www/handicap.js` (where one boat's lines go).
 
-The server computes each boat's sub-line by sliding that line's defined points *along the line* until
-the resulting midpoint makes the leg before plus the leg after come to that boat's required distance.
-Both points slide together, so the geometry and the measurement move consistently.
+**It is a property of a step, not of a line.** A step with `handicapWidthM` does not ask a boat to
+cross the line it names. That line is the **track** each boat's own line is centred on: its midpoint
+is where a 1.000 boat's line sits, the **near** end — the one that makes the legs either side
+shortest — is the lowest TCF the course can take, and the far end is the highest. Each boat's line
+is `handicapWidthM` wide and square to the average of the directions to the steps either side, and
+every boat's line at one step has that same orientation, so together they sweep a parallelogram the
+editor stripes. Whether a line *can* be a track depends on the legs either side of it, which only a
+course has; hence the step.
 
-Note what this reuses: the midpoint is already the measurement point, and the point on an infinite end
-is already a free handle that changes no geometry. The server is in the *geometry* and still not in the
-*rounding*. What is open is how a TCF becomes a length delta — [open question 5](open-questions.md).
+```yaml
+sequence:
+  - {line: leeward, cross: forward}
+  - {line: windward-track, cross: forward, handicapWidthM: 80}
+  - {line: leeward, cross: reverse}
+```
+
+**A TCF becomes a distance linearly.** A boat of TCF *t* sails *t* × *D*, where *D* is the nominal
+length — the course as drawn, which is what a 1.000 boat sails.
+
+**One slide for the whole course.** Every handicapped step is placed at the same fraction *u* of its
+track, −1 at the near end, 0 at the midpoint and +1 at the far end, and a boat is given the *u* at
+which the course comes to *t* × *D*. That shares the correction between several tracks in proportion
+to their length, and it makes a track passed twice — the windward mark of a two-lap course — and two
+handicapped steps in a row need no special case: every leg runs between two points moving in
+straight lines, so the length is convex in *u* and one bisection finds it. The course's range is
+*L*(−1)/*D* to *L*(+1)/*D*, rounded **inward** to three places so every TCF it admits can be placed.
+
+**What the server refuses** (`Handicap.problems`, so the variant cannot be snapshotted):
+
+| Problem | Why |
+|---|---|
+| a track that is a start, finish or cycle entry anywhere in the course | one line has one width, and a start is crossed as itself |
+| a handicapped gate, or a side of one | a boat's line is one line |
+| a track with an infinite end | a finite track is what lets the designer see every line a boat could be given — nobody has to check to infinity that none of them is on an island |
+| two passings of one line with different widths | one line is one piece of water; the editor sets every passing at once |
+| a `lengthNm` on a leg into or out of a handicapped step | a fixed length cannot stretch |
+| legs more than 90° apart, at either end of the track or its middle | the line lies square to their average, and past a right angle that is a passage, not a turn |
+| a leg that gets shorter as the tracks slide out | the track has to run away from both of its neighbours |
+
+**Who works out what.** The server says which TCFs a course takes — `tcfMin`, `tcfMax` on the
+snapshot, `handicapNear` on each handicapped step — and refuses a join without a TCF or outside
+the range. **The boat places its own lines**, from the snapshot, with no network: which line it
+must cross is part of deciding its race. The record carries the lines it was given
+(`CourseRecord.handicap`), which is also what tells the results pages its elapsed time is already
+corrected, so nobody multiplies by the TCF a second time.
 
 ---
 

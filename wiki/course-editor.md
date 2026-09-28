@@ -95,6 +95,14 @@ pixels, and is a control nobody has to be taught. The rules that hold it togethe
 - **The sequence folds, and folded it still answers for itself** — how many lines and how far, the two
   questions worth asking from outside it. The count is of **rows, not steps**: a gate is one step and
   two lines to cross. The fold is part of the form's render key.
+- **`hcp` handicaps a step by distance** — offered only on a single line that is not a start, a finish
+  or a cycle entry, and it sets **every** step of the variant naming that line at once, because one
+  line is one width. On the chart the step's track draws as a striped parallelogram
+  (`coursedraw.stripes`), every stripe one of the lines a boat could be given, with a grip halfway
+  along its port side to drag the width by — to the metre, and again for every passing. The header
+  gives the TCFs the variant can take beside its length, as the server works them out; the rest of
+  what makes a track acceptable — the turn, the direction it runs — is the server's to say, in the
+  variant's problems. See [course-model.md](course-model.md#distance-corrected-handicap-each-boats-own-line).
 
 ### Three traps in the rendering
 

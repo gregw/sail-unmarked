@@ -329,7 +329,7 @@ Direction is **C→S** (client to server) or **S→C**. The schemas are the exac
 | `rejected` | S→C | `code`, `text` | any refusal, including version and schema |
 
 **`rejected` carries BOTH a code and a sentence.** The `code` is what a client branches on —
-`version`, `course`, `variant`, `unpublished`, `schema`, `record`, `internal`; the `text` is what a
+`version`, `course`, `variant`, `unpublished`, `handicap`, `schema`, `record`, `internal`; the `text` is what a
 sailor reads. Neither is sufficient alone: a code cannot be shown to somebody and a sentence cannot
 be acted on. **An unknown code falls back to the text**, which the versioning rules require anyway.
 
@@ -360,11 +360,19 @@ has to fetch before it can sail is a boat that cannot join on a flaky connection
 what was **published**, never what the editor currently holds, and a course with nothing published
 cannot be joined.
 
+**A course handicapped by distance needs the boat's TCF**, because the TCF places the boat's own
+line at each handicapped step. A join with no TCF, or one outside the snapshot's `tcfMin` to
+`tcfMax`, is `rejected` with code `handicap` and a sentence giving the range; the REST join takes
+`?tcf=` and refuses the same way, with a 409, so a device does not fall back from one refusal to
+the other. With the snapshot in hand the boat places its lines itself (`handicap.js`) — see
+[course-model.md](course-model.md#distance-corrected-handicap-each-boats-own-line). The fleet
+feed's `distanceCorrected` says a boat's elapsed time is already its corrected time.
+
 **`joined` also arrives unasked**, when a boat that has stopped racing is entered for the next race
 of the day (§12.6). Same message, same fields.
 
 **If there is no conversation to be had at all, the boat sails anyway.** The device falls back to
-`POST /api/join/{club}/{series}/{course}?variant=…`, which hands over the published snapshot and
+`POST /api/join/{club}/{series}/{course}?variant=…&tcf=…`, which hands over the published snapshot and
 nothing else, and says on screen that it is sailing with no race behind it.
 
 #### A JOIN WITH NO RACE BEHIND IT GETS NO CHANNEL, AND NOTHING ELSE LIVE

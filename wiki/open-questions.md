@@ -20,11 +20,12 @@ The numbering is stable — code and other documents refer to these by number.
 4. **Asynchronous window width.** How far apart in time boats can sail the same loop before
    differing wind and tide mean they are not racing the same course.
 
-5. **Distance-factor conversion.** The *mechanism* is designed (see
-   [course-model.md](course-model.md#distance-factor-sub-lines-slid-along-themselves)); the
-   conversion from a TCF to a length delta is not, and interacts with leg geometry and wind
-   angle. Also open: how the handicap distance is shared when a course designates several
-   adjustable lines. Until then the join screen collects a TCF and nothing applies it.
+5. **Distance-factor conversion.** *Decided and built:* a TCF of *t* sails *t* times the nominal
+   length, shared between a course's tracks by sliding them all the same fraction along — see
+   [course-model.md](course-model.md#distance-corrected-handicap-each-boats-own-line). What stays
+   open is whether a linear rule is fair across leg geometry and wind angle, which wants results
+   from the water. The TCF is declared by the boat at the join; a club entering its fleet's TCFs
+   in advance is not built.
 
 6. **The QC threshold values.** Kinematic ceiling, minimum satellites, accuracy limit — all
    configurable per series (`defaults.qc`), and all currently defaults asserted against no data.

@@ -227,6 +227,31 @@ public class JsonStoreTest
     }
 
     @Test
+    public void theLinesABoatWasGivenComeBackWithItsRecord(@TempDir Path root) throws Exception
+    {
+        // A record is the one artefact that leaves the system, and on a course handicapped by
+        // distance the lines a boat was placed on are what its result is argued from.
+        JsonStore store = new JsonStore(root);
+        store.start();
+        CourseRecord plain = record("placed", JoinMode.RACE, "2026-01-01T07:00:00Z", 3600);
+        CourseRecord.Applied applied = new CourseRecord.Applied(0.25, List.of(
+            new CourseRecord.PlacedLine(1, "top@1", "top",
+                new org.mortbay.sailing.unmarked.model.Position(-33.81, 151.27),
+                new org.mortbay.sailing.unmarked.model.Position(-33.81, 151.271))));
+        store.save(new CourseRecord(plain.club(), plain.series(), plain.course(),
+            plain.courseRevision(), plain.join(), plain.boatId(), plain.boatName(),
+            plain.sailNumber(), plain.tcf(), plain.lengthM(), null, null, plain.startTime(),
+            plain.finishTime(), plain.submittedAt(), plain.appVersion(), plain.crossings(),
+            plain.fixes(), applied), UTC);
+
+        CourseRecord back = store.day("test.example", "up-and-back",
+            java.time.LocalDate.of(2026, 1, 1)).get(0);
+        assertThat(back.distanceCorrected(), is(true));
+        assertThat(back.handicap().lines().get(0).line(), is("top@1"));
+        assertThat(back.handicap().fraction(), is(0.25));
+    }
+
+    @Test
     public void anUnfinishedRunIsNotRanked(@TempDir Path root) throws Exception
     {
         JsonStore store = new JsonStore(root);

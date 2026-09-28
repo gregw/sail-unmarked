@@ -8,18 +8,44 @@ section ends by naming the document that goes deeper.
 
 ## The idea
 
-Every mark is a **line checked by GPS** rather than a buoy checked by eyeball. A boat rounds a
-virtual mark by crossing a line, in the required direction, and its phone decides that it did and
-at what instant. Fleets already cross start lines this way; Unmarked extends it to every rounding.
+### Motive
 
-Two consequences shape everything else:
+**First, to need less on the water.** A race normally needs volunteers and boats to lay marks,
+raise flags and take times. Unmarked is meant to let a club run a race with no committee boat and
+no laid marks, or with fewer of them. Clubs can still use boats, and can mix real marks with
+virtual ones.
 
-- **RRS 18 (mark-room) never applies.** There is no zone and no inside or outside overlap to
-  adjudicate, so boats meeting near a line fall back on the Part 2 right-of-way rules. That is a
-  deliberate safety choice.
-- **Nobody has to lay a mark.** Which makes practice and record attempts on a standing course,
-  self-timed starts, and circuits a boat may join anywhere possible — see the
-  [brief](unmarked-racing-brief.html) for the formats.
+**Second, to make other race formats possible.** Once a mark costs nothing to lay, the course
+doesn't have to wait for a committee to set it up. The usual formats still work: scratch or
+pursuit starts, windward/leeward or passage courses. These also become possible:
+
+- **Practice and record attempts.** A course can stay open all the time, so a boat can sail it
+  whenever it likes. Best times on each version of the course are kept as records.
+- **Self-timed starts.** Each boat's clock starts when it crosses the start line.
+- **Circuit, join anywhere.** A course can be a loop with several entry lines. A boat starts at
+  one of them and finishes by crossing the same line again, so a boat can start and finish near
+  its home waters. This makes a new kind of interclub racing possible, with live rankings when
+  there is a network.
+- **Dynamic courses.** The committee can move or shorten a course during a race and publish the
+  change to the fleet. *Partly built:* a boat is told about the change but does not switch to the
+  new course.
+- **Distance-corrected handicap.** Each boat gets its own position for a handicap line, so that
+  the boat's handicap becomes extra distance rather than a factor on its time. All boats start
+  together, and the first one home wins on handicap. A TCF of *t* sails *t* times the course
+  → [course-model.md](course-model.md#distance-corrected-handicap-each-boats-own-line).
+
+The [brief](unmarked-racing-brief.html) §2 describes each format in more detail.
+
+### Method
+
+Every mark is a **virtual line checked by GPS** rather than a buoy checked by eyeball. A boat
+rounds a virtual mark by crossing a line in the required direction, and its phone decides that it
+did and at what instant. Fleets already cross start lines this way, and Unmarked does the same for
+every rounding.
+
+This also means that **RRS 18 (mark-room) never applies.** A line has no zone and no boat inside or
+outside at an overlap, so there is nothing to judge. Boats that meet near a line use the Part 2
+right-of-way rules instead. This is a deliberate safety choice.
 
 ---
 

@@ -82,7 +82,8 @@ covers the login and installing on a Raspberry Pi.
 A prototype that runs end to end: a race can be defined, published, joined from a phone, started,
 sailed, and read back as results. Not built yet: the native wrapper and an offline tile cache, the
 brief's Live place picture (the boat's Place screen is a ranked table), a boat switching to a
-course change mid-race, re-posting a record with its full track, and the distance-factor handicap.
+course change mid-race, re-posting a record with its full track, and a club entering its fleet's
+TCFs in advance.
 See [`wiki/open-questions.md`](wiki/open-questions.md) for what is undecided.
 
 ## Documentation

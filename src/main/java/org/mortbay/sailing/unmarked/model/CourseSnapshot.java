@@ -43,6 +43,13 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * <p>What follows is the safety property the whole lifecycle is arranged around: editing
  * named geometry can never modify a snapshot, and therefore never changes anything a boat
  * has already been handed. A published course changes only when somebody publishes.
+ *
+ * <h2>A handicapped course</h2>
+ * A step with a {@code handicapWidthM} carries its TRACK as its one crossing — the line each
+ * boat's own line is placed along — and {@code handicapNear} says which end of it the lowest
+ * TCF gets. {@code tcfMin} and {@code tcfMax} are the TCFs the course can take, and a join
+ * outside them is refused. What any one boat must cross is worked out on the boat, from these,
+ * by {@code client/www/handicap.js}; see {@link Handicap}.
  */
 public record CourseSnapshot(
     @JsonProperty("revision") String revision,
@@ -56,8 +63,19 @@ public record CourseSnapshot(
     @JsonProperty("steps") List<Step> steps,
     @JsonProperty("lengthNm") Double lengthNm,
     @JsonProperty("defaults") Programme.Detection defaults,
-    @JsonProperty("archivedAt") Instant archivedAt)
+    @JsonProperty("archivedAt") Instant archivedAt,
+    @JsonProperty("tcfMin") Double tcfMin,
+    @JsonProperty("tcfMax") Double tcfMax)
 {
+    /** A snapshot of a course with no handicapped step. */
+    public CourseSnapshot(String revision, String club, String series, String course,
+        String variant, String label, String name, boolean closed, List<Step> steps,
+        Double lengthNm, Programme.Detection defaults, Instant archivedAt)
+    {
+        this(revision, club, series, course, variant, label, name, closed, steps, lengthNm,
+            defaults, archivedAt, null, null);
+    }
+
     public CourseSnapshot
     {
         steps = (steps == null) ? List.of() : List.copyOf(steps);
@@ -65,13 +83,23 @@ public record CourseSnapshot(
             variant = CourseVariant.MAIN;
     }
 
-    /** One step: its drawn letter, whether a lap may begin here, and what must be crossed. */
+    /**
+     * One step: its drawn letter, whether a lap may begin here, and what must be crossed — or,
+     * when {@code handicapWidthM} is set, the track each boat's own line is placed along.
+     */
     public record Step(
         @JsonProperty("letter") String letter,
         @JsonProperty("entry") boolean entry,
         @JsonProperty("legNm") Double legNm,
-        @JsonProperty("crossings") List<Crossing> crossings)
+        @JsonProperty("crossings") List<Crossing> crossings,
+        @JsonProperty("handicapWidthM") Double handicapWidthM,
+        @JsonProperty("handicapNear") String handicapNear)
     {
+        public Step(String letter, boolean entry, Double legNm, List<Crossing> crossings)
+        {
+            this(letter, entry, legNm, crossings, null, null);
+        }
+
         public Step
         {
             crossings = (crossings == null) ? List.of() : List.copyOf(crossings);
@@ -115,6 +143,7 @@ public record CourseSnapshot(
         Map<String, Line> lines = variant.resolveLines(programme.lines());
         Map<String, NamedPoint> points = variant.resolvePoints(programme.points());
         double[] legs = variant.legLengthsNm(programme.lines(), programme.points());
+        Handicap.Plan plan = Handicap.plan(variant, lines, points);
 
         List<Step> steps = new ArrayList<>();
         for (int i = 0; i < variant.sequence().size(); i++)
@@ -130,13 +159,17 @@ public record CourseSnapshot(
                     end(line.port(), points), end(line.starboard(), points)));
             }
             steps.add(new Step(variant.sequenceLetter(i), variant.closed() && step.entry(),
-                Double.isNaN(legs[i]) ? null : legs[i], crossings));
+                Double.isNaN(legs[i]) ? null : legs[i], crossings,
+                plan == null ? null : step.handicapWidthM(),
+                plan == null ? null : plan.near()[i]));
         }
 
         double length = variant.lengthNm(programme.lines(), programme.points());
         CourseSnapshot unhashed = new CourseSnapshot(null, programme.club(), programme.series(),
             course.id(), variantId, null, course.name(), variant.closed(), steps,
-            Double.isNaN(length) ? null : length, programme.defaults(), null);
+            Double.isNaN(length) ? null : length, programme.defaults(), null,
+            plan == null ? null : plan.range().tcfMin(),
+            plan == null ? null : plan.range().tcfMax());
         return unhashed.withRevision(unhashed.hash());
     }
 
@@ -156,7 +189,7 @@ public record CourseSnapshot(
             ? course + "/" + stamp
             : course + "/" + variant + "/" + stamp;
         return new CourseSnapshot(revision, club, series, course, variant, named, name,
-            closed, steps, lengthNm, defaults, at);
+            closed, steps, lengthNm, defaults, at, tcfMin, tcfMax);
     }
 
     private static End end(LineEnd from, Map<String, NamedPoint> points)
@@ -169,11 +202,13 @@ public record CourseSnapshot(
     private CourseSnapshot withRevision(String revision)
     {
         return new CourseSnapshot(revision, club, series, course, variant, label, name, closed,
-            steps, lengthNm, defaults, archivedAt);
+            steps, lengthNm, defaults, archivedAt, tcfMin, tcfMax);
     }
 
     /**
      * Twelve hex characters over the geometry and the order.
+     *
+     * <p>A handicap width is geometry — it changes what a boat must cross — so it is in it.
      *
      * <p>Built from a canonical string rather than from serialised JSON, so the revision
      * cannot change because a field was added, reordered or renamed somewhere. Coordinates
@@ -193,6 +228,9 @@ public record CourseSnapshot(
         for (Step step : steps)
         {
             canonical.append("|S").append(step.entry());
+            // Only when present, so a course nobody handicapped keeps the revision it had.
+            if (step.handicapWidthM() != null)
+                canonical.append("|H").append(step.handicapWidthM());
             for (Crossing crossing : step.crossings())
             {
                 canonical.append("|C").append(crossing.line()).append(':').append(crossing.cross());

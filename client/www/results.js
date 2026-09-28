@@ -53,6 +53,9 @@ const hhmm = (iso) => {
  * dropped the boats it could not rank would be a result nobody could reconcile against who
  * started.
  *
+ * <b>A boat handicapped by distance</b> is corrected already — its TCF placed the lines it
+ * sailed — so the server gives its elapsed time as its corrected time and the cell says so.
+ *
  * <b>Corrected time appears only where there is a TCF to correct by</b>, and the column is
  * absent entirely when nobody in the table declared one — a column of dashes is a column that
  * says the page is missing something, where the truth is that this fleet races scratch.
@@ -82,7 +85,7 @@ export function table(rows, options = {}) {
         ${divisions ? `<td class="muted">${esc(row.division ?? '—')}</td>` : ''}
         <td class="num">${esc(hhmm(row.startTime))}</td>
         <td class="num">${finished ? esc(clock(row.elapsedSeconds)) : 'did not finish'}</td>
-        ${corrected ? `<td class="num">${row.correctedSeconds == null ? '—' : esc(clock(row.correctedSeconds))}</td>` : ''}
+        ${corrected ? `<td class="num">${row.correctedSeconds == null ? '—' : esc(clock(row.correctedSeconds))}${row.distanceCorrected ? '<span class="muted mono" style="font-size:10px" title="handicapped by distance: the TCF placed this boat\'s lines, so its elapsed time is its corrected time"> dist</span>' : ''}</td>` : ''}
         <td class="num">${row.crossings ?? 0}</td>
       </tr>`;
   }).join('')}

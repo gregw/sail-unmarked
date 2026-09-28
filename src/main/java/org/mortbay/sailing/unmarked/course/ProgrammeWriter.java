@@ -433,6 +433,8 @@ public final class ProgrammeWriter
                     out.append(field).append("lengthNm: ").append(trim(step.lengthNm())).append('\n');
                 if (step.entry())
                     out.append(field).append("entry: true\n");
+                if (step.handicapWidthM() != null)
+                    out.append(field).append("handicapWidthM: ").append(trim(step.handicapWidthM())).append('\n');
                 notes(out, step.notes(), indent + 4);
             }
             else
@@ -452,6 +454,8 @@ public final class ProgrammeWriter
         // a lap at this crossing.
         if (step.entry())
             out.append(", entry: true");
+        if (step.handicapWidthM() != null)
+            out.append(", handicapWidthM: ").append(trim(step.handicapWidthM()));
         return out.append('}').toString();
     }
 

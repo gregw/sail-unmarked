@@ -72,6 +72,7 @@ unmarked/
   etc/sail-unmarked.service, install.sh systemd unit and installer for the Pi
   client/www/                           THE CLIENT, packaged by Maven as /static/
     crossing.js                         >>> the crossing detector: sense, extent, QC, latch
+    handicap.js                         a boat's own lines on a course handicapped by distance
     raceclient.js                       what a boat holds while sailing: the live step, the
                                         screen rule, the record
     device.js / device.css              >>> the boat's UI: join, screens, selectors. ONE copy,
@@ -96,7 +97,7 @@ unmarked/
     model/                              records: Position, NamedPoint, LineEnd, Line, Direction,
                                         CourseStep, CourseVariant, Course, Race, Programme,
                                         CourseSnapshot, CourseRecord, CrossingEvent, Fix,
-                                        FixVerdict, JoinMode, Ids, Geo
+                                        FixVerdict, JoinMode, Ids, Geo, Handicap
     course/ProgrammeLibrary.java        loads and validates the series files; creates, renames
     course/ProgrammeWriter.java         splices YAML rather than serialising it
     store/JsonStore.java                records, archived geometry, conduct; atomic, journalled
@@ -184,8 +185,9 @@ service user, `/opt/sail-unmarked`, `/var/lib/sail-unmarked` — carry the `sail
 
 Not built: the Capacitor wrapper and an offline tile cache; the brief's Live place picture; caching
 a joined race across a reload; the boat switching to a course change or to the next race's course;
-re-posting a record with its track; the WebSocket, `ask`, `window` and muting; the distance-factor
-handicap. The dialog's list, with reasons, is [dialog §14](wiki/client-server-dialog.md#14-where-it-lives-how-it-is-tested-and-what-is-not-built).
+re-posting a record with its track; the WebSocket, `ask`, `window` and muting; a club entering its
+fleet's TCFs in advance, rather than each boat declaring its own at the join. The dialog's list,
+with reasons, is [dialog §14](wiki/client-server-dialog.md#14-where-it-lives-how-it-is-tested-and-what-is-not-built).
 
 Not decided: [`wiki/open-questions.md`](wiki/open-questions.md). None of those should be answered
 by asserting a number in code.

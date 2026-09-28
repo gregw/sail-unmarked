@@ -306,6 +306,9 @@ export class RaceClient {
         line: crossing.line,
         required: sense(crossing.cross),
         midpoint: midpointOf(crossing),
+        // On a step handicapped by distance, everywhere ANY boat's line may lie. Drawn faintly
+        // under this boat's own line so that a boat rounding somewhere else is no surprise.
+        envelope: step.envelope ? step.envelope.map((p) => toLocal(this.origin, p)) : null,
         prepared: prepareLine({
           id: crossing.line,
           port: crossing.port,
@@ -1132,6 +1135,11 @@ export class RaceClient {
       boatName: this.boat?.name ?? null,
       sailNumber: this.boat?.sail ?? null,
       tcf: Number(this.boat?.tcf) > 0 ? Number(this.boat.tcf) : null,
+      // THE LINES THIS BOAT WAS GIVEN, where the course is handicapped by distance: what makes
+      // its elapsed time already corrected, and what a protest over one of them is argued from.
+      handicap: snapshot.handicap
+        ? { fraction: snapshot.handicap.fraction, lines: snapshot.handicap.lines }
+        : null,
       // Carried for whoever scores it: a length is what a handicapper and a protest both ask
       // for first, and it is the one fact about the boat this application knows precisely.
       lengthM: this.boatLengthM,

@@ -597,6 +597,32 @@ public class ProgrammeWriterTest
     }
 
     @Test
+    public void aHandicapWidthIsWrittenAndReadBack() throws Exception
+    {
+        // A new field in the programme file has to reach the disk and come back, inline and
+        // in block form both; a field the writer drops works on screen and nowhere else.
+        Map<String, Course> courses = new LinkedHashMap<>();
+        courses.put("handicap", flat("handicap", "Handicap", false, null,
+            new CourseStep("start", Direction.FORWARD, null, null, false, null),
+            new CourseStep("top", Direction.FORWARD, null, null, false, null, 60.0),
+            new CourseStep("bottom", Direction.FORWARD, null, null, false, "Noted.", 42.5),
+            new CourseStep("start", Direction.FORWARD, null, null, false, null)));
+        String yaml = ProgrammeWriter.emitCourses(courses);
+        assertThat(yaml, containsString("      - {line: top, cross: forward, handicapWidthM: 60}\n"));
+        assertThat(yaml, containsString("        handicapWidthM: 42.5\n"));
+        assertThat(yaml, containsString("      - {line: start, cross: forward}\n"));
+
+        CourseVariant back = new com.fasterxml.jackson.databind.json.JsonMapper.Builder(
+            new com.fasterxml.jackson.databind.json.JsonMapper(
+                new com.fasterxml.jackson.dataformat.yaml.YAMLFactory()))
+            .build()
+            .readValue(yaml, Programme.class).courses().get("handicap").variant(CourseVariant.MAIN);
+        assertThat(back.sequence().get(1).handicapWidthM(), is(60.0));
+        assertThat(back.sequence().get(2).handicapWidthM(), is(42.5));
+        assertThat(back.sequence().get(0).handicapped(), is(false));
+    }
+
+    @Test
     public void aCourseWithNoVariantsStaysThatWayAcrossAWrite() throws Exception
     {
         // A course has no design before its first variant and may have none after its last

@@ -27,7 +27,7 @@
  * exercised without a screen.
  */
 
-import { LABEL, ROLE_COLOUR, TRIANGLE, arrowHead, forwardNormal, seats, track, triangle } from './coursedraw.js';
+import { LABEL, ROLE_COLOUR, TRIANGLE, arrowHead, forwardNormal, seats, stripes, track, triangle } from './coursedraw.js';
 import { BASEMAPS, MapView, mercX, mercY } from './geo.js';
 import { fromLocal } from './crossing.js';
 import { TRAIL_IN_VIEW, bearingLocal, clock } from './raceclient.js';
@@ -888,7 +888,10 @@ export function plot(state, options = {}) {
   });
   const to = projector(centre, up, scale, width, height);
 
-  let out = '';
+  // EVERYWHERE ANYBODY'S LINE MAY BE, on a step handicapped by distance, faintly and first:
+  // this boat's line is its own, and a boat crossing somewhere else in the stripes is crossing
+  // its own.
+  let out = state.watched.envelope ? stripes(state.watched.envelope.map(to)) : '';
 
   // How far an infinite end is run out before the viewport clips it: the diagonal, so it
   // reaches the corner whichever way the line lies.
@@ -1862,6 +1865,13 @@ export function overview(client, options = {}) {
   }
 
   let out = background;
+  // Each handicapped step's parallelogram under everything else: this boat's own line is drawn
+  // over it, and the stripes say that the other boats' lines are somewhere in there too.
+  for (const step of client.steps) {
+    for (const crossing of step.crossings) {
+      if (crossing.envelope) out += stripes(crossing.envelope.map(to));
+    }
+  }
   for (const [, uses] of byLine) {
     const a = to(uses[0].crossing.prepared.port);
     const b = to(uses[0].crossing.prepared.starboard);

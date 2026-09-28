@@ -24,6 +24,7 @@ const SPECS = [
   'dialog-test.js',
   'raceclient-test.js',
   'markscreen-test.js',
+  'handicap-test.js',
 ];
 
 let total = 0;

@@ -46,7 +46,11 @@ public record CourseRecord(
     @JsonProperty("boatId") String boatId,
     @JsonProperty("boatName") String boatName,
     @JsonProperty("sailNumber") String sailNumber,
-    /** Declared by the boat when it joined, if it declared one. Applied by nobody here. */
+    /**
+     * Declared by the boat when it joined, if it declared one. Applied by nobody here — except
+     * on a course handicapped by distance, where the boat applied it to the lines it was given
+     * and {@link #handicap} says so.
+     */
     @JsonProperty("tcf") Double tcf,
     /**
      * How long the boat is, in metres, as it declared when it joined.
@@ -77,8 +81,49 @@ public record CourseRecord(
     @JsonProperty("submittedAt") Instant submittedAt,
     @JsonProperty("appVersion") String appVersion,
     @JsonProperty("crossings") List<CrossingEvent> crossings,
-    @JsonProperty("fixes") List<Fix> fixes)
+    @JsonProperty("fixes") List<Fix> fixes,
+    /**
+     * THE LINES THIS BOAT WAS GIVEN, on a course handicapped by distance; null on any other.
+     *
+     * <p>They follow from the snapshot and the TCF, and are written down anyway: a result has
+     * to be explicable from this record alone, long after the code that placed them has
+     * changed. And they are what says the TCF has already been applied — in the distance — so
+     * nobody multiplies the elapsed time by it a second time.
+     */
+    @JsonProperty("handicap") Applied handicap)
 {
+    /** The lines placed for a boat's TCF: how far along the tracks, and each line itself. */
+    public record Applied(
+        @JsonProperty("fraction") Double fraction,
+        @JsonProperty("lines") List<PlacedLine> lines)
+    {
+        public Applied
+        {
+            lines = (lines == null) ? List.of() : List.copyOf(lines);
+        }
+    }
+
+    /** One boat's line at one handicapped step, and the track it was placed along. */
+    public record PlacedLine(
+        @JsonProperty("step") int step,
+        @JsonProperty("line") String line,
+        @JsonProperty("track") String track,
+        @JsonProperty("port") Position port,
+        @JsonProperty("starboard") Position starboard)
+    {
+    }
+
+    /** A record of a course nobody handicapped by distance. */
+    public CourseRecord(String club, String series, String course, String courseRevision,
+        JoinMode join, String boatId, String boatName, String sailNumber, Double tcf,
+        Double lengthM, String race, String division, Instant startTime, Instant finishTime,
+        Instant submittedAt, String appVersion, List<CrossingEvent> crossings, List<Fix> fixes)
+    {
+        this(club, series, course, courseRevision, join, boatId, boatName, sailNumber, tcf,
+            lengthM, race, division, startTime, finishTime, submittedAt, appVersion, crossings,
+            fixes, null);
+    }
+
     public CourseRecord
     {
         if (join == null)
@@ -100,7 +145,7 @@ public record CourseRecord(
             return this;
         return new CourseRecord(club, series, course, courseRevision, join, boatId, boatName,
             sailNumber, tcf, lengthM, inRace, inDivision, startTime, finishTime, submittedAt,
-            appVersion, crossings, fixes);
+            appVersion, crossings, fixes, handicap);
     }
 
     /** Elapsed seconds on the boat's own clock, or empty until it has finished. */
@@ -110,6 +155,13 @@ public record CourseRecord(
         if (startTime == null || finishTime == null)
             return OptionalLong.empty();
         return OptionalLong.of(finishTime.getEpochSecond() - startTime.getEpochSecond());
+    }
+
+    /** True when its TCF went into the distance sailed, so its elapsed time is already corrected. */
+    @JsonIgnore
+    public boolean distanceCorrected()
+    {
+        return handicap != null;
     }
 
     /** True when the full track came with it, so a contested crossing can be examined. */

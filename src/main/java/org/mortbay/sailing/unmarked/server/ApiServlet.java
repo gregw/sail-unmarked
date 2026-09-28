@@ -33,6 +33,7 @@ import org.mortbay.sailing.unmarked.model.Programme;
 import org.mortbay.sailing.unmarked.model.Race;
 import org.mortbay.sailing.unmarked.model.CourseRecord;
 import org.mortbay.sailing.unmarked.model.CourseSnapshot;
+import org.mortbay.sailing.unmarked.model.Handicap;
 import org.mortbay.sailing.unmarked.store.CourseLedger;
 import org.mortbay.sailing.unmarked.store.JsonStore;
 import org.slf4j.Logger;
@@ -361,7 +362,7 @@ public class ApiServlet extends HttpServlet
         String[] path = split(req.getPathInfo());
         if (path.length == 4 && path[0].equals("join"))
         {
-            join(resp, path[1], path[2], path[3], req.getParameter("variant"));
+            join(resp, path[1], path[2], path[3], req.getParameter("variant"), req.getParameter("tcf"));
             return;
         }
         if (path.length == 1 && path[0].equals("programmes"))
@@ -676,10 +677,11 @@ public class ApiServlet extends HttpServlet
      * nothing else — no session, no race, no channel.
      *
      * <p>Nothing about the boat is recorded by joining. Who sailed, and why, arrives with
-     * the record afterwards.
+     * the record afterwards. The one thing asked is {@code ?tcf=}, and only a handicapped
+     * course needs it: it is refused here exactly as the dialog refuses it.
      */
     private void join(HttpServletResponse resp, String club, String series, String courseId,
-        String variantId) throws IOException
+        String variantId, String tcfParam) throws IOException
     {
         Programme programme = programmes.programme(club, series).orElse(null);
         Course course = programme == null ? null : programme.courses().get(courseId);
@@ -713,6 +715,22 @@ public class ApiServlet extends HttpServlet
         if (published == null)
         {
             resp.sendError(500, "Published revision " + revision + " is missing from the store");
+            return;
+        }
+        Double tcf = null;
+        try
+        {
+            tcf = tcfParam == null || tcfParam.isBlank() ? null : Double.valueOf(tcfParam.trim());
+        }
+        catch (NumberFormatException e)
+        {
+            resp.sendError(400, "tcf '" + tcfParam + "' is not a number");
+            return;
+        }
+        String handicap = Handicap.refusal(published, tcf);
+        if (handicap != null)
+        {
+            resp.sendError(409, handicap);
             return;
         }
         send(resp, published);
@@ -1011,6 +1029,9 @@ public class ApiServlet extends HttpServlet
                 row.put("adhocLines", variant.lines().keySet());
                 row.put("revision", now == null ? null : now.revision());
                 row.put("lengthNm", Double.isNaN(nm) ? null : nm);
+                // The TCFs a handicapped variant can take, as a snapshot of it now would say.
+                row.put("tcfMin", now == null ? null : now.tcfMin());
+                row.put("tcfMax", now == null ? null : now.tcfMax());
                 row.put("state", state(variant.template(), problems, now, latest));
                 row.put("latest", latest);
                 row.put("published", publishedRevision);
@@ -1273,6 +1294,13 @@ public class ApiServlet extends HttpServlet
                     {
                         offer.put("lengthNm", snap.lengthNm());
                         offer.put("steps", snap.steps().size());
+                        // So the join screen can say what TCFs the course takes before a
+                        // boat asks, and the refusal is the rare case rather than the lesson.
+                        if (snap.tcfMin() != null)
+                        {
+                            offer.put("tcfMin", snap.tcfMin());
+                            offer.put("tcfMax", snap.tcfMax());
+                        }
                     });
                     offers.add(offer);
                 });
@@ -1549,8 +1577,15 @@ public class ApiServlet extends HttpServlet
         row.put("auditable", record.auditable());
         OptionalLong elapsed = record.elapsedSeconds();
         row.put("elapsedSeconds", elapsed.isPresent() ? elapsed.getAsLong() : null);
-        row.put("correctedSeconds", elapsed.isPresent() && record.tcf() != null
-            ? Math.round(elapsed.getAsLong() * record.tcf()) : null);
+        // A boat handicapped by distance sailed its TCF already: its elapsed time IS its
+        // corrected time, and multiplying by the TCF again would handicap it twice.
+        row.put("distanceCorrected", record.distanceCorrected());
+        Long corrected = null;
+        if (elapsed.isPresent() && record.distanceCorrected())
+            corrected = elapsed.getAsLong();
+        else if (elapsed.isPresent() && record.tcf() != null)
+            corrected = Math.round(elapsed.getAsLong() * record.tcf());
+        row.put("correctedSeconds", corrected);
         return row;
     }
 

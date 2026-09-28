@@ -129,23 +129,6 @@ public record CourseVariant(
     }
 
     /**
-     * True when some line on this variant can carry a per-boat sub-line, which is what a
-     * distance-corrected race needs.
-     *
-     * <p>A half-infinite line is the shape that works: its finite end is the knob, so
-     * pushing that end out along the bearing makes a boat sail further before there is any
-     * line to cross. A finite line has no such freedom.
-     */
-    public boolean hasAdjustableLine(Map<String, Line> club)
-    {
-        Map<String, Line> all = resolveLines(club);
-        return sequence.stream()
-            .flatMap(step -> step.alternatives().stream())
-            .map(step -> all.get(step.line()))
-            .anyMatch(line -> line != null && line.halfInfinite());
-    }
-
-    /**
      * The length of each leg in nautical miles, one per step; the first is
      * {@link Double#NaN} because nothing precedes the start. A leg the course could not
      * measure and did not override is also NaN, and is reported by {@link #problems}.
@@ -288,6 +271,7 @@ public record CourseVariant(
             else if (legs[i] <= 0 && !(closed && i == 0))
                 problems.add(at + " measures zero; two steps share a reference point");
         }
+        problems.addAll(Handicap.problems(this, where, all, allPoints));
         return problems;
     }
 }
