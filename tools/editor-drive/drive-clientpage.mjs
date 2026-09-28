@@ -99,6 +99,43 @@ ok('...and the level with a real choice does not, so nothing is suggested that n
 ok('...with the button naming what is still missing rather than sitting greyed out in silence',
   /id="j_go" disabled>Choose a course</.test(device()));
 
+/*
+ * PUBLISHED AFTER THE PAGE LOADED, and joinable without reloading it. Opening a level reads its
+ * lists again — opening, because a level with one answer settles itself and offers no other
+ * option to change to, so opening it is the only gesture there is. And nothing is redrawn under
+ * an open level, whose list a redraw would close; it is drawn when the level lets go.
+ */
+// A copy of a course already on offer, under a new id: the fixture has only the two courses
+// published above, and what is under test is that a NEW one appears, not what it is.
+const late = { course: 'published-late', variant: published[0].variant };
+file.courses[late.course] = JSON.parse(JSON.stringify(file.courses[published[0].course]));
+await fetch(`/api/programmes/${KEY}`, {
+  method: 'PUT', headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ points: file.points, lines: file.lines, courses: file.courses }),
+});
+await post(`/api/lifecycle/${KEY}/snapshots`, late);
+if (late) {
+  await post(`/api/lifecycle/${KEY}/publications`, { publish: [late] });
+  file.courses[late.course].public = true;
+  await fetch(`/api/programmes/${KEY}`, {
+    method: 'PUT', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ points: file.points, lines: file.lines, courses: file.courses }),
+  });
+  const offered = () => /<select id="j_course">[\s\S]*?<\/select>/.exec(device())?.[0] ?? '';
+  ok('a course published after the page loaded is not offered yet', !offered().includes(`value="${late.course}"`));
+  document.activeElement = $('j_series');
+  H('j_series:focus')();
+  await settle(800);
+  ok('...and opening the series reads it, but draws nothing under the open list',
+    !offered().includes(`value="${late.course}"`));
+  document.activeElement = null;
+  H('j_series:blur')();
+  await settle(200);
+  ok('...and when the series lets go, the new course is on offer', offered().includes(`value="${late.course}"`));
+} else {
+  ok('the fixture holds a third course to publish late', false);
+}
+
 $('j_sail').value = 'AUS 1';
 H('j_sail:input')({ target: { value: 'AUS 1' } });
 $('j_name').value = 'Bombora';
@@ -480,7 +517,33 @@ H('o_basemap:change')({ target: { value: 'chart', blur: () => { document.activeE
 await settle(300);
 ok('...and draws one when it is, without a single call of its own',
   overviewSvg().includes('<image'));
-H('o_basemap:change')({ target: { value: 'none', blur: () => { document.activeElement = null; } } });
+
+// THE SLIDER, which is the chart's brightness while there is a chart. Dragging changes the
+// layer in place — the panel is held while the slider has focus — and letting go renders.
+const released = { blur: () => { document.activeElement = null; } };
+H('o_ink:change')({ target: { value: '100', ...released } });
+await settle(300);
+ok('the slider turned all the way up draws the chart at full strength',
+  /class="basemap"[^>]*opacity="1"/.test(overviewSvg()));
+H('o_ink:change')({ target: { value: '0', ...released } });
+await settle(300);
+ok('...and all the way down does not draw it at all', !overviewSvg().includes('<image'));
+H('o_ink:change')({ target: { value: '30', ...released } });
+await settle(300);
+
+H('o_basemap:change')({ target: { value: 'none', ...released } });
+await settle(300);
+ok('with no chart the slider asks how light the background is instead',
+  /aria-label="Background lightness"/.test(device()));
+ok('...which starts dark', /class="basemap"[^>]*fill-opacity="0"/.test(overviewSvg()));
+H('o_ink:change')({ target: { value: '100', ...released } });
+await settle(300);
+ok('...and goes all the way to white', /class="basemap"[^>]*fill-opacity="1"/.test(overviewSvg()));
+H('o_basemap:change')({ target: { value: 'chart', ...released } });
+await settle(300);
+ok('the chart keeps its own brightness, separate from the background\'s',
+  /class="basemap"[^>]*opacity="0.3"/.test(overviewSvg()));
+H('o_basemap:change')({ target: { value: 'none', ...released } });
 await settle(300);
 
 // THE PAN, followed on the document rather than on the chart: this panel is rebuilt on every
@@ -497,6 +560,41 @@ H('document:pointerup')({});
 // and merely inert is a drag that resumes the next time anything moves.
 ok('...and lets go of the document when the finger lifts, rather than listening for ever',
   H('document:pointermove') === undefined);
+press('zoom', 'fit');
+
+/*
+ * THE WHEEL AND THE PINCH zoom about the point under them, so the water there stays there. The
+ * stub lays nothing out, so the chart is given the size the page draws it at, and a point on the
+ * screen is found from the one on the chart: the stub's box is 900 × 600 at the origin.
+ */
+const plot = () => $('device').querySelector('.plot');
+const viewBox = /<svg class="plot" viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(device()).slice(1).map(Number);
+const onScreen = ([x, y]) => ({ clientX: (x / viewBox[0]) * 900, clientY: (y / viewBox[1]) * 600 });
+const fitDead = () => /data-zoom="fit"[^>]*disabled/.test(device());
+const near = (a, b) => Math.abs(a[0] - b[0]) < 1 && Math.abs(a[1] - b[1]) < 1;
+
+plot().setAttribute('viewBox', `0 0 ${viewBox[0]} ${viewBox[1]}`);
+const wheelAt = boatOn();
+plot().fire('wheel', { ...onScreen(wheelAt), deltaY: -300, deltaMode: 0 });
+plot().setAttribute('viewBox', `0 0 ${viewBox[0]} ${viewBox[1]}`);
+ok('the wheel zooms the overview', !fitDead());
+ok('...about the pointer, so the boat under it stays under it', near(boatOn(), wheelAt));
+press('zoom', 'fit');
+
+plot().setAttribute('viewBox', `0 0 ${viewBox[0]} ${viewBox[1]}`);
+const pinchAt = boatOn();
+const finger = (id, dx, dy) => ({ pointerId: id, ...onScreen([pinchAt[0] + dx, pinchAt[1] + dy]) });
+plot().fire('pointerdown', finger(1, -20, 0));
+plot().fire('pointerdown', finger(2, 20, 0));
+H('document:pointermove')(finger(2, 60, 0));
+plot().setAttribute('viewBox', `0 0 ${viewBox[0]} ${viewBox[1]}`);
+H('document:pointermove')(finger(1, -60, 0));
+ok('two fingers spreading apart zoom in', !fitDead());
+ok('...about the point between them, which is where the boat is', near(boatOn(), pinchAt));
+H('document:pointerup')({ pointerId: 1 });
+ok('...and lifting one finger keeps following the other', H('document:pointermove') !== undefined);
+H('document:pointerup')({ pointerId: 2 });
+ok('...and lifting both lets go of the document', H('document:pointermove') === undefined);
 press('zoom', 'fit');
 
 press('view', 'auto');

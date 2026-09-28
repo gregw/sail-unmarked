@@ -297,3 +297,6 @@ button.plain.on { border-color: var(--ok); color: var(--ok); }
 .banner .kind { font-size: 9px; letter-spacing: 0.14em; color: var(--toside); }
 .banner .text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .banner .after { font-size: 9px; color: var(--muted); }
+/* The chart's brightness, or with no chart the background's lightness. Last in the bar, after the
+   chooser whose choice it qualifies. */
+.chartbar input[type="range"] { width: 84px; margin: 0; accent-color: var(--line); }

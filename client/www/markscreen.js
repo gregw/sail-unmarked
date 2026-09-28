@@ -99,6 +99,14 @@ export const chartBar = (options = {}) => {
     <select id="o_basemap" title="What is drawn behind the course">${Object.entries(BASEMAPS)
       .map(([key, spec]) => `<option value="${key}"${key === (options.basemap ?? 'none') ? ' selected' : ''}>${esc(spec.label)}</option>`)
       .join('')}</select>
+    ${(options.basemap ?? 'none') === 'none'
+    ? `<input type="range" id="o_ink" min="0" max="100" step="5"
+      value="${Math.round(100 * (options.backgroundLight ?? 0))}"
+      title="How light the background is: from dark to white" aria-label="Background lightness">`
+    : `<input type="range" id="o_ink" min="0" max="100" step="5"
+      value="${Math.round(100 * (options.basemapInk ?? BASEMAP_INK))}"
+      title="How strongly the chart is drawn: from not at all to full brightness"
+      aria-label="Chart brightness">`}
   </div>`;
 };
 
@@ -1633,7 +1641,11 @@ export function northPointer(up, width) {
  */
 export const OVERVIEW_ZOOM = { min: 0.25, max: 16, step: 1.5 };
 
-/** How much of the basemap is let through — see `basemapArt` for why it is so little. */
+/**
+ * How much of the basemap is let through BY DEFAULT — see `basemapArt` for why it is so little.
+ * The sailor can turn it anywhere from gone to full strength with the chart bar's slider: dim is
+ * right in glare, and a pale chart at full strength is right for reading the shore at dusk.
+ */
 export const BASEMAP_INK = 0.32;
 
 /**
@@ -1717,6 +1729,24 @@ export class OverviewView {
     return this;
   }
 
+  /**
+   * Zoom about a point rather than about the middle, which is what a wheel and a pinch both
+   * mean: the water under the pointer, or between the fingers, stays under it. `dx`, `dy` are
+   * that point's offset from the middle of the picture, in the chart's own units.
+   *
+   * The pan is a screen offset of the whole picture, so a point `d` from the middle sits at
+   * `pan + (d − pan)` and after scaling by `f` at `pan' + f(d − pan)`; holding it still gives
+   * `pan' = f·pan + (1 − f)·d`. The ratio is taken after the clamp, so zooming into the stop
+   * does not drift the picture.
+   */
+  zoomAt(factor, dx, dy) {
+    const before = this.zoom;
+    this.zoomBy(factor);
+    const f = this.zoom / before;
+    this.pan = { x: f * this.pan.x + (1 - f) * dx, y: f * this.pan.y + (1 - f) * dy };
+    return this;
+  }
+
   /** Back to the fit, which is the screen's own answer. */
   reset() {
     this.zoom = 1;
@@ -1757,9 +1787,10 @@ export class OverviewView {
  * at its scale — a couple of pixels to the metre — every tile server in the world is out of
  * zoom levels and would hand back a blur to sail by.
  */
-export function basemapArt(basemap, centre, origin, scale, width, height, up) {
+export function basemapArt(basemap, centre, origin, scale, width, height, up, ink = BASEMAP_INK) {
   const spec = BASEMAPS[basemap];
-  if (!spec || spec.layers.length === 0 || !origin) return '';
+  // Turned all the way down is NOT DRAWN, rather than drawn invisibly: no tiles are asked for.
+  if (!spec || spec.layers.length === 0 || !origin || !(ink > 0)) return '';
   const reach = Math.ceil(Math.hypot(width, height));
   const at = fromLocal(origin, centre);
   const view = new MapView(reach, reach);
@@ -1771,8 +1802,10 @@ export function basemapArt(basemap, centre, origin, scale, width, height, up) {
   // the brightest thing on the plot and the course, which is the only thing on it that matters,
   // is a thin cyan line over a bright page. At this opacity the sea colour behind shows through
   // and the tiles become what they are for: the shape of the land, under the course.
-  return `<g transform="translate(${((width - reach) / 2).toFixed(1)},${((height - reach) / 2).toFixed(1)})"`
-    + ` opacity="${BASEMAP_INK}"><g transform="rotate(${(-up).toFixed(1)},${reach / 2},${reach / 2})">`
+  // Classed, so the slider can change it in place while it is being dragged — a whole render
+  // would replace the slider under the finger.
+  return `<g class="basemap" transform="translate(${((width - reach) / 2).toFixed(1)},${((height - reach) / 2).toFixed(1)})"`
+    + ` opacity="${Math.min(1, ink)}"><g transform="rotate(${(-up).toFixed(1)},${reach / 2},${reach / 2})">`
     + `${view.tileLayer(basemap)}</g></g>`;
 }
 
@@ -1835,7 +1868,15 @@ export function overview(client, options = {}) {
   const to = projector(centre, up, scale, width, height);
 
   // THE BACKGROUND FIRST, so every line, triangle and letter of the course draws over it.
-  const background = basemapArt(options.basemap, centre, client.origin, scale, width, height, up);
+  // With no chart the same slider says how light the background is instead: a white wash over
+  // the dark sea, none of it by default. Classed like the chart so a drag can change it in place.
+  const background = (options.basemap ?? 'none') === 'none'
+    // FILL-opacity, and named on the element so the drag knows which to set: it is a wash, not a
+    // faded mark, and the rule that nothing on the overview is drawn faint is about the marks.
+    ? `<rect class="basemap" data-ink="fill-opacity" x="0" y="0" width="${width}" height="${height}"`
+      + ` fill="#fff" fill-opacity="${Math.min(1, options.backgroundLight ?? 0)}"/>`
+    : basemapArt(options.basemap, centre, client.origin, scale, width, height, up,
+      options.basemapInk ?? BASEMAP_INK);
 
   // How many crossings each line carries, so the ones that repeat can be seated along it
   // in course order rather than stacked. The leeward line of a windward/leeward is the

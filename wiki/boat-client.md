@@ -315,10 +315,18 @@ the selector is on the overview as well and sets one setting.
 - **It re-fits every frame until somebody takes hold of it**, then anchors; **Fit** gives it back. The pan is
   held in screen pixels and applied in rotated space, and followed on the **document**, because the panel is
   rebuilt on every fix. Bounded to a quarter and sixteen times the fit.
+- **The wheel and a pinch zoom about the point under them** (`OverviewView.zoomAt`), so the water under the
+  pointer or between the fingers stays there. The pointers are held on the device rather than the element —
+  the second finger usually lands on a chart the first never touched — and one finger pans, two pinch.
+  Neither reaches the Mark screen, whose frame is held on purpose.
 - **A background never blocks.** Tiles are `<image>` elements, so nothing on the path from a fix to a drawn
-  course touches the network. Dimmed hard (`BASEMAP_INK`) because every tile server draws for a white screen
-  and these screens are read in glare; drawn on a square the size of the viewport's diagonal, because the
-  picture turns. The default is `none`.
+  course touches the network. Dimmed hard by default (`BASEMAP_INK`) because every tile server draws for a
+  white screen and these screens are read in glare; drawn on a square the size of the viewport's diagonal,
+  because the picture turns. The default is `none`.
+- **One slider, whichever there is to brighten** (`o_ink`, in the chart bar). With a chart it runs from not
+  drawn at all — no tiles asked for — to full strength; with none it runs the background from dark to white,
+  as a wash over the sea. Each keeps its own value, so the background starts dark whatever the chart was
+  turned to. A drag changes the layer's opacity in place and a release renders.
 - **A turned chart gets a north pointer** (`northPointer`), drawn only when it is needed — which is also what
   makes it informative.
 
@@ -410,9 +418,9 @@ and green everywhere else.
 **Picking the boat up does not cancel the helm order** (`BoatSim.placeAt`). Moving a boat says where it *is*,
 not where it was going; if it should be stopped there is a Pause button.
 
-**The device panel is not rebuilt while somebody is choosing a background.** It is rebuilt on every fix, and
-rebuilding destroys a `<select>` whose popup is open. Held on **focus** rather than on a flag of our own, so
-it cannot stick.
+**The device panel is not rebuilt while somebody is choosing a background** or dragging its slider. It is
+rebuilt on every fix, and rebuilding destroys a `<select>` whose popup is open and a slider under the finger.
+Held on **focus** rather than on a flag of our own, so it cannot stick.
 
 **The RIG is always full height, and the device's constraint must never reach it**: `align-self` on the
 device, never `align-items` on the split, and one definite grid row — an implicit `auto` row is sized by its
@@ -438,6 +446,13 @@ differently. It is the editor's `stageOf` rule, which is the value of a hierarch
 list: it collapses to nothing when there is nothing to choose. Settled into `this.boat` rather
 than into the markup, because the join reads its course from there. **`NO_RACE` does not make a
 single race into two answers** — it is opting out of the question, not another race.
+
+**Choosing a level reads again what it opens up**, so a course published after the page loaded can be
+joined without reloading it: the club or the series reads the courses and the day's races, the course reads
+the courses (`refreshFor`). Opening a level starts the read as well as changing it does, because a `<select>`
+fires no `change` for the option already chosen, and a level that settled itself has no other option to
+choose. Nothing is redrawn under an open level, whose list a redraw would close; a read that came back while
+it was open is drawn when it lets go, and only if something changed.
 
 **The club is the exception, and is remembered rather than defaulted.** A sail number, a boat name and a club
 are facts about whoever is holding the phone; the series, course and variant are the decision being made.

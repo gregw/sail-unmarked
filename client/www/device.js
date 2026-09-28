@@ -23,10 +23,11 @@
  */
 
 import {
-  OVERVIEW_ZOOM, OverviewView, PlotView, Turner, esc, markScreen, overviewPanel, viewBar,
+  BASEMAP_INK, OVERVIEW_ZOOM, OverviewView, PlotView, Turner, esc, markScreen, overviewPanel, viewBar,
 } from './markscreen.js';
 import { RaceClient } from './raceclient.js';
 import { personalise } from './handicap.js';
+import { wheelZoomStep } from './geo.js';
 import { Dialog } from './dialog.js';
 import { alertBanner, alertModal, chatPanel, placePanel, startRow } from './screens.js';
 
@@ -116,6 +117,9 @@ export class Device {
     this.client = null;
     this.snapshot = null;
     this.courses = [];
+    // A fresh read of the join screen's lists that arrived while one of its levels was open,
+    // waiting for it to close. See `refreshFor`.
+    this.staleJoin = false;
     this.message = null;
     this.boat = { sail: '', name: '', tcf: '1.000', lengthM: '10', mode: 'ANONYMOUS', ...recall() };
     /*
@@ -130,6 +134,11 @@ export class Device {
     // off does not open by asking a tile server for anything.
     this.orientation = 'north';
     this.basemap = 'none';
+    // How strongly it is drawn, 0 to 1. Starts dim, for the reason `BASEMAP_INK` gives.
+    this.basemapInk = BASEMAP_INK;
+    // And with no chart, how light the background is, 0 dark to 1 white. Dark to start: the
+    // screens are dark because they are read in glare and at dusk.
+    this.backgroundLight = 0;
     // The Mark screen's frame, held across renders so the boat is seen to move across it
     // rather than sitting in the middle of a picture that re-fits itself every frame.
     this.plotView = new PlotView();
@@ -170,12 +179,7 @@ export class Device {
    * over: what a boat sails is a SNAPSHOT.
    */
   async load() {
-    try {
-      this.courses = (await (await fetch('/api/public')).json())
-        .filter((course) => course.published.length > 0);
-    } catch (error) {
-      this.message = `Could not read the public courses: ${error.message}`;
-    }
+    await this.loadCourses();
     /*
      * AND HOW THIS FLEET'S SCREENS ARE TO BE DRAWN, which is one number and a forgiving one.
      * A failure here is not worth a message: the setting has a default, the screens work
@@ -190,6 +194,51 @@ export class Device {
     }
     await this.loadRaces();
     return this.courses;
+  }
+
+  /**
+   * The courses that can be joined, read afresh. Kept as they were when the read fails, so a
+   * flaky connection costs the update and not the list the sailor was choosing from.
+   */
+  async loadCourses() {
+    try {
+      this.courses = (await (await fetch('/api/public')).json())
+        .filter((course) => course.published.length > 0);
+    } catch (error) {
+      this.message = `Could not read the public courses: ${error.message}`;
+    }
+    return this.courses;
+  }
+
+  /**
+   * READ AGAIN WHAT A CHOICE OPENS UP, so something published after this page was loaded can be
+   * joined without reloading it. Choosing a club or a series reads the courses and the day's
+   * races again — the levels under it come from both — and choosing a course reads the courses,
+   * which carry its published variants.
+   *
+   * Started when the level is OPENED as well as when it is changed, because a `<select>` fires
+   * no `change` for the option already chosen — and a level with one answer, which settles
+   * itself, has no other option to choose. Opening it is the only gesture there is.
+   *
+   * Redrawn only when something actually changed, and never under an open level: a redraw
+   * replaces the `<select>`, which closes its list under the pointer. Held until that level
+   * lets go of focus instead (`staleJoin`). And not at all once a join has been made — a list
+   * arriving late does not take a sailing boat back to the join screen.
+   */
+  async refreshFor(field) {
+    const before = JSON.stringify([this.courses, this.races]);
+    if (field === 'club' || field === 'series') {
+      await this.loadCourses();
+      await this.loadRaces();
+    } else if (field === 'course') {
+      await this.loadCourses();
+    } else {
+      return;
+    }
+    if (this.client || JSON.stringify([this.courses, this.races]) === before) return;
+    const open = document.activeElement?.id;
+    if (['j_club', 'j_series', 'j_course'].includes(open)) this.staleJoin = true;
+    else this.renderJoin();
   }
 
   /**
@@ -251,6 +300,9 @@ export class Device {
      */
     const chooser = this.el('o_basemap');
     if (chooser && document.activeElement === chooser) return undefined;
+    // The same for the brightness slider: a render mid-drag would replace it under the finger.
+    const slider = this.el('o_ink');
+    if (slider && document.activeElement === slider) return undefined;
 
     const now = Date.now();
     /*
@@ -304,6 +356,7 @@ export class Device {
       { ...shared, bars, division: this.division });
     else screen = overviewPanel(this.client, {
       ...shared, turner: this.courseTurn, view: this.overview, basemap: this.basemap,
+      basemapInk: this.basemapInk, backgroundLight: this.backgroundLight,
     });
 
     this.host.innerHTML = startRow(this.dialog, now)
@@ -451,6 +504,29 @@ export class Device {
         this.render();
       });
     }
+    /*
+     * THE CHART'S BRIGHTNESS — or with no chart, THE BACKGROUND'S LIGHTNESS, the one slider
+     * meaning whichever there is. While it is being dragged only the layer's own opacity is
+     * changed, in place, because the panel is held while the slider has focus (see `render`) and
+     * a render would take the slider away from the finger. Let go, and it blurs and renders —
+     * which is also what draws a chart turned up from nothing, there being no layer to brighten.
+     */
+    const ink = this.el('o_ink');
+    const take = (value) => {
+      if (this.basemap === 'none') this.backgroundLight = value;
+      else this.basemapInk = value;
+    };
+    ink?.addEventListener('input', (ev) => {
+      const value = Number(ev.target.value) / 100;
+      take(value);
+      const layer = this.host.querySelector?.('.basemap');
+      layer?.setAttribute(layer.dataset?.ink ?? 'opacity', String(value));
+    });
+    ink?.addEventListener('change', (ev) => {
+      take(Number(ev.target.value) / 100);
+      ev.target.blur?.();
+      this.render();
+    });
     this.el('o_basemap')?.addEventListener('change', (ev) => {
       this.basemap = ev.target.value;
       // Blurred first, or the hold above would keep the panel frozen on the very render that
@@ -460,23 +536,89 @@ export class Device {
     });
 
     const chart = this.host.querySelector?.('.plot');
+    // Only the overview pans and zooms: the Mark screen's frame is held on purpose and moving it
+    // would be arguing with the one thing that screen does.
+    const overviewShown = () => this.client && this.client.view(Date.now()) !== 'mark';
+
+    /*
+     * ONE FINGER PANS, TWO PINCH. Every pointer down on the chart is held on the DEVICE, not on
+     * the element, because the panel is rebuilt on every fix — the second finger usually lands on
+     * a chart the first one never touched. The document is followed from the first pointer down
+     * to the last one up, for the same reason.
+     */
     chart?.addEventListener('pointerdown', (ev) => {
-      // Only the overview pans: the Mark screen's frame is held on purpose and dragging it
-      // would be arguing with the one thing that screen does.
-      if (!this.client || this.client.view(Date.now()) === 'mark') return;
-      let at = { x: ev.clientX, y: ev.clientY };
+      if (!overviewShown()) return;
+      this.pointers ??= new Map();
+      this.pointers.set(ev.pointerId ?? 0, { x: ev.clientX, y: ev.clientY });
+      if (this.pointers.size > 1) return;   // already following the document
       const move = (m) => {
-        this.overview.panByPx(m.clientX - at.x, m.clientY - at.y);
-        at = { x: m.clientX, y: m.clientY };
+        const id = m.pointerId ?? 0;
+        const was = this.pointers.get(id);
+        if (!was) return;
+        const before = [...this.pointers.values()];
+        this.pointers.set(id, { x: m.clientX, y: m.clientY });
+        if (this.pointers.size >= 2) {
+          // The two fingers that went down first. The picture follows their midpoint and scales
+          // by how far apart they have moved, about that midpoint.
+          const [a0, b0] = before;
+          const [a1, b1] = [...this.pointers.values()];
+          const mid0 = { x: (a0.x + b0.x) / 2, y: (a0.y + b0.y) / 2 };
+          const mid1 = { x: (a1.x + b1.x) / 2, y: (a1.y + b1.y) / 2 };
+          // In the chart's own units, both of them: the zoom is about a point on the chart, and a
+          // pan in screen pixels beside it would slide the picture out from between the fingers
+          // on any screen not drawn at one pixel to the unit.
+          const from = this.chartOffset(mid0);
+          const at = this.chartOffset(mid1);
+          const apart0 = Math.hypot(a0.x - b0.x, a0.y - b0.y);
+          const apart1 = Math.hypot(a1.x - b1.x, a1.y - b1.y);
+          if (from && at) {
+            this.overview.panByPx(at.x - from.x, at.y - from.y);
+            if (apart0 > 0) this.overview.zoomAt(apart1 / apart0, at.x, at.y);
+          }
+        } else {
+          this.overview.panByPx(m.clientX - was.x, m.clientY - was.y);
+        }
         this.render();
       };
-      const up = () => {
+      const up = (u) => {
+        this.pointers.delete(u.pointerId ?? 0);
+        if (this.pointers.size > 0) return;
         document.removeEventListener('pointermove', move);
         document.removeEventListener('pointerup', up);
+        document.removeEventListener('pointercancel', up);
       };
       document.addEventListener('pointermove', move);
       document.addEventListener('pointerup', up);
+      document.addEventListener('pointercancel', up);
     });
+
+    // THE WHEEL, about the pointer, at the editor's rate (`wheelZoomStep` is in zoom levels).
+    chart?.addEventListener('wheel', (ev) => {
+      if (!overviewShown()) return;
+      ev.preventDefault?.();
+      const at = this.chartOffset({ x: ev.clientX, y: ev.clientY });
+      if (!at) return;
+      this.overview.zoomAt(2 ** wheelZoomStep(ev.deltaY, ev.deltaMode), at.x, at.y);
+      this.render();
+    }, { passive: false });
+  }
+
+  /**
+   * Where a point on the screen falls on the chart, as an offset from the chart's middle in the
+   * chart's own units — what `OverviewView.zoomAt` takes. Null with no chart drawn.
+   */
+  chartOffset(point) {
+    const chart = this.host.querySelector?.('.plot');
+    const box = chart?.getBoundingClientRect?.();
+    const view = /^\s*[\d.-]+\s+[\d.-]+\s+([\d.]+)\s+([\d.]+)/
+      .exec(chart?.getAttribute?.('viewBox') ?? '');
+    if (!box || !box.width || !box.height || !view) return null;
+    const width = Number(view[1]);
+    const height = Number(view[2]);
+    return {
+      x: ((point.x - box.left) / box.width) * width - width / 2,
+      y: ((point.y - box.top) / box.height) * height - height / 2,
+    };
   }
 
   /**
@@ -741,7 +883,7 @@ export class Device {
               answered in boats rather than in metres. Ten metres until somebody says
               otherwise.
             -->
-            <div><label for="j_length">Length (m)</label>
+            <div><label for="j_length">Boat length (m)</label>
               <input id="j_length" value="${esc(this.boat.lengthM)}" inputmode="decimal"></div>
           </div>
           <p class="${tcfRange ? '' : 'muted'}" style="font-size:11px; margin-top:4px">
@@ -750,7 +892,7 @@ export class Device {
               handicapped marks, so everybody finishes on corrected time together. It takes a TCF
               from ${esc(tcfRange)}.`
     : 'The TCF is carried to the record, and the results correct your elapsed time by it.'}
-            The length is drawn and zoomed to, and goes on the record.</p>
+            The boat length is drawn and zoomed to, and goes on the record.</p>
 
           <!--
             The button SAYS WHAT IS MISSING rather than sitting greyed out with no explanation.
@@ -795,8 +937,20 @@ export class Device {
       this.boat[field] = ev.target.value || null;
       for (const lower of clear) this.boat[lower] = null;
       if (field === 'club') remember(this.boat);
+      this.staleJoin = false;
       this.renderJoin();
+      this.refreshFor(field);
     });
+    // Opening a level reads again what it offers, and a read held back while it was open is
+    // drawn when it closes. See `refreshFor`.
+    for (const field of ['club', 'series', 'course']) {
+      this.el(`j_${field}`)?.addEventListener('focus', () => { this.refreshFor(field); });
+      this.el(`j_${field}`)?.addEventListener('blur', () => {
+        if (!this.staleJoin || this.client) return;
+        this.staleJoin = false;
+        this.renderJoin();
+      });
+    }
     redraw('club', 'series', 'race', 'division', 'course', 'variant');
     redraw('series', 'race', 'division', 'course', 'variant');
     // Choosing a race drops the division under it, and any course chosen while there was no

@@ -40,6 +40,15 @@ ok('the chart stripes everywhere a boat\'s line may lie', map().includes('handic
 ok('...with a grip to change the width by', map().includes('class="hgrip"'));
 ok('the header gives the TCFs the course takes, beside its length', /TCF \d\.\d{3}&ndash;\d\.\d{3}/.test($('c_len').innerHTML));
 
+// The track runs north–south up the course, and a boat's line lies across it: so the step's
+// triangle has its base east–west and points north, the way a boat crosses its own line — not
+// east or west, across the track that nobody crosses.
+const tri = /<g class="cmark" data-id="1@windward-track"[^>]*>(?:<[^>]*>)*?<polygon points="([^"]+)"/.exec(map());
+const [a, b, apex] = (tri?.[1] ?? '').split(' ').map((p) => p.split(',').map(Number));
+ok('the handicapped step\'s triangle lies along the boats\' lines, not along the track',
+  !!tri && Math.abs(a[1] - b[1]) < 1 && Math.abs(a[0] - b[0]) > 5);
+ok('...and points the way a boat crosses one: out of the turn, north', !!tri && apex[1] < a[1] - 5);
+
 // ------------------------------------------------------------ dragging the width
 const grip = $('map').querySelectorAll('.hgrip')[0];
 grip.fire('mousedown', { stopPropagation() {} });

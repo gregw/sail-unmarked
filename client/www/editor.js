@@ -30,7 +30,7 @@
 
 import { ROLE_COLOUR, roleColour } from './coursedraw.js';
 import { ARROW_CENTROID, LABEL, TRIANGLE, arrowHead, darken, forwardNormal, seats, stripes, track, triangle } from './coursedraw.js';
-import { envelope, geometry, widthHandle, widthThrough } from './handicap.js';
+import { envelope, geometry, outward, widthHandle, widthThrough } from './handicap.js';
 import {
   BASEMAPS,
   MapView,
@@ -1009,6 +1009,22 @@ function courseCrossings(variant) {
     });
   }
 
+  /*
+   * A HANDICAPPED STEP'S TRIANGLE POINTS ACROSS THE BOATS' LINES, not across its track. The track
+   * is where the lines' centres slide and nobody crosses it; each boat's line lies square to the
+   * average of the legs either side, so the triangle is turned to that — its base along a boat's
+   * line and its apex the way a boat crosses one — and still seated on the track.
+   */
+  const handicapped = (variant.sequence ?? []).some((step) => step.handicapWidthM != null)
+    ? handicapShape(variant) : null;
+  const hg = handicapped ? geometry(handicapped) : null;
+  const acrossBoatLines = (index, reverse) => {
+    if (!hg?.ends[index]) return null;
+    const out = outward(hg, index);   // local metres, north up; the screen's y runs down
+    const sign = reverse ? -1 : 1;
+    return { along: { x: -out.y, y: -out.x }, normal: { x: out.x * sign, y: -out.y * sign } };
+  };
+
   const drawn = new Map();   // step index -> [{ base, apex, points, label, letter }]
   for (const [lineId, uses] of byLine) {
     const line = GEO.lines.get(lineId);
@@ -1026,10 +1042,10 @@ function courseCrossings(variant) {
     (reversed.has(lineId) ? [...positions].reverse() : positions).forEach((distance, i) => {
       const { step, alternative } = uses[i];
       const at = { x: ax + along.x * distance, y: ay + along.y * distance };
-      const normal = alternative.cross === 'REVERSE' || alternative.cross === 'reverse'
-        ? { x: -forward.x, y: -forward.y }
-        : forward;
-      const shape = triangle(at, along, normal);
+      const reverse = alternative.cross === 'REVERSE' || alternative.cross === 'reverse';
+      const normal = reverse ? { x: -forward.x, y: -forward.y } : forward;
+      const turned = acrossBoatLines(step.index, reverse);
+      const shape = turned ? triangle(at, turned.along, turned.normal) : triangle(at, along, normal);
       if (!drawn.has(step.index)) drawn.set(step.index, []);
       drawn.get(step.index).push({
         ...shape,

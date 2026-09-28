@@ -415,7 +415,9 @@ export function run(check) {
    * dimmed, and only to "still legible".
    */
   const daylight = overviewPanel(client, { now: t });
-  const opacities = [...daylight.matchAll(/opacity="([\d.]+)"/g)].map((m) => Number(m[1]));
+  // The OPACITY attribute, not `fill-opacity`: the background wash is a background, which is
+  // allowed to be anything from none to white, and is set by the sailor.
+  const opacities = [...daylight.matchAll(/ opacity="([\d.]+)"/g)].map((m) => Number(m[1]));
   check('nothing the sailor has to SEE on the overview is drawn under two thirds strength',
     opacities.length > 0 && opacities.every((o) => o >= OVERVIEW_INK.done));
   check('...the track included, which is the thing the course hangs on',
@@ -678,6 +680,17 @@ export function run(check) {
   check('the chart bar offers zoom, fit and a background, under the chart they act on',
     ['data-zoom="out"', 'data-zoom="in"', 'data-zoom="fit"', 'id="o_basemap"']
       .every((bit) => chartBar({ basemap: 'none' }).includes(bit)));
+  check('the chart bar has a slider, which with no chart says how light the background is',
+    /id="o_ink"[^>]*aria-label="Background lightness"/.test(chartBar({ basemap: 'none' })));
+  check('...and with a chart, how strongly the chart is drawn',
+    /id="o_ink"[^>]*aria-label="Chart brightness"/.test(chartBar({ basemap: 'chart' })));
+  check('turned all the way down the chart is not drawn at all — no tiles are asked for',
+    imagesIn(courseOf(overClient, { basemap: 'chart', basemapInk: 0 })) === 0);
+  check('...and all the way up it is drawn at full strength',
+    /class="basemap"[^>]*opacity="1"/.test(courseOf(overClient, { basemap: 'chart', basemapInk: 1 })));
+  check('with no chart the background is a white wash, dark by default and white at the top',
+    /fill-opacity="0"/.test(courseOf(overClient, { basemap: 'none' }))
+    && /fill-opacity="1"/.test(courseOf(overClient, { basemap: 'none', backgroundLight: 1 })));
   check('...every background the selector knows, so the labels live in one place',
     Object.values(BASEMAPS).every((spec) => chartBar({}).includes(spec.label)));
   check('...with Fit dead while there is nothing to reset', chartBar({}).includes('disabled'));

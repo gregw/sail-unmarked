@@ -99,7 +99,9 @@ pixels, and is a control nobody has to be taught. The rules that hold it togethe
   or a cycle entry, and it sets **every** step of the variant naming that line at once, because one
   line is one width. On the chart the step's track draws as a striped parallelogram
   (`coursedraw.stripes`), every stripe one of the lines a boat could be given, with a grip halfway
-  along its port side to drag the width by — to the metre, and again for every passing. The header
+  along its port side to drag the width by — to the metre, and again for every passing. The step's
+  triangle is turned to lie along a boat's line and point the way a boat crosses one, because the
+  track is where the lines' centres slide and nobody crosses it. The header
   gives the TCFs the variant can take beside its length, as the server works them out; the rest of
   what makes a track acceptable — the turn, the direction it runs — is the server's to say, in the
   variant's problems. See [course-model.md](course-model.md#distance-corrected-handicap-each-boats-own-line).
