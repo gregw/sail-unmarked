@@ -14,17 +14,17 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * decided on the boat, from raw GNSS, with no network. The server stores it and hands it
  * on; it does not adjudicate it.
  *
- * <h2>There are no races here</h2>
- * This system publishes courses and collects what boats did on them. Places, OCS,
- * corrected times, penalties, drop races and series scoring belong to the club's own
- * scoring software, which already has rules for all of it. Owning none of that is what
- * lets this be right about the one thing it is uniquely able to be right about: detecting
- * and timing a crossing.
+ * <h2>There is no scoring here</h2>
+ * This system publishes courses, runs the committee's side of a race where there is one,
+ * and collects what boats did. Places, OCS, corrected times, penalties, drop races and
+ * series scoring belong to the club's own scoring software, which already has rules for all
+ * of it. Owning none of that is what lets this be right about the one thing it is uniquely
+ * able to be right about: detecting and timing a crossing.
  *
- * <p>The consequence, and it is a commitment rather than a gap: <b>every start is
- * self-timed</b>. A boat's clock starts when it crosses, because there is nothing here to
- * fire a gun. A club running a fixed-gun race scores from its own gun and this record's
- * crossing times.
+ * <p>The consequence, and it is a commitment rather than a gap: <b>every elapsed time is
+ * self-timed</b>. A boat's clock starts when it crosses the start line, even where a
+ * committee published a start time. A club scoring from a gun scores from its own gun and
+ * this record's crossing times.
  *
  * <h2>This record is the interface</h2>
  * Since it is the only artefact that leaves this system, it has to carry everything a
@@ -54,7 +54,7 @@ public record CourseRecord(
      * <p>Asked for because the boat's own screen needs it — the approach plot draws the hull
      * to scale and zooms no closer than a few of these — and kept here because it is the first
      * thing a handicapper or a protest asks about a boat, and this is the only artefact that
-     * leaves the system. Trusted like everything else a boat says about itself (§1.1).
+     * leaves the system. Trusted like everything else a boat says about itself (dialog §1.1).
      */
     @JsonProperty("lengthM") Double lengthM,
     /**

@@ -1,18 +1,25 @@
 /**
- * The course editor: place and move points on a chart, see the lines they define, and
- * export the result as YAML.
+ * The course editor: a club's points, lines, courses and races, authored against a chart and
+ * written back to the series file — and the lifecycle that turns a design into what a fleet is
+ * handed: snapshot, publish, public. `wiki/course-editor.md` is the tour; this file's comments
+ * are the detail.
  *
- * SCOPE OF THIS PASS. Points are editable; lines and courses are drawn from the loaded
- * programme but not authored here yet. Drawing them matters even so — a point placed
- * without seeing the line it defines is a coordinate with no meaning, and the whole
- * argument for building an editor rather than importing GPX was that these decisions
- * are visual.
+ * The pane is a drill-down — club, series, then a tab (Points | Lines | Courses | Races), then
+ * course, variant and snapshot — and every level is a selector. The tab is the scope of an
+ * edit: the Points and Lines tabs edit the club's named geometry, the Courses tab edits one
+ * variant, and widening that scope from the Courses tab always takes an explicit answer.
  *
- * SAVES AS YOU GO. Every completed edit is written straight back to the programme file
- * through PUT .../points. An edit is completed when the form loses focus, when a drag
- * ends, or when a click places a point — so there is no Save button and nothing to
- * forget. The server splices only the `points:` block, leaving the rest of the file,
- * comments included, byte for byte as it was.
+ * SAVES AS YOU GO. Every completed edit is written straight back to the programme file through
+ * `PUT /api/programmes/{club}/{series}`, with points, lines, courses and races in one body
+ * because one gesture can change more than one of them. An edit is completed when the form
+ * loses focus, when a drag ends, or when a click places something — so there is no Save button
+ * and nothing to forget. The server splices only the blocks it is sent (`ProgrammeWriter`),
+ * leaving the rest of the file, comments included, byte for byte as it was.
+ *
+ * ANYTHING ADDED TO THE FILE HAS TO BE ADDED IN FOUR PLACES: the model, the payload, the writer
+ * — and the change guard in `endEdit()`, with `snapshot()` and `takeUndo()` beside it. The
+ * fourth is the one that fails silently: everything works on screen and nothing reaches the
+ * disk.
  *
  * ONE LEVEL OF UNDO, IN MEMORY. The state before the last completed edit is kept in a
  * single slot and offered as an Undo button; taking it writes the old state back and
@@ -84,8 +91,6 @@ function takeId(input, raw, scoped, say) {
   return clean;
 }
 
-
-
 const el = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
@@ -114,14 +119,9 @@ const state = {
   // A snapshot is the fourth level of the drill-down, and selecting one REPLACES the
   // variant in the editor: what is drawn and what the form shows is the capture, read-only.
   selectedSnapshot: null,
-  // Which levels are expanded, by explicit answer. A level not named here falls back to
-  // the default: open while it has nothing chosen. Several may be open at once — choosing
-  // from a list does NOT close it, because the next thing you do is often to choose again.
+  // Which levels' FIELDS are unfolded, by explicit answer from the chevron. A level not named
+  // here falls back to its default — see `isOpen`.
   open: {},             // level -> true | false
-  // Which level was last worked at. With several lists open there is no longer a single
-  // "deepest open level" to infer it from, and the form has to follow something.
-  // A dragged list keeps its height across renders. The rows are re-rendered, so the
-  // inline height the browser wrote would otherwise be thrown away on the next pan.
   // Which way a line end is being edited: by naming a point, or by typing a position.
   // Held here rather than on the end itself, because it is a view state — the end's own
   // shape (`at`, or lat/long) is what gets saved.
@@ -586,9 +586,8 @@ async function transformCourse(variant, course, transform, what) {
 /**
  * Every list in the pane is sorted by id.
  *
- * File order is the order somebody authored things in, which was worth preserving while
- * the lists were short. They are not short any more, and a list you have to read all of is
- * not a list you can find anything in. The FILE keeps its own order regardless — the writer
+ * File order is the order somebody authored things in, which is worth little once a list is
+ * long: a list you have to read all of is not a list you can find anything in. The FILE keeps its own order regardless — the writer
  * emits the map it is given, and nothing here reorders what is on disk.
  */
 function byId(entries, id = (e) => e.id) {
@@ -791,8 +790,7 @@ function detachLine(lineId, variant) {
 /**
  * Copy a point out of the club's list, and repoint the named variants at the copy.
  *
- * The subtle part, and it was a deliberate correction: <b>only the end that names this point
- * moves</b>. A line's two ends are independent — one may be a surveyed feature the whole
+ * The subtle part: <b>only the end that names this point moves</b>. A line's two ends are independent — one may be a surveyed feature the whole
  * club knows and the other a handle dropped this morning — so detaching one end leaves the
  * other still pointing at the club's point. Forcing them to share a fate would either
  * promote the handle to a name nobody wants or detach the feature everybody relies on.
@@ -1590,9 +1588,9 @@ function placingArmed() {
  * — both Sow and Pigs lines do — must share the POINT, not merely sit at the same
  * coordinates, or a later correction moves one line and leaves the other behind.
  *
- * <b>Open water gets no point.</b> It used to manufacture one (`line-2-port`, and so on),
- * which filled the club's list with names nobody had chosen and nobody referred to. Naming
- * is identity, not sharing: a handle dropped on the water is not a thing anyone names, so
+ * <b>Open water gets no point.</b> Manufacturing one (`line-2-port`, and so on) would fill the
+ * club's list with names nobody had chosen and nobody referred to. Naming is identity, not
+ * sharing: a handle dropped on the water is not a thing anyone names, so
  * the end takes an INLINE position instead — the same distinction the course model draws
  * between named and ad-hoc geometry, one level down.
  */
@@ -1621,8 +1619,8 @@ function freeId(map, base) {
  * What a variant made from a template is called: {@code yyyymmdd-race-n}.
  *
  * A template is a shape; what comes out of one is a race, on a day, and usually not the only
- * race that day. Naming it after the template ("two-laps", "two-laps-2") said what it was
- * made from rather than what it IS, and a season of them sorted into one indistinguishable
+ * race that day. Naming it after the template ("two-laps", "two-laps-2") would say what it was
+ * made from rather than what it IS, and a season of them would sort into one indistinguishable
  * run. Dated first, so the list reads chronologically under the templates that sit above it.
  *
  * The LOCAL date, because a race day is a local day. `n` counts from 1 within this course,
@@ -1738,10 +1736,10 @@ function warnInForm(id, message) {
  * ONE LEVEL OF THE DRILL-DOWN: a label, a selector showing what is chosen, and that level's
  * commands. In that order, at the same three columns, on every level.
  *
- * <b>This replaces a breadcrumb that opened a list.</b> Several of those could be open at
- * once, each a fixed-height box with its own scrollbar and resize grip, so the pane became a
- * stack of little windows and the thing you wanted was in one of four places depending on what
- * happened to be open. A selector says what is chosen while it is shut, takes one line rather
+ * <b>Not a breadcrumb that opens a list.</b> Several of those could be open at once, each a
+ * fixed-height box with its own scrollbar and resize grip, and the pane would become a stack of
+ * little windows with the thing you wanted in one of four places depending on what happened to
+ * be open. A selector says what is chosen while it is shut, takes one line rather
  * than a hundred and fifty pixels, and is a control nobody has to be taught.
  *
  * <b>An empty option is offered only when nothing is chosen</b>, and it carries no value, so
@@ -1754,8 +1752,8 @@ function warnInForm(id, message) {
  * answered. A snapshot is not like that: *nothing chosen* is the ordinary, useful state of
  * that level — it means you are editing the design — so the empty option there is not a way to
  * empty the pane but the way back to the thing underneath it. Without it, choosing a capture
- * was a DEAD END: a `<select>` fires no `change` for the option already selected, so there was
- * nothing in the list to pick and no way back to the variant but reloading the page.
+ * would be a DEAD END: a `<select>` fires no `change` for the option already selected, so there
+ * would be nothing in the list to pick and no way back to the variant but reloading the page.
  *
  * A level with nothing to offer is DISABLED and says why in the empty option, rather than
  * being a dropdown that opens onto nothing: "no variants yet" is a different fact from "none
@@ -1782,13 +1780,12 @@ function picker(level, label, options, chosen, commands = [], empty = '\u2014', 
 }
 
 /**
- * A foldable heading for a level's FIELDS — which is where the chevron went.
+ * A foldable heading for a level's FIELDS — which is where the chevron is.
  *
- * It used to open a list of things to choose from; the selector does that now, in a line. What
- * is actually worth getting out of the way is the other half: a course's fields and a variant's
- * sequence are long, and somebody who came back to move a mark is not re-reading either. So the
- * chevron folds the form, and folded it still answers for itself — `trailing` is what the
- * heading says while it is shut.
+ * Choosing is the selector's job, in a line. What is worth getting out of the way is the other
+ * half: a course's fields and a variant's sequence are long, and somebody who came back to move
+ * a mark is not re-reading either. So the chevron folds the form, and folded it still answers
+ * for itself — `trailing` is what the heading says while it is shut.
  */
 function fold(level, title, trailing = '') {
   const open = isOpen(level);
@@ -1801,12 +1798,7 @@ function fold(level, title, trailing = '') {
 }
 
 /**
- * Whether a level's FIELDS are unfolded.
- *
- * It used to answer "is this level's list showing", and the defaults were about getting you
- * started — a level was open while it had nothing chosen, because the list was how you chose.
- * A selector does that now in one line, so the question this answers has changed: it is about
- * the long thing below the selector, not about finding anything.
+ * Whether a level's FIELDS are unfolded — the long thing below the selector.
  *
  * <b>A level's fields start OPEN and the chevron closes them</b>, which is what "closeable"
  * means: they are the thing you came to the level for, and a pane that opened with everything
@@ -1828,7 +1820,7 @@ function isOpen(level) {
   return false;
 }
 
-/** Toggle a level's list, without disturbing any other level or any selection. */
+/** Fold or unfold a level's fields, without disturbing any other level or any selection. */
 function toggle(level) {
   state.open[level] = !isOpen(level);
   render();
@@ -1838,10 +1830,9 @@ function toggle(level) {
  * Forget every form's guard, so the next render rebuilds them.
  *
  * <b>One call, because there is more than one guard and a caller that cleared one and forgot
- * another is a form that silently stops updating.</b> That is exactly what happened when the
- * variant's fields moved inline and got a key of their own: `Add line` went on clearing the
- * course's key, the variant form was recognised as unchanged, and the step it had just added
- * never appeared. The guards exist to keep the caret in whatever somebody is typing, which is
+ * another is a form that silently stops updating.</b> Clear the course's key and not the
+ * variant's, and `Add line` adds a step the variant form — recognised as unchanged — never
+ * shows. The guards exist to keep the caret in whatever somebody is typing, which is
  * worth having — they just must not be reachable one at a time.
  */
 function formsChanged() {
@@ -1856,10 +1847,10 @@ function renderRows() {
   const course = currentCourse();
 
   /*
-   * THE CLUB AND THE SERIES ARE TWO QUESTIONS, and they used to be one selector showing
+   * THE CLUB AND THE SERIES ARE TWO QUESTIONS, not one selector showing
    * `myc.org.au/2026-summer`. A club has several series and a series belongs to one club, so
-   * choosing is naturally two steps — and the compound label was the widest thing on the pane
-   * while saying less than either half would on its own.
+   * choosing is naturally two steps — and a compound label would be the widest thing on the pane
+   * while saying less than either half does on its own.
    *
    * The club carries NO commands. A club is a domain: it is not created here, not renamed here
    * (that would be a migration across every record path and the ledger's own filename), and not
@@ -2115,18 +2106,6 @@ function renderList() {
 }
 
 /**
- * The three view tickboxes, pinned to the foot of the pane.
- *
- * <b>They are settings for the CHART, not a level of the drill-down</b>, and they were at the
- * bottom of the variant form — under the sequence, which is the longest thing in the pane — so
- * reaching them meant scrolling past a course to get at a control that decides how that course
- * is drawn. Pinned, they are always in the same place, and the scrolling surface above them
- * gets on with being a drill-down.
- *
- * Only on the Courses tab, because all three are about how a course is drawn: `hide unused` is
- * defined against the selected course, and the move/turn grips act on a variant.
- */
-/**
  * The three view tickboxes' handlers.
  *
  * View settings, not edits: they change what is DRAWN, not what is stored, so none of them
@@ -2138,6 +2117,18 @@ function wireViewToggles() {
   el('c_move')?.addEventListener('change', (ev) => { state.showTransform = ev.target.checked; render(); });
 }
 
+/**
+ * The three view tickboxes, pinned to the foot of the pane.
+ *
+ * <b>They are settings for the CHART, not a level of the drill-down</b>. At the bottom of the
+ * variant form — under the sequence, which is the longest thing in the pane — reaching them
+ * would mean scrolling past a course to get at a control that decides how that course is
+ * drawn. Pinned, they are always in the same place, and the scrolling surface above them gets
+ * on with being a drill-down.
+ *
+ * Only on the Courses tab, because all three are about how a course is drawn: `hide unused` is
+ * defined against the selected course, and the move/turn grips act on a variant.
+ */
 function renderPaneBottom() {
   const into = el('paneBottom');
   if (!into) return;
@@ -2463,38 +2454,12 @@ function renameLine(oldId, wanted) {
   // Saved HERE, not left to the blur that would normally do it. A rename re-renders, and
   // the re-render destroys the very input the browser was in the middle of leaving — so the
   // `blur` that calls endEdit() lands on a detached node, or never fires at all, and the
-  // edit was left in memory only: the editor showed the new id while the file and the
+  // edit would be left in memory only: the editor showing the new id while the file and the
   // server kept the old one, which is a 404 on the next snapshot and no length on the row.
   endEdit();
   render();
 }
 
-/** The club's points. Its own list, on its own tab, at the series level. */
-
-/**
- * Every club and series the server has.
- *
- * Moved off the chart bar and into the head of the hierarchy: choosing a programme is
- * choosing a SCOPE, not a chart control, and the bar above the chart is for things that act
- * on the chart — background, undo, save state.
- */
-
-/**
- * The variants of the selected course.
- *
- * A list of its own rather than rows nested under the course, because a course and a
- * variant are different kinds of thing and looking alike made a course row select a course
- * with NO variant — a state the form could only apologise for.
- */
-
-/**
- * The captures taken of this variant, newest last.
- *
- * Selecting one puts it in the editor INSTEAD of the variant, read-only. A snapshot is not
- * a draft to be corrected — it is what a boat was handed, and the whole model rests on it
- * being unable to change — so what you can do here is about it, never to it: make a new
- * variant from it, hand it to boats, or take it out of the list.
- */
 /**
  * A snapshot named for a person, with its REVISION always beside the name.
  *
@@ -2521,9 +2486,8 @@ export const snapshotName = (snap, fallback = '') =>
  */
 async function selectSnapshot(revision) {
   // The way back to the design, which is the level's empty option (`keepEmpty` in `picker`).
-  // It used to be a toggle — choosing the capture that was already chosen put the design back
-  // — which worked while this level was a list of rows and became unreachable the moment it
-  // was a selector, since a `<select>` fires no `change` for the option already selected.
+  // Not a toggle on the chosen capture: a `<select>` fires no `change` for the option already
+  // selected, so that would be unreachable.
   if (!revision) {
     state.selectedSnapshot = null;
     state.snapshotShown = null;
@@ -2624,15 +2588,6 @@ async function forgetSnapshot() {
 }
 
 /**
- * Courses.
- *
- * A course with a single plain variant shows as ONE row and selects that variant directly,
- * because that is the ordinary club course and nobody editing one should have to learn the
- * word "variant" to do it. A course with several shows its variants indented under it, each
- * with its own state, because that is when the distinction starts earning its keep.
- */
-
-/**
  * The state of one variant, as a word.
  *
  * DERIVED on the server and never stored: the hash of the resolved variant against the
@@ -2687,25 +2642,11 @@ function frameVariant(variant) {
 }
 
 /**
- * The course editor: the course above, the open variant below.
- *
- * The sequence is the whole of the variant. Everything else — id, name, notes — is one
- * field; the sequence is an ordered list whose order IS the course, since the first step is
- * the start and the last the finish and the letters follow from position.
- */
-/**
- * The variant's fields, at the bottom of the pane.
- *
- * The COURSE's fields are not here — they live under the course list, in
- * {@link renderCourseFields}, so that closing the course chevron puts both away together
- * and the variant list can sit below them.
- */
-/**
  * The variant's own fields, INLINE under its selector rather than at the foot of the pane.
  *
- * A level's fields belong with the level. They were in the one form region at the bottom, with
- * the snapshot selector above them — so the pane read course, variant, snapshot, and then the
- * variant's sequence, out of order and a scroll away from the thing it belonged to.
+ * A level's fields belong with the level. In one form region at the foot of the pane, with the
+ * snapshot selector above them, the pane would read course, variant, snapshot, and then the
+ * variant's sequence — out of order and a scroll away from the thing it belongs to.
  */
 function renderVariantFields() {
   const into = el('variantForm');
@@ -3404,20 +3345,14 @@ async function retitleSeries(change) {
   try {
     const done = await post(`/api/programmes/${state.key}/rename`, change);
     state.seriesFormFor = undefined;
-    // Wired HERE, beside the assignment that destroyed the old buttons. It used to be
-    // wired with the rest below, under a guard that watches #rows — a different element —
-    // so any render that rebuilt this row while #rows stayed put left the series chevron
-    // and its commands dead. Each container re-wires its own.
+    // The series row re-wires its own controls; see where #rowSeries is assigned.
     wireRow(['series']);
     await loadProgrammeList(`${done.club}/${done.series}`);
     note(change.series ? `renamed to ${done.series}` : 'renamed');
   } catch (e) {
     note(e.message, true);
     state.seriesFormFor = undefined;
-    // Wired HERE, beside the assignment that destroyed the old buttons. It used to be
-    // wired with the rest below, under a guard that watches #rows — a different element —
-    // so any render that rebuilt this row while #rows stayed put left the series chevron
-    // and its commands dead. Each container re-wires its own.
+    // The series row re-wires its own controls; see where #rowSeries is assigned.
     wireRow(['series']);
     render();
   }
@@ -3479,13 +3414,6 @@ async function takeSnapshot(course, variant) {
   }
 }
 
-/**
- * Publish the latest snapshot of one variant.
- *
- * Publishing REPLACES that variant's previous publication rather than adding to it: a course
- * has one live design per variant, and offering a fleet a choice of vintages would be a way
- * to start a race with two different courses on the water.
- */
 /**
  * The variants of one course that have something new to capture.
  *
@@ -3752,9 +3680,9 @@ async function expandTemplate(course, template) {
 
   // ONE crossing of each name, however many times the sequence names it. A leeward line
   // that is start, mark 2 and finish appears three times and is still one line; taking it
-  // across per OCCURRENCE made three copies of it in the same water, which every later
+  // across per OCCURRENCE would make three copies of it in the same water, which every later
   // correction would then have to be made to three times — and for an ad-hoc line every
-  // copy got its own id, so they were not even recognisable as the same mark. The same
+  // copy would get its own id, so they would not even be recognisable as the same mark. The same
   // goes for a point two of those lines stand on. Both are memoised on the template's id.
   const asPoint = new Map();
   const asLine = new Map();
@@ -4134,10 +4062,10 @@ function senseOf(entry) {
  * appearance depends on state that moves under a selection has to be updated HERE, not baked
  * into the markup once and left.
  *
- * That caught the race-morning buttons: their disabled state was computed from the lifecycle at
- * the moment the course was first drawn, so a variant going dirty under them updated the row's
- * chip — the rows are rebuilt — and left the button that acts on it greyed out. The state was
- * right everywhere except on the control for it.
+ * The race-morning buttons are the case in point: a disabled state computed from the lifecycle
+ * at the moment the course was first drawn would leave the button greyed out while a variant
+ * went dirty under it — the row's chip would update, the rows being rebuilt, and the control
+ * that acts on it would not.
  */
 function syncCourseForm() {
   const course = currentCourse();
@@ -4194,7 +4122,7 @@ function renameCourse(oldId, wanted) {
   // Saved HERE, not left to the blur that would normally do it. A rename re-renders, and
   // the re-render destroys the very input the browser was in the middle of leaving — so the
   // `blur` that calls endEdit() lands on a detached node, or never fires at all, and the
-  // edit was left in memory only: the editor showed the new id while the file and the
+  // edit would be left in memory only: the editor showing the new id while the file and the
   // server kept the old one, which is a 404 on the next snapshot and no length on the row.
   endEdit();
   render();
@@ -4219,7 +4147,7 @@ function renameVariant(course, variant, wanted) {
   // Saved HERE, not left to the blur that would normally do it. A rename re-renders, and
   // the re-render destroys the very input the browser was in the middle of leaving — so the
   // `blur` that calls endEdit() lands on a detached node, or never fires at all, and the
-  // edit was left in memory only: the editor showed the new id while the file and the
+  // edit would be left in memory only: the editor showing the new id while the file and the
   // server kept the old one, which is a 404 on the next snapshot and no length on the row.
   endEdit();
   render();
@@ -4407,12 +4335,6 @@ function relatedLines(pointId) {
 /* ------------------------------------------------------- saving and undo */
 
 /**
- * The courses as the file wants them: variants, each with its own ad-hoc geometry.
- *
- * Built once and used twice — it is both the save payload and the undo slot's serialised
- * form — so a shape the server accepts is by construction a shape undo can put back.
- */
-/**
  * The races as the file wants them.
  *
  * <b>A race's DEFINITION only</b> — a name, a date, a format, a course per division, and the
@@ -4437,6 +4359,12 @@ function racesPayload() {
   return races;
 }
 
+/**
+ * The courses as the file wants them: variants, each with its own ad-hoc geometry.
+ *
+ * Built once and used twice — it is both the save payload and the undo slot's serialised
+ * form — so a shape the server accepts is by construction a shape undo can put back.
+ */
 function coursesPayload() {
   const courses = {};
   for (const [id, course] of state.courses) {
@@ -4548,11 +4476,11 @@ function endEdit() {
   /*
    * EVERY BLOCK THE FILE HOLDS, and forgetting one is a whole tab that silently never saves.
    *
-   * That is not hypothetical: `races` was added to the file, to the payload and to the writer,
-   * and not to this line — so every race edit compared equal to the state before it, the guard
-   * said "nothing changed", and the save never ran. The editor showed the race, the file never
-   * heard of it, and a reload lost the afternoon's work. Found by the first driver that made a
-   * race through the FORM rather than through the API.
+   * A block added to the file, the payload and the writer but not to this comparison makes
+   * every edit of it compare equal to the state before, so the guard says "nothing changed" and
+   * the save never runs: the editor shows the edit, the file never hears of it, and a reload
+   * loses the afternoon's work. `drive-racedef.mjs` makes a race through the FORM for this
+   * reason.
    *
    * The guard itself is worth keeping — focusing a field and leaving it without typing is an
    * extremely ordinary thing to do, and without it every one of those would write the file and

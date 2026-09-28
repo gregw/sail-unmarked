@@ -9,7 +9,7 @@ site:
   name: "Unmarked Racing"
   contact: "unmarked@mortbay.org"
 
-# How the BOATS draw, as opposed to how this server runs. One setting so far.
+# How the BOATS draw, as opposed to how this server runs.
 display:
   # THE CLOSEST THE APPROACH PLOT WILL EVER ZOOM, in the joining boat's own lengths of line
   # across the view. The join screen asks each boat for its length, because three lengths of a
@@ -31,15 +31,15 @@ server:
   # client sent.
   forwardedHeaders: false
 
-  # One line per request in the ordinary log — on the Pi, `journalctl -u unmarked`.
+  # One line per request in the ordinary log — on the Pi, `journalctl -u sail-unmarked`.
   # On by default. The clients here are phones on marginal connections, so "did the
   # record actually arrive" is the question that will be asked, and this is what
   # answers it.
   requestLog: true
 
   # The course editor saves as you type, so this is on by default or the editor simply
-  # does not work. It is a real exposure and not a small one: with it on, ANYTHING THAT
-  # CAN REACH THIS PORT CAN REWRITE THE COURSE FILES, because there is no authentication
-  # on writes yet. Correct for a laptop on a desk; set false — or put a login in front of
-  # it — before this server is reachable from anywhere else. It warns at startup.
+  # does not work. It is the second lock behind the login: with it on and no auth.yaml,
+  # ANYTHING THAT CAN REACH THIS PORT CAN REWRITE THE COURSE FILES. Correct for a laptop
+  # on a desk; configure auth.yaml (see auth.yaml.example), or set this false, before the
+  # server is reachable from anywhere else. It warns at startup.
   configWrites: true

@@ -117,11 +117,11 @@ public record UnmarkedConfig(
             if (port <= 0)
                 port = 8083;
             // The course editor saves as you type, so this is on by default or the
-            // editor simply does not work. It is a real exposure and not a small one:
-            // with it on, ANYTHING THAT CAN REACH THIS PORT CAN REWRITE THE COURSE
-            // FILES, because there is no authentication on writes yet. Correct for a
-            // laptop on a desk; turn it off — or put a login in front of it — before
-            // this is reachable from anywhere else. The server says so at startup.
+            // editor simply does not work. It is the second lock behind the login in
+            // auth.yaml: with writes on and no login configured, ANYTHING THAT CAN REACH
+            // THIS PORT CAN REWRITE THE COURSE FILES. Correct for a laptop on a desk; set
+            // up a login, or turn this off, before the port is reachable from anywhere
+            // else. The server says so at startup.
             if (configWrites == null)
                 configWrites = Boolean.TRUE;
             // Boolean rather than boolean, and defaulted here: an absent YAML key

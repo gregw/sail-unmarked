@@ -1,5 +1,6 @@
 /**
- * THE BOAT'S HALF OF THE CONVERSATION — the dialog document, from the phone's side.
+ * THE BOAT'S HALF OF THE CONVERSATION — `wiki/client-server-dialog.md`, from the phone's side.
+ * The section numbers (§) throughout are that document's.
  *
  * <h2>This is the optional half of the application, and it has to stay that way</h2>
  * Nothing in this file is on the path from a fix to a latch. The boat detects and times its own
@@ -27,11 +28,11 @@
  * crossing instants already rest on, and the reason a clock offset costs nothing: elapsed time
  * is a difference between two readings of one clock.
  *
- * <h2>What is NOT built yet</h2>
+ * <h2>What is NOT built</h2>
  * <ul>
- * <li><b>The WebSocket.</b> Polling only; the envelopes and the rules are the ones the socket
- *     will carry, which is what the document promises. `poll` comes from `hello.ok`.
- * <li><b>`ask`.</b> Every join answers itself today.
+ * <li><b>The WebSocket.</b> Polling only; the envelopes and the rules are the ones a socket
+ *     would carry. `poll` comes from `hello.ok`.
+ * <li><b>`ask`.</b> Every join answers itself: the join screen names the race and division.
  * <li><b>`window`.</b> Carried and held as state; nothing shows a start range yet.
  * </ul>
  */
@@ -511,12 +512,12 @@ export class Dialog {
    */
   markRead(notify = true) {
     /*
-     * NOTHING TO DO IS NOT A CHANGE, and saying otherwise here was an infinite loop.
+     * NOTHING TO DO IS NOT A CHANGE, and saying otherwise here would be an infinite loop.
      *
      * The device calls this from `render`, because being on the channel screen is what reading
      * it means — and `changed()` is what asks the device to render. So an unconditional notify
-     * is render → markRead → changed → render, for ever. Found by `drive-alert.mjs` as a stack
-     * overflow the moment a boat looked at its channel, which is a thing every boat does.
+     * is render → markRead → changed → render, for ever: a stack overflow the moment a boat
+     * looks at its channel. `drive-alert.mjs` holds it to that.
      *
      * Two guards rather than one, because either alone is a trap: this method reports whether
      * it did anything, and the device passes `notify = false` since it is already rendering.
@@ -566,7 +567,8 @@ export class Dialog {
 }
 
 /**
- * THE CORRECTED-TIME LADDER — brief §3's Live place, from what the fleet said about itself.
+ * THE CORRECTED-TIME LADDER — standing in for brief §5's Live place, from what the fleet said
+ * about itself. It is a ranked list, not the brief's distance-to-finish picture.
  *
  * <b>It is a view, not an authority.</b> Nothing here is scored: a place on this ladder is
  * arithmetic over what boats reported about themselves (§1.1), and the club's software is what
@@ -574,8 +576,8 @@ export class Dialog {
  * wrong — a boat whose fixes stopped ages last — without anything being at stake.
  *
  * Corrected time is elapsed × TCF where a TCF is known, which is the one handicap arithmetic
- * this system does. That is not the open question: turning a TCF into a DISTANCE is (CLAUDE.md
- * open question 5), and nothing here does that.
+ * this system does. That is not the open question: turning a TCF into a DISTANCE is
+ * (`wiki/open-questions.md`, question 5), and nothing here does that.
  */
 export function ladder(fleet, { tags = null, now = Date.now() } = {}) {
   const rows = (fleet ?? [])

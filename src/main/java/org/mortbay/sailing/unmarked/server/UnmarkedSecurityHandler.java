@@ -12,16 +12,18 @@ import org.mortbay.sailing.unmarked.config.AuthConfig;
  * WHAT NEEDS A LOGIN, IN ONE PLACE — and it is the officer's half of the system and nothing
  * else.
  *
- * <p><b>Authenticate authority, trust data</b> (dialog document §7.1). Publishing a course,
+ * <p><b>Authenticate authority, trust data</b> (dialog §7.1). Publishing a course,
  * scheduling a start and abandoning a race are decisions imposed on a fleet, and <em>who did
  * this</em> has an answer that matters; a boat's positions and instants are trusted by design,
  * so a login there would put a name to a claim nothing can check. The list below is that
  * sentence made mechanical, and the two things NOT on it matter as much as the things that are:
  *
  * <ul>
- * <li><b>{@code /api/dialog/*} is never constrained.</b> That is the boats' conversation, and
- *     boats are never authenticated — not yet, but never. Putting a login in front of it would
- *     stop a fleet racing to protect data that is trusted anyway.
+ * <li><b>{@code /api/dialog/*} is never constrained</b>, and nor are {@code POST /api/join}
+ *     and {@code POST /api/records}. That is the boats' side, and boats are never
+ *     authenticated. A login in front of it would look exactly like a working login until
+ *     race day, and then stop a fleet racing to protect data that is trusted anyway.
+ *     {@code AuthIntegrationTest} asserts the open half as deliberately as the closed one.
  * <li><b>Every GET stays open.</b> A club publishes its racing: the courses, the log of what
  *     was handed to whom, the results. A read behind a login is a club publishing to itself.
  * </ul>
@@ -69,7 +71,7 @@ public class UnmarkedSecurityHandler extends SecurityHandler
          * OPT-IN, and that is not caution for its own sake. BEHIND A REVERSE PROXY EVERY
          * REQUEST IN THE WORLD ARRIVES FROM 127.0.0.1 — so a bypass that were on by default
          * would hand the editor to the internet on the first club that put nginx in front of
-         * this, and would do it silently. sail-jinx learned that one the same way.
+         * this, and would do it silently.
          */
         if (auth.allowLoopback() && isLoopback(request))
             return Constraint.ALLOWED;

@@ -1,13 +1,13 @@
 /**
  * A template whose sequence names one line several times expands into ONE line.
  *
- * A windward/leeward's leeward line is start, mark 2 and finish: three steps, one line. The
- * expansion used to take a line across once per OCCURRENCE, so an ad-hoc line came out as
- * three separate copies sitting in the same water with three different ids — indistinguishable
- * on the chart, and three separate edits every time the mark moved afterwards.
+ * A windward/leeward's leeward line is start, mark 2 and finish: three steps, one line. Taken
+ * across once per OCCURRENCE, an ad-hoc line would come out as three separate copies sitting in
+ * the same water with three different ids — indistinguishable on the chart, and three separate
+ * edits every time the mark moved afterwards.
  *
- * The fixture's own templates are all built on NAMED lines, where `adopt` happened to be
- * idempotent and the bug did not show. So this driver writes the template it needs: ad-hoc
+ * The fixture's own templates are all built on NAMED lines, where `adopt` is idempotent anyway
+ * and the difference cannot show. So this driver writes the template it needs: ad-hoc
  * geometry, repeated, in a series other than the one the editor has open.
  */
 import { $, H, choose, chosenIn, ok, optionsOf, paneHtml, report, settle, unfold } from './dom.mjs';

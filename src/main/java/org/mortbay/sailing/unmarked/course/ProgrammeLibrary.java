@@ -50,8 +50,7 @@ public class ProgrammeLibrary
     private static final Logger LOG = LoggerFactory.getLogger(ProgrammeLibrary.class);
 
     private static final JsonMapper YAML_MAPPER = JsonMapper.builder(new YAMLFactory())
-        // Race files carry window times as ISO instants. Programme files carry none, so
-        // this module's absence went unnoticed until races arrived.
+        // A race's `date` is a LocalDate, which Jackson cannot read without this module.
         .addModule(new JavaTimeModule())
         .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
         .build();
@@ -126,12 +125,6 @@ public class ProgrammeLibrary
         }
     }
 
-
-
-
-
-
-
     public Optional<Programme> programme(String club, String series)
     {
         return Optional.ofNullable(programmes.get(key(club, series)));
@@ -145,10 +138,10 @@ public class ProgrammeLibrary
      * a URL, so a constructed path would be a request to write wherever the caller liked.
      * A programme that is not already loaded cannot be written by this method.
      *
-     * <p>That used to be the whole of the access control here. {@link #create} now does
-     * build a path, because creating a file cannot do otherwise — so the guard has moved
-     * rather than gone: see {@link #resolve}, which validates the ids through
-     * {@link Ids} and then checks the resolved path is inside the config tree anyway.
+     * <p>{@link #create} and {@link #rename} are the only methods that build a path, because
+     * a new file cannot be looked up; they go through {@link #resolve}, which validates the
+     * ids through {@link Ids} and then checks the resolved path is inside the config tree
+     * anyway.
      *
      * <p>Reloading afterwards is not a nicety. The library is the read model for every
      * GET, so skipping it would leave the server serving the previous points until the

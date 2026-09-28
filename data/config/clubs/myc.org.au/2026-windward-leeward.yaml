@@ -14,7 +14,8 @@
 #      when real marks arrive, a gate with a virtual line one side and a buoy the
 #      other is just a list with one of each in it.
 #
-# No coordinates are asserted here either. See the test fixtures for a populated one.
+# The positions here were placed on a chart in the editor for demonstration; none is a
+# survey.
 
 name: Windward/leeward (shape demonstration)
 datum: WGS84

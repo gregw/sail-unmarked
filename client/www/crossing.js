@@ -144,10 +144,10 @@ export const SIDE_BAND_M = RESOLUTION_M / 2;
  * metre this system resolves to — not that the receiver was uncertain, which is a different
  * question with a different answer and is {@link confirmedSide} below.
  *
- * Those two used to share a band, and sharing it made the plot unreadable: with the band set
- * to the fix's own accuracy, a boat crossing at nine knots under a two-metre sky spends a
- * second inside it, and the picture of the crossing — the one thing that makes a result
- * explicable — came out as a run of grey dots through the very moment being explained.
+ * The two must not share a band. With the band set to the fix's own accuracy, a boat crossing
+ * at nine knots under a two-metre sky spends a second inside it, and the picture of the
+ * crossing — the one thing that makes a result explicable — would come out as a run of grey
+ * dots through the very moment being explained.
  */
 export function side(prepared, point, bandM = SIDE_BAND_M) {
   const distance = signedDistanceM(prepared, point);
@@ -168,9 +168,8 @@ export function side(prepared, point, bandM = SIDE_BAND_M) {
  * makes the effective width vary with the sky — an open question, and the reason this is a
  * setting at all.
  *
- * <p>Separating the two changes nothing about what latches. It changes only what the screen
- * is willing to call, which was being held to the stricter of two standards for no reason
- * beyond their having been written as one function.
+ * <p>Only the latch uses this. The screen colours a fix by {@link side}, so what it is
+ * willing to call is not held to the stricter of the two standards.
  */
 export function confirmedSide(prepared, point, accuracyM, bandM) {
   return side(prepared, point, bandM == null ? (accuracyM ?? 0) : bandM);
@@ -263,7 +262,7 @@ export const NOISE_SIGMAS = 3;
  * to exactly the wrong thing.
  *
  * So the budget is what the boat could have travelled PLUS what the receiver could have
- * made up, and the second term is why raising the fix rate no longer makes the gate
+ * made up, and the second term is why raising the fix rate does not make the gate
  * hysterical. It uses the accuracy the receiver itself states, so a good sky narrows the
  * gate automatically and a bad one widens it — which is the same reasoning the accuracy band
  * rests on, and the reason `accuracyBandM: null` is the more honest setting there too.

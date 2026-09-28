@@ -1,11 +1,11 @@
 /**
  * A rename reaches the FILE, not only the screen.
  *
- * The bug: a rename re-renders, and the re-render destroys the very input the browser is in
- * the middle of leaving — so the `blur` that would have called endEdit() landed on a detached
- * node or never fired, and the edit stayed in memory. The editor showed the new id while the
- * file and the server kept the old one, which reads as a variant with no length (the lengths
- * come back from the server keyed by the id it knows) and a 404 on the next snapshot:
+ * The hazard: a rename re-renders, and the re-render destroys the very input the browser is in
+ * the middle of leaving — so a `blur` that would call endEdit() lands on a detached node or
+ * never fires, and the edit stays in memory. The editor would show the new id while the file and
+ * the server kept the old one, which reads as a variant with no length (the lengths come back
+ * from the server keyed by the id it knows) and a 404 on the next snapshot:
  *
  *     POST /api/lifecycle/{club}/{series}/snapshots  ->  404 No such course variant
  *

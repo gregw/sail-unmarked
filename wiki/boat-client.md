@@ -111,12 +111,12 @@ about seven knots, so for most of a club fleet most of the time both tests say t
 screen comes up where a sailor expects it. The time test then earns its keep only at the ends of the
 range — measured, it takes the screen at 100 m up to 7 kn, 129 m at 10, 193 m at 15 and 257 m at 20.
 
-Four details around it, each of which was a bug first and each of which a change must preserve:
+Four details around it, each of which a change must preserve:
 
-- **The screen is given back at 160 m, not 100** — and at 48 seconds, not 30. Both tests need a gap, and
-  the missing one on the *time* test is what made the screen flash on the water: a boat coming in fast took
-  the screen on time, failed the distance-only hold on the very next fix, went back to the course, took it
-  again on time. Held at the same 1.6 ratio, because what a gap has to beat is the jitter in the quantity
+- **The screen is given back at 160 m, not 100** — and at 40 seconds, not 25 (`APPROACH`). Both tests
+  need a gap: without one on the *time* test the screen flashes on the water — a boat coming in fast takes
+  the screen on time, fails a distance-only hold on the very next fix, goes back to the course, takes it
+  again on time. Both at the same 1.6 ratio, because what a gap has to beat is the jitter in the quantity
   it is testing, and a boat's speed is the noisier of the two.
 - **And a minimum hold of five seconds** (`APPROACH.holdMs`) under both. Hysteresis answers a quantity that
   *drifts* across a threshold and can do nothing about one that *jumps* — a speed that halves because a fix
@@ -134,7 +134,7 @@ extent test still runs out without limit.
 
 **The selector is on EVERY screen**, because any one of them may be the one you want to leave. The Mark
 screen and the overview emit it themselves; Chat and Place have no chart and no orientation of their own,
-so the device passes it in — leaving it off made those two screens a trap with no way off but a reload,
+so the device passes it in — without it those two screens would be a trap with no way off but a reload,
 which on the water costs the joined race.
 
 **The sailor can also overrule it** (`VIEWS`, `RaceClient.setViewMode`). AUTO is the default and is the
@@ -176,14 +176,14 @@ derivations; these are the rules that outlive any of them.
   (2) times its own perpendicular distance off, which is about sixty degrees of square. The triangle and the
   arrow come in as pixel offsets from the seat, which is what the fit iterates for.
 
-  **The line's own geometry is not in it, and that is the lesson of a real boat on real water.** The
-  midpoint and the nearer end used to be held, on the reasoning that a picture of a line must say how much
-  line there is; on the long lines this is actually raced round, that pins the picture to a mark and an end
-  hundreds of metres from where the boat will cross, and the last few metres are drawn a few pixels across.
-  Measured on a 300 m line at ten metres out: **177 m of visible water before, 56 m now**, and the same
-  either way along the line. What those two answered is answered better elsewhere — DTW counts down to the
-  mark on the row above, and the overview draws the line whole. The COG cut was capped in *line lengths*
-  for the same wrong reason: that gives the loosest frame to exactly the line that needs the tightest.
+  **The line's own geometry is not in it, and that is the lesson of a real boat on real water.** Holding
+  the midpoint and the nearer end — so the picture says how much line there is — pins it, on the long lines
+  this is actually raced round, to a mark and an end hundreds of metres from where the boat will cross, and
+  draws the last few metres a few pixels across. Without them, on a 300 m line at ten metres out, the plot
+  shows about 56 m of water rather than 177 m, and the same wherever along the line the boat comes in. What
+  those two would answer is answered better elsewhere — DTW counts down to the mark on the row above, and
+  the overview draws the line whole. For the same reason the COG cut is not capped in *line lengths*: that
+  would give the loosest frame to exactly the line that needs the tightest.
 
 - **The maximum zoom is measured in BOAT LENGTHS** (`minSpanM`). How much room there is at a start line is
   a question answered in boats, so the floor is the boat's own length times the club's
@@ -196,8 +196,8 @@ derivations; these are the rules that outlive any of them.
 - **The boat and the line are drawn at their REAL SIZE**, which is how the plot shows closing. A glyph of
   fixed pixel size says nothing about range. Both are clamped, and **the line's bounds are derived from the
   boat's** by the ratio of their lengths, so the clamp cannot put the pair out of proportion. **The boat's
-  length is asked for at join** (`realFor`), ten metres being the fallback rather than the assumption it
-  once was; the line stays three metres for everybody, because that width is the accuracy band and belongs
+  length is asked for at join** (`realFor`), ten metres being the fallback for a boat that does not say;
+  the line stays three metres for everybody, because that width is the accuracy band and belongs
   to the sky rather than to the boat. The length is remembered like the sail number, carried in the `join`
   message and written onto the record, where a handicapper or a protest asks for it first.
 - **The boat is a HULL SEEN FROM ABOVE, not an arrow** (`boatArt`) — an arrow reads as a cursor or a
@@ -292,17 +292,17 @@ the selector is on the overview as well and sets one setting.
 - **DTW switches units at a fifth of a mile.** Safe only because the unit is printed beside the figure every
   time. **Bearings are true throughout**, because there is no variation model anywhere in this system.
 - **It is drawn to be read in DAYLIGHT** (`OVERVIEW_INK`). Dark is the background's job, not the
-  course's: everything here used to be faint over a dark panel, which on a desk reads as a tasteful
-  picture and on the water at midday reads as an empty screen. The ranking between marks is carried by
+  course's: a course drawn faint over a dark panel reads, on a desk, as a tasteful picture and, on the
+  water at midday, as an empty screen. The ranking between marks is carried by
   **colour and weight** — green live, blue ahead, a thinner dashed track — rather than by fading them
   out, so only a mark already crossed this lap is dimmed, and only to *still legible*. The basemap stays
   faint, because that is the thing everything else is read against.
 - **It shows the boat's own track back to the last line** (`RaceClient.legTrack`), which is the one
   question the course drawing cannot answer: not where the leg goes but where the boat has actually
   been on it. **Every fix, one pixel each, as dots rather than a line** — a line claims the boat went
-  straight from one fix to the next, which it did not. It was decimated at 25 m and that drew a dozen
-  points down a whole leg with the shape missing from between them; `LEG_TRACK.everyM` is 0 now and
-  remains the knob, with `max` as the real bound (a cap in points, a quarter-hour of leg at 5 Hz).
+  straight from one fix to the next, which it did not. Decimating by distance draws a dozen points down a
+  whole leg with the shape missing from between them, so `LEG_TRACK.everyM` is 0 and stays the knob,
+  with `max` as the real bound (a cap in points, a quarter-hour of leg at 5 Hz).
   Drawn as one path of zero-length round-capped segments, because thousands of circles is a document
   the browser lays out where this is a shape it fills. It starts at the *interpolated crossing*, so it
   touches the mark it came from, and is reset by a crossing, a skip or a relocation — the segment
@@ -330,8 +330,8 @@ the selector is on the overview as well and sets one setting.
 
 **Elapsed runs from the CROSSING**, never from when the app was opened, because every start is self-timed.
 Before the first crossing the overview shows a dash, not a zero. Both instants come off the *interpolated*
-crossings — that is the entire reason the detector interpolates. On a cycle each lap restarts it, which is
-what makes the number a lap time. **Final is said by the COLOUR, not by the label**: a label is text, `esc`
+crossings — that is the entire reason the detector interpolates. On a cycle it runs from the entry line the
+boat took, which is what makes the number a lap time. **Final is said by the COLOUR, not by the label**: a label is text, `esc`
 is right, and a label that has to carry markup is a label saying too much.
 
 **BTW, DTW, Started and Elapsed fill the panel's width**, sized in `cqi` against the **system** font — there
@@ -342,31 +342,16 @@ NUMBER, not a unit beside it**, or beside a large figure it reads as a decimal p
 
 ---
 
-## Quality control, and a jump that is not a flyer
+## Quality control, and staleness
 
-`crossing.js` holds the detector and the gates; `crossing-test.js` is its executable spec, run in a browser
-and in `mvn test` from one file.
+The detector, the quality gates and the relocation watch are described in
+[crossing-detection.md](crossing-detection.md); `crossing.js` holds them and `crossing-test.js` is their
+spec. What the screens add is one rule:
 
-- **The gate budgets for noise as well as for motion** (`kinematicBudgetM`). A speed limit alone is the wrong
-  test over a short interval: as the interval shrinks the distance is dominated by the noise on the two fixes
-  rather than by anything the boat did. The budget is what the boat could have travelled **plus** what the
-  receiver could have made up, the second term from the accuracy the receiver states — so a good sky narrows
-  the gate and a bad one widens it.
-- **The kinematic gate has no way out of its own judgement.** `lastGood` only advances when something is
-  accepted, so after a real relocation — a dropout below decks, under a bridge, a phone asleep in a pocket —
-  every fix is measured against a position the boat has left.
-- **The discriminator is that a flyer disagrees with its neighbours and a relocation agrees with itself**
-  (`RelocationWatch`). Confirmed the same way a crossing is: N consecutive agreeing fixes.
-- **A relocation must never become a crossing.** The segment from where we thought the boat was to where it
-  turns out to be sweeps across any number of lines. The detectors are re-armed and the trail thrown away;
-  losing a crossing that happened during the blackout is the honest outcome, inventing one is not. The step is
-  **not** advanced — which mark is live is a fact about the course, not about the receiver.
-- **Only a KINEMATIC refusal can relocate.** A fix from two satellites is not evidence about where the boat
-  is, however many of them agree.
-- **A stale fix is not shown as if it were current** (`STALE_MS`). SOG and COG are instantaneous, so an old
-  one is *wrong* rather than merely old, and a frozen speed reads as "everything is fine" at precisely the
-  moment it is not. BTW and DTW stay, because last-known position degrades gracefully. Either way the screen
-  says how long it has been, how many fixes went in the bin, and why the last one did.
+**A stale fix is not shown as if it were current** (`STALE_MS`). SOG and COG are instantaneous, so an old
+one is *wrong* rather than merely old, and a frozen speed reads as "everything is fine" at precisely the
+moment it is not. BTW and DTW stay, because last-known position degrades gracefully. Either way the screen
+says how long it has been, how many fixes went in the bin, and why the last one did.
 
 ---
 
@@ -374,10 +359,10 @@ and in `mvn test` from one file.
 
 A test client that shared state with the thing it tests is a demonstration, not a test.
 
-**The simulated boat turns in half the radius it used to** (`TURN_RATE_DEG_S`, 40°/s). What that number
-really sets is a radius — speed over turn rate — and at the old twenty a boat doing twenty-five knots
-arced out nearly forty metres past a mark before it was pointing at the next one, which is time spent
-steering the simulator rather than watching the screen it exists to exercise.
+**The simulated boat turns at 40°/s** (`TURN_RATE_DEG_S`). What that number really sets is a radius —
+speed over turn rate — and at twenty a boat doing twenty-five knots would arc out nearly forty metres past
+a mark before it was pointing at the next one, which is time spent steering the simulator rather than
+watching the screen it exists to exercise.
 
 **GNSS error WANDERS; it does not shimmer.** Independent draws per fix make the plotted dots hop about the
 truth like nothing any receiver has produced. A real receiver sits a little way off and *stays* there, so the
@@ -399,7 +384,8 @@ which is the application's central claim, and nothing else on the page could tes
 geometry: the true track, the accepted fixes, the helm order, the boat and the tiles all stay.
 
 > One leak worth knowing about: joining aims the boat *through* the first line, so the helm target betrays
-> roughly where that first mark is. **Place boat** replaces it.
+> roughly where that first mark is. Dragging the boat somewhere and giving it a fresh helm order replaces
+> it.
 
 **THE DEVICE IS A PHONE ON THE DESK, not a column beside it.** What ships is a phone in a bracket, and a phone
 sits ON the chart. It is **dragged by the case and never by the screen** — the screen's own chart pans on a
@@ -486,4 +472,4 @@ it and takes the finish time with it, a result that stood while the boat went on
 result about nothing.
 
 **The handicap is carried, not applied**: the join screen collects a TCF and does nothing with it, because
-turning a TCF into a distance is open question 5.
+turning a TCF into a distance is [open question 5](open-questions.md).

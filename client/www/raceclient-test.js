@@ -81,6 +81,13 @@ const WINDWARD_LEEWARD = snapshot([
   { letter: 'F', entry: false, legNm: 0.1, crossings: [line('leeward', 0, 'REVERSE')] },
 ]);
 
+/** Perpendicular distance, for assertions about what the plot chose to colour. */
+const signedOf = (prepared, point) =>
+  (prepared.d.x * (point.y - prepared.port.y) - prepared.d.y * (point.x - prepared.port.x))
+  / prepared.length;
+
+const CLOCK = new WeakMap();
+
 /**
  * Feed the client a straight run of fixes, at a spacing the quality gate will accept.
  *
@@ -89,13 +96,6 @@ const WINDWARD_LEEWARD = snapshot([
  * a side instead of falling in the band. Both of those have to be true or this spec would
  * be testing the gate rather than the thing it means to.
  */
-/** Perpendicular distance, for assertions about what the plot chose to colour. */
-const signedOf = (prepared, point) =>
-  (prepared.d.x * (point.y - prepared.port.y) - prepared.d.y * (point.x - prepared.port.x))
-  / prepared.length;
-
-const CLOCK = new WeakMap();
-
 function sail(client, from, to, options = {}) {
   const stepM = options.stepM ?? 10;
   const dt = options.dtSeconds ?? 2;
@@ -278,8 +278,8 @@ export function run(check) {
   check('with two entry points, both lines are live before the start',
     either.live().crossings.length === 2
     && either.isLive(0) && either.isLive(1));
-  // Starting at the SECOND one, which is the case the old client could not sail at all: it
-  // began every cycle at step 0 whatever the author had marked.
+  // Starting at the SECOND one: a client that began every cycle at step 0, whatever the author
+  // had marked, could not sail this at all.
   sail(either, { e: 0, n: 120 }, { e: 0, n: 420 });
   check('...and the boat begins at whichever it crosses first',
     either.entryIndex === 1 && either.at === 0);
@@ -304,8 +304,8 @@ export function run(check) {
   sail(tracked, { e: 0, n: -400 }, { e: 0, n: -120 });
   check('the boat leaves a track on the leg it is sailing', tracked.legTrack.length > 3);
   // EVERY FIX, because the shape of the leg is what this is for and the shape lives between
-  // the dots. It was decimated at twenty-five metres, which on the water drew a dozen points
-  // down a whole leg. What bounds it now is a cap in POINTS, not a spacing.
+  // the dots. Decimating at twenty-five metres draws a dozen points down a whole leg. What
+  // bounds it is a cap in POINTS, not a spacing.
   check('...at every fix, so the shape of the leg survives rather than a dozen dots of it',
     tracked.legTrack.length === tracked.fixes.length
     && LEG_TRACK.everyM === 0 && LEG_TRACK.max > 1000);
@@ -525,14 +525,14 @@ export function run(check) {
    * AND IT DOES NOT FLASH, which is what this cost on the water.
    *
    * The screen is taken on EITHER test — inside the radius, or inside the seconds at the speed
-   * being made — and was held on the distance one alone. So a boat coming in fast from three
-   * hundred metres took the screen on time, failed the distance-only hold on the very next
-   * fix, went back to the course, took it again on time, and flapped between the two several
-   * times a second all the way in. Both tests have a hysteresis now.
+   * being made. Held on the distance one alone, a boat coming in fast from three hundred metres
+   * would take the screen on time, fail the distance-only hold on the very next fix, go back to
+   * the course, take it again on time, and flap between the two several times a second all the
+   * way in. So both tests have a hysteresis.
    */
   // At fifteen knots the time test takes the screen at about 190 m, which is outside the 160 m
-  // the distance test would hold it at — so every fix from there in used to be a fresh argument
-  // between the two rules.
+  // the distance test would hold it at — so without the time test's own hysteresis every fix
+  // from there in would be a fresh argument between the two rules.
   const flap = fresh(WINDWARD_LEEWARD);
   sail(flap, { e: 0, n: -900 }, { e: 0, n: -180 }, { stepM: 30, dtSeconds: 4 });
   const took = flap.approachM();
@@ -869,10 +869,10 @@ export function run(check) {
 
   /* ------------------------------------------- what the plot is willing to call */
 
-  // Two questions used to share one band, and sharing it made the picture of a crossing
-  // unreadable: with the band set to the fix's own accuracy, a boat crossing at speed under a
-  // five-metre sky spends a second inside it, so the moment being explained came out as a run
-  // of grey. The plot now asks the GEOMETRIC question — which side, at the metre this system
+  // Two questions, two bands. Sharing one would make the picture of a crossing unreadable: with
+  // the band set to the fix's own accuracy, a boat crossing at speed under a five-metre sky
+  // spends a second inside it, so the moment being explained would come out as a run of grey.
+  // The plot asks the GEOMETRIC question — which side, at the metre this system
   // resolves to — while the latch goes on asking the stricter one.
   const plotted = fresh(WINDWARD_LEEWARD);
   sail(plotted, { e: 0, n: -60 }, { e: 0, n: 60 }, { stepM: 1, dtSeconds: 1, accuracyM: 5 });
@@ -883,7 +883,7 @@ export function run(check) {
   check('...only the fixes that round onto the line itself',
     shown.filter((f) => f.side === 0)
       .every((f) => Math.abs(signedOf(crossed, f)) <= 0.5));
-  check('...where the old shared band left a dozen of them grey',
+  check('...where one shared band would leave a dozen of them grey',
     shown.filter((f) => Math.abs(signedOf(crossed, f)) <= 5).length > grey * 3);
   check('and the crossing still latched, because none of this is what the latch counts',
     plotted.crossings.length === 1);

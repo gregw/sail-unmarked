@@ -55,9 +55,9 @@ ok('...named yyyymmdd-race-n, for the race it is rather than for nothing',
 ok('...with one division already, since a race with none can hand no boat a course',
   form().includes('data-dcourse='));
 
-// THE QUESTION THAT WAS WRONG. With one race in existence there is nothing before it, so the
-// only honest answer is "nothing" — and the old form asked what this race was FOLLOWED BY,
-// which could never be answered at the moment of asking.
+// THE QUESTION ASKED FROM THE RIGHT END. With one race in existence there is nothing before
+// it, so the only honest answer is "nothing" — where asking what this race is FOLLOWED BY
+// could never be answered at the moment of asking.
 ok('the form asks what this race FOLLOWS, not what follows it',
   form().includes('id="r_follows"') && !form().includes('id="r_next"'));
 ok('...and the first race follows nothing, which is the only answer available',
@@ -196,8 +196,7 @@ ok('a race that another leads into cannot be deleted while it does',
 // AND FREEING IT IS DONE FROM THE RACE ITSELF, which is the whole point of asking the question
 // this way round: what holds SECOND is FIRST's `next`, and the way to clear that is to stand on
 // SECOND and say it follows nothing. Standing on FIRST and answering "nothing" clears whatever
-// leads into FIRST, which is a different link entirely — and was this driver's own mistake
-// first, which is a fair sign the question is now being asked at the end a person thinks from.
+// leads into FIRST, which is a different link entirely.
 choose('race', SECOND);
 await settle(900);
 $('r_follows').value = '';

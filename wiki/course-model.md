@@ -1,12 +1,10 @@
 # The course model
 
 **What a course is made of, how it is identified, and how a design becomes something a boat
-can be handed.** This supersedes the YAML sketch in [brief §6](unmarked-racing-brief.html),
-which was wrong in ways worth not reintroducing.
-
-The reasoning behind the lifecycle half is in [`course-lifecycle.html`](course-lifecycle.html);
-what is here are the rules a change has to respect. The Java records in `model/` carry the rest
-in their comments.
+can be handed.** The Java records in `model/` carry the detail in their comments; the files under
+`data/config/clubs/` are working examples of the format. The reasoning behind the lifecycle half
+is in [`course-lifecycle.html`](course-lifecycle.html); what is here are the rules a change has to
+respect. How a line is actually *crossed* is [crossing-detection.md](crossing-detection.md).
 
 ---
 
@@ -114,26 +112,18 @@ The subtle part, and it is deliberate: on an infinite end the point's *distance*
 is arbitrary — sliding it leaves the line geometrically identical — so **that point is the control
 handle for where the line is measured to**. Place it where the fleet actually crosses.
 
-(The alternative rule — measure to the finite end of a half-infinite line, since it cannot move
-without the line moving — is more stable and gives up the handle. Considered and rejected for that
-reason.)
+Measuring to the finite end of a half-infinite line instead would be more stable, and would give up
+the handle — leaving an explicit `lengthNm` with no picture attached as the only way to adjust a
+leg.
 
 ---
 
 ## One metre, everywhere
 
-**The resolution of the whole system is one metre.** Declared twice, in `Geo.RESOLUTION_M` and
-`crossing.js`'s `RESOLUTION_M`, and the two must agree. GNSS on a phone does not honestly resolve
-better, and a scoring edge that moves with the twelfth decimal place of a float is one nobody can
-argue in front of a protest committee.
-
-The consequence is deliberate and blunt: **a finite end is a hard edge. If you miss, you miss.**
-There is no unresolved state at an endpoint — that treatment is reserved for the accuracy band
-about the line itself, which exists to stop a boat sitting on the line emitting phantom crossings.
-
-What the application owes the sailor instead is **warning**: `projectCog()` reports the margin from
-the COG projection's cut to the nearer finite end and flags `near-end` or `beyond-end`. An infinite
-end raises no warning, because it is not a hazard.
+**The resolution of the whole system is one metre**, declared twice — `Geo.RESOLUTION_M` and
+`crossing.js`'s `RESOLUTION_M` — and the two must agree. Course lengths are measured at it, and so is
+every crossing. **A finite end is a hard edge: if you miss, you miss**, and what the sailor is owed
+instead is warning. See [crossing-detection.md](crossing-detection.md#one-metre-a-hard-edge-and-a-warning).
 
 ---
 
@@ -189,28 +179,36 @@ about the same club line up across all three.
 
 ---
 
-## There are no races
+## There is no scoring
 
-**This system publishes courses and collects what boats did on them.** Places, OCS, corrected times,
-penalties, drop races and series scoring belong to the club's software, which already has rules for
-all of it. Owning none of that is what lets this be right about the one thing it is uniquely able to
-be right about — detecting and timing a crossing — which is also the only thing here a protest
-committee could not reconstruct from somebody's watch.
+**This system publishes courses, runs the committee's side of a race where there is one, and
+collects what boats did.** Places, OCS, corrected times, penalties, drop races and series scoring
+belong to the club's software, which already has rules for all of it. Owning none of that is what
+lets this be right about the one thing it is uniquely able to be right about — detecting and timing
+a crossing — which is also the only thing here a protest committee could not reconstruct from
+somebody's watch.
 
 Same boundary the brief drew (*"the server is explicitly outside the rounding path"*), extended one
 step: **outside the scoring path too**.
 
-**The consequence is a commitment, not a gap: every start is self-timed.** A boat's clock starts
-when it crosses, because there is nothing here to fire a gun. A club running a fixed-gun race scores
-from its own gun and this record's crossing times.
+**Races exist, as a definition and as conduct.** A race is defined in the series file — a date, a
+format, and a course and variant per division (`Race`) — and what happened on the afternoon is a
+conduct record in the store. The committee's side of it is
+[the client–server dialog](client-server-dialog.md). None of that is scoring.
 
-**Three ways to join** (`JoinMode`), declared when joining rather than when submitting — it changes
-how a boat sails, and a boat deciding afterwards decides with the answer in front of it:
+**Every elapsed time is self-timed.** A boat's clock starts when it crosses the start line, even
+where a committee published a start time: that crossing is the instant the boat can defend. A club
+scoring from a gun scores from its own gun and this record's crossing times.
+
+### Three ways to sail
+
+`JoinMode`, chosen on the join screen — it changes how a boat sails, and a boat deciding afterwards
+decides with the answer in front of it — and carried on the record:
 
 | | |
 |---|---|
 | `RACE` | goes to the club, which scores it |
-| `ANONYMOUS` | practice: kept for the boat, published to nobody |
+| `ANONYMOUS` | practice: kept for the boat, published to nobody. The only mode that may step through the marks without sailing them |
 | `RECORD` | goes to the club **and** stands against every other attempt at the same geometry |
 
 Practice is **stored and not published**, rather than withheld: a boat that never uploads cannot
@@ -236,7 +234,8 @@ one thing in a record the boat is not the authority on. It is stamped by the ser
 session when the record arrives over the dialog, never read off the boat's own message: everything
 else here is a boat's account of itself and is trusted as such (dialog §1.1), but being in a race
 is an entry a committee accepted, and a boat that could name its own race could put itself in a
-results table nobody can check. Null for a record attempt or for practice.
+results table nobody can check. Null for a record attempt or for practice. (A record posted over
+REST has no session, and is not yet stripped of a `race` it carries — dialog §14.)
 
 Records are filed `records/{club}/{course}/{date}/{boatId}-{HHmmss}{±hhmm}.json`. The start time is
 in the *name* so a boat may sail the same course twice in a day, and so a resubmission of the same
@@ -304,7 +303,7 @@ Both points slide together, so the geometry and the measurement move consistentl
 
 Note what this reuses: the midpoint is already the measurement point, and the point on an infinite end
 is already a free handle that changes no geometry. The server is in the *geometry* and still not in the
-*rounding*. What is open is how a TCF becomes a length delta — open question 5.
+*rounding*. What is open is how a TCF becomes a length delta — [open question 5](open-questions.md).
 
 ---
 
@@ -371,9 +370,8 @@ about a season.
 
 ### Snapshots inline everything, immediately
 
-Lazy inlining was considered and rejected: **the revision is a hash over resolved coordinates**, so a
-snapshot that resolved names later would have a hash that could silently stop describing its own
-contents. The impact question does not need it, because **the variant a snapshot was taken from
+Not lazily: **the revision is a hash over resolved coordinates**, so a snapshot that resolved names
+later would have a hash that could silently stop describing its own contents. The impact question does not need it, because **the variant a snapshot was taken from
 remains**, still holding its named references. Immutability and impact tracking are jobs for two
 different objects.
 
@@ -385,8 +383,9 @@ changes anything a boat has been handed. A published course changes only when so
 `hash(resolve(variant))` against the latest snapshot's revision gives **unpublished** / **current** /
 **dirty** / **incomplete** — plus **template**, which can never reach any of the others. No flag is
 written, so none can go stale, be missed by an edit path, or survive an undo it should not have. A
-course shows dirty if any of its variants is. Review means a **diff**: "dirty" alone only says
-something changed, and what an editor needs before publishing is *what*.
+course shows dirty if any of its variants is. Review should mean a **diff**: "dirty" alone only says
+something changed, and what an editor needs before publishing is *what*. The diff is not built; the
+editor shows which variants are dirty.
 
 ### Snapshot and publish are two steps
 

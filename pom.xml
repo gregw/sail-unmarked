@@ -129,9 +129,9 @@
                             <commandlineArgs>${unmarked-data}</commandlineArgs>
                         </configuration>
                     </execution>
-                    <!-- The crossing detector and the geo module are JavaScript, because
-                         they run on the boat. Their specs run in the Maven build so they
-                         cannot rot. -->
+                    <!-- The logic that decides a race is JavaScript, because it runs on
+                         the boat. Every client spec (client/www/*-test.js) runs in the
+                         Maven build so none of it can rot. -->
                     <execution>
                         <id>js-tests</id>
                         <phase>test</phase>

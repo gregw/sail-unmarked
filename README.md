@@ -8,68 +8,86 @@ rounded.*
 ## What this is
 
 Racing where the mark you round is a **line checked by GPS** rather than a buoy checked by
-eyeball. Fleets already cross start lines this way — often unsighted to one or both ends,
-often relying on instruments — and this extends that to every rounding.
+eyeball. Fleets already cross start lines this way — often unsighted to one or both ends, often
+relying on instruments — and this extends that to every rounding. A boat's phone watches its
+position, decides when it crossed each line and which way, and times it.
 
 Two reasons for a line rather than a point:
 
 - **RRS 18 (mark-room) never applies.** There is no zone to reach and no inside or outside
-  overlap to adjudicate, so boats meeting near a line fall back on the Part 2
-  right-of-way rules alone. That is a deliberate safety choice.
-- **No rounding radius to dispute.** GPS error cannot put a boat inside or outside a
-  circle, because there is no circle.
+  overlap to adjudicate, so boats meeting near a line fall back on the Part 2 right-of-way rules
+  alone. That is a deliberate safety choice.
+- **No rounding radius to dispute.** GPS error cannot put a boat inside or outside a circle,
+  because there is no circle.
 
 It also removes the work of laying marks, and makes some formats possible that were not:
 
 | Format | What it changes |
 |---|---|
-| **Self-timed rolling start** | Each boat starts in its own time inside a window; its clock starts when it crosses. No start-line scrum, no committee-boat sightline. |
-| **Distance-factor handicap** | The handicap is spent on the course rather than the clock — each boat gets its own parallel line, and first home wins. Handicap becomes raceable on the water instead of arithmetic done to you afterwards. |
-| **Circuit, join anywhere** | Boats join a loop at any point, finish where they entered, and are ranked live. Different clubs sail it on their own evening without travelling to a common start. |
+| **Practice and record attempts** | A published course is always there to sail. Practice is kept for the boat; a record attempt stands against every other attempt at the same geometry. |
+| **Self-timed start** | Each boat's clock starts when it crosses the start line, timed by its own device. A committee may still publish a start time; nobody needs a gun. |
+| **Circuit, join anywhere** | A loop with several entry lines: a boat starts at whichever it crosses first and finishes by crossing it again, so clubs can race one circuit from their own waters. |
+| **Distance-factor handicap** *(designed, not built)* | The handicap is spent on the course rather than the clock — each boat gets its own line — and first home wins. |
 
 ## How it is built
 
 Two parts, and the division between them is the whole architecture:
 
-- **A client on the boat.** Reads GPS, detects crossings, times them, and stores its own
-  race record. Works with no network. HTML/CSS/JavaScript, to be wrapped with Capacitor
+- **A client on the boat.** Reads GNSS, runs quality control, detects and times crossings, and
+  builds its own race record — with no network. Plain HTML and JavaScript, no framework and no
+  build step; the same files are served by the server and are meant to be wrapped by Capacitor
   for background geolocation.
-- **A server on shore.** Distributes course definitions before the start and aggregates
-  records afterwards. Java on embedded Jetty, YAML configuration, JSON files — the same
-  approach as [sail-jinx](https://github.com/gregw/sail-jinx) and
+- **A server on shore.** Hands out course definitions before the start, carries the race
+  committee's side of a race while it runs — starts, flags, a message channel, a live fleet feed —
+  and collects records afterwards. Java 21 on embedded Jetty, YAML configuration, JSON files on
+  disk: the same approach as [sail-jinx](https://github.com/gregw/sail-jinx) and
   [sailing-pf](https://github.com/gregw/sailing-pf).
 
-> **A boat's own rounding and timing are computed entirely on the device and never wait on
-> a server.** The server is explicitly outside the rounding path: it distributes and
-> aggregates, it does not adjudicate a crossing.
+> **A boat's own rounding and timing are computed entirely on the device and never wait on a
+> server.** The server is outside the rounding path: it distributes, relays and collects; it does
+> not adjudicate a crossing, and it does not score.
+
+## What is in it
+
+| Page | For |
+|---|---|
+| `/editor.html` | the **course editor** — points, lines, courses and races against a chart; snapshot and publish what a fleet is handed |
+| `/boat.html` | **the client**, on a phone: join a race or a course, and sail it on the phone's own GNSS |
+| `/client.html` | **the test rig**: the same client on a simulated boat with a receiver that lies, steered by clicking a chart |
+| `/race.html` | the **race screen** — the committee's starts, flags, course changes, channel and fleet |
+| `/results.html` | **results**: races as a finishing order, record attempts by course revision |
+| `/*-test.html` | the JavaScript specs, in a browser |
 
 ## Running it
 
+Needs Java 21, Maven, and Node (for the JavaScript specs).
+
 ```bash
-mvn exec:java     # http://localhost:8083/
-mvn test          # Java tests, plus the crossing detector's spec
+mvn exec:java                                 # serves http://localhost:8083/ from ./data
+mvn exec:java -Dunmarked-data=/path/to/data   # from somewhere else
+mvn test                                      # Java tests and the JavaScript specs
+tools/editor-drive/run.sh                     # every page driven headlessly against a live server
 ```
 
-Courses are YAML, one file per club and series, under
-`data/config/clubs/<club domain>/<series>.yaml`.
+Then open `http://localhost:8083/`. The sample series under `data/config/clubs/myc.org.au/` has
+courses around Sydney Harbour to try in the test rig. Their positions were placed by eye on a chart;
+**nothing in this repository is a survey**, and real positions must be surveyed before anybody races.
 
-**No coordinates are supplied.** Every position in this repository is `null`, waiting on a
-survey — the design brief is explicit that real positions are to be supplied and not
-guessed, and the server reports each unsurveyed point as a problem rather than pretending.
+With no `data/config/auth.yaml` the editor and the race screen are open to anything that can reach
+the port, which is right for a laptop and wrong for anything else. [`wiki/deployment.md`](wiki/deployment.md)
+covers the login and installing on a Raspberry Pi.
 
 ## Status
 
-Early. The **crossing detector** — sense, extent, fix quality control, and the N-and-N
-latch — is built and has an executable specification that runs in the build. The **server**
-loads and validates courses, serves them, and stores race records. The **course editor**
-authors them against a chart and publishes what a fleet is handed.
+A prototype that runs end to end: a race can be defined, published, joined from a phone, started,
+sailed, and read back as results. Not built yet: the native wrapper and an offline tile cache, the
+brief's Live place picture (the boat's Place screen is a ranked table), a boat switching to a
+course change mid-race, re-posting a record with its full track, and the distance-factor handicap.
+See [`wiki/open-questions.md`](wiki/open-questions.md) for what is undecided.
 
-There is now a **prototype client** at `/client.html`: a simulated boat on one side of the
-page and the boat's own screens on the other, with nothing passing between them but a GPS
-fix. Steer it at a line and the Mark screen takes over on its own as it closes. It is a
-prototype — not on a phone, not offline, and it posts no records yet. **Live place** is not
-built at all.
+## Documentation
 
-See [`wiki/unmarked-racing-brief.html`](wiki/unmarked-racing-brief.html) for the design
-brief, [`wiki/course-model.md`](wiki/course-model.md) for what a course is made of, and
-[`CLAUDE.md`](CLAUDE.md) for the working notes and the rest of the wiki's index.
+Start with [**`wiki/overview.md`**](wiki/overview.md) — how the whole thing works, in one pass, with
+a map of the rest of the wiki and a glossary. The design brief is
+[`wiki/unmarked-racing-brief.html`](wiki/unmarked-racing-brief.html). [`CLAUDE.md`](CLAUDE.md) holds
+the working notes for changing the code.

@@ -86,9 +86,9 @@ completes a whole sign-in with no network and no real secret: Jetty's `JwtDecode
 token and checks the issuer, audience and expiry, never a signature. That is what makes the constraint
 testable rather than merely asserted.
 
-> **A stub has to tell the truth about the thing under test.** The first one minted `hd: myc.org.au`
-> for every account, so the domain check passed for an `example.com` address and the test proved
-> nothing. The `hd` claim follows the address now.
+> **A stub has to tell the truth about the thing under test.** One that minted `hd: myc.org.au` for
+> every account would pass the domain check for an `example.com` address and prove nothing, so the
+> stub's `hd` claim follows the address.
 
 **Sessions are in memory** and go when the process does, so a restart signs the officer out. Nothing a
 boat is doing is affected, because no boat has a session here at all.

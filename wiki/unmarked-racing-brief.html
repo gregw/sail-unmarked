@@ -701,6 +701,9 @@
     <p class="lede">An app for sailing races around virtual marks, where every mark is a line to be crossed via GPS rather than
         a point to be rounded. The intention of the application is both to allow more flexible traditional racing without the
         hassle of laying marks; and to support some new racing formats made possible by virtual marks and app tracking.</p>
+    <p class="lede">This brief is the design intent: the formats, the screens and the model. What is built, and exactly how,
+        is in the other documents in this directory &mdash; start at <a href="overview.md">overview.md</a> &mdash; and
+        where they differ from this brief, they are right.</p>
 
     <h2><span class="n">01</span>Introduction</h2>
     <p>The core idea is to replace the rounding of physical marks (checked with the eyeball) with the crossing of virtual
@@ -712,7 +715,7 @@
         mark rounding, most of which will be less contended than the start.</p>
     <p><strong>RRS 18 (mark-room) never applies at a virtual mark</strong>. There is no zone to reach and no inside or outside
         overlap to adjudicate. That is a deliberate safety/simplicity choice, not a side effect, and it shapes both the rules
-        framing in section 4 and the crossing logic in section 2.</p>
+        framing in section 6 and the crossing logic in sections 3 and 4.</p>
     <p>The system has two parts. A client on the boat that reads GPS, detects crossings, times them, and stores its own race
         record, working with no network. A server on shore that distributes course and format definitions and aggregates
         results. The dividing principle, stated once and relied on throughout: <strong>a boat's own rounding and timing are
@@ -826,7 +829,7 @@
     <p>"Leave the starboard end to starboard" is a mnemonic for the sense test written in the vocabulary of the extent test,
         which is why it sounds paradoxical at infinity: the <em>point</em> that defined an infinite end can easily fall on the
         other hand from the end itself. The point was never the end.</p>
-    <p>The Mark screen's three states in section 3 are exactly the combinations. <b>Approaching</b> is neither settled; <b>crossed</b>
+    <p>The Mark screen's three states in section 5 are exactly the combinations. <b>Approaching</b> is neither settled; <b>crossed</b>
         is both passed; <b>missed</b> is the sense test passed and the extent test failed.</p>
     <h2><span class="n">04</span>Course definition</h2>
     <p>Courses are built from the same lines as everything else. Each line is two points, each with an <span class="mono">infinite</span>
@@ -902,7 +905,7 @@
         sliding it leaves the line geometrically identical &mdash; so <strong>that point is the control handle for where the
             line is measured to</strong>. Place it where the fleet actually crosses. A course-design UI draws the leg straight
         to the midpoint and lets somebody drag the handle until the course looks like the one they meant. The same handle is
-        what the distance-factor format in section 4 turns.</p>
+        what the distance-factor format in section 2 turns.</p>
     <div class="legend">
         <div class="li">
             <svg width="24" height="10">
@@ -1018,7 +1021,7 @@
     <h3>Accuracy band</h3>
     <p>A boat is resolved to a side only when it is clear of the line by more than the fix uncertainty. Close to the line it is
         not yet on either side, which stops a boat sitting on the line from generating a burst of phantom crossings. Whether the
-        band width should be a fixed declared value or the per-fix stated accuracy is an open choice, noted in section 8. Both
+        band width should be a fixed declared value or the per-fix stated accuracy is an open choice (<a href="open-questions.md">open questions</a>, 2). Both
         are implemented; a null declared width selects the per-fix behaviour.</p>
     <p>Note that this band belongs to the <em>sense</em> test &mdash; it is about the line, not about the ends. There is
         deliberately no equivalent band at an endpoint; see below.</p>
@@ -1029,8 +1032,7 @@
         drift. GNSS on a phone does not honestly resolve better than this, and a scoring edge that moves with the twelfth
         decimal place of a float is one nobody can argue in front of a protest committee.</p>
     <p>The consequence is deliberate and blunt: <strong>a finite end is a hard edge. If you miss, you miss.</strong> There is no
-        unresolved state at an endpoint and no band of doubt to fall into. This settles what was previously listed as an open
-        question about endpoints in open water.</p>
+        unresolved state at an endpoint and no band of doubt to fall into.</p>
     <p>That rule is only defensible if the boat was told, so what the application owes the sailor instead is
         <strong>warning</strong>. The Mark screen projects the boat's COG onto the line, reports the margin in metres from that
         projected cut to the nearer <em>finite</em> end, and says loudly when the present course is running out past it &mdash;
@@ -1177,8 +1179,10 @@
         status line.</p>
 
     <h3>Orientation modes</h3>
-    <p>The display is switchable between three orientations, set by the selector on the Mark screen. Leg up and Line perp both
-        turn the whole display when the boat crosses onto the next leg. North up never turns.</p>
+    <p>The display is switchable between orientations, set by a selector on the Mark screen and the course overview alike.
+        Leg up and Line perp both turn the whole display when the boat crosses onto the next leg; North up never turns. The
+        built client adds a fourth, <b>COG up</b> &mdash; the boat's own heading at the top, as a plotter shows it &mdash;
+        which swings on the boat rather than on the course, eased so it drifts rather than shakes.</p>
 
     <div class="omodes">
         <div class="ocard">
@@ -1401,11 +1405,14 @@
             problem rather than pretending to know it.</p>
     </div>
 
-    <p>The configuration, as implemented. Shape and vocabulary are settled; the values are not.</p>
-    <pre><span class="c"># clubs/myc.org.au/2026-example.yaml</span>
+    <p>The configuration, in the format as implemented &mdash; an excerpt, with its positions left null. The whole file,
+        with positions placed on a chart and a harbour circuit beside it, is <span class="mono">data/config/clubs/myc.org.au/2026-passage-examples.yaml</span>, and
+        <a href="course-model.md">course-model.md</a> is the reference for the format.</p>
+    <pre><span class="c"># clubs/myc.org.au/2026-passage-examples.yaml</span>
 <span class="c"># One file per club and series. The PATH is the identity: this file is filed</span>
-<span class="c"># under clubs/myc.org.au/ and named 2026-example, so its club is myc.org.au and</span>
-<span class="c"># its series is 2026-example. Nothing here resolves from any other file.</span>
+<span class="c"># under clubs/myc.org.au/ and named 2026-passage-examples, so its club is</span>
+<span class="c"># myc.org.au and its series is 2026-passage-examples. Nothing here resolves</span>
+<span class="c"># from any other file.</span>
 
 <span class="k">name</span>: <span class="v">Manly Cove circuit (example)</span>
 <span class="k">datum</span>: <span class="v">WGS84</span>
@@ -1468,35 +1475,33 @@
       - { <span class="k">line</span>: <span class="v">manly-cove</span>,    <span class="k">cross</span>: <span class="v">reverse</span>, <span class="k">notes</span>: <span class="v">Finish. Northbound.</span> }</pre>
 
     <div class="callout warnbox">
-        <div class="h">What the earlier sketch got wrong</div>
-        <p>Recorded so it is not reintroduced. The first version of this section proposed a different shape, and each of these
-            was a defect rather than a matter of taste.</p>
-        <p><strong><span class="mono">type: finite | half_infinite</span> contradicted the model.</strong> The end type belongs
-            to each <em>end</em>, and hoisting it to the line forced two incompatible schemas &mdash;
+        <div class="h">Shapes the format deliberately does not take</div>
+        <p>Each of these looks reasonable and is a defect rather than a matter of taste.</p>
+        <p><strong>No <span class="mono">type: finite | half_infinite</span> on the line.</strong> The end type belongs to
+            each <em>end</em>, and hoisting it to the line would force two incompatible schemas &mdash;
             <span class="mono">end_a</span>/<span class="mono">end_b</span> for one kind of line,
             <span class="mono">fixed_end</span> plus <span class="mono">bearing_deg</span> for the other &mdash; behind a
-            <span class="mono">type</span> key that was derivable from the ends anyway.</p>
-        <p><strong><span class="mono">cross: S</span> collided with itself.</strong> It meant "southbound", while
-            <span class="mono">S</span> is also the sequence letter for the start: two meanings for one letter, two lines apart
-            in the same file, with <span class="mono">cross: N</span> on the Obelisk line one keystroke from being read as a
-            sequence letter too.</p>
-        <p><strong>Compass senses are not safe to store.</strong> Ambiguous for a line lying near the direction of travel, and
-            silently wrong the moment somebody edits the line. Forward/reverse moves with the line.</p>
-        <p><strong><span class="mono">marks:</span></strong> re-imported the word the whole design exists to remove, and leaves
-            nothing to call a real mark when mixed courses arrive.</p>
-        <p><strong><span class="mono">TBD</span> in a numeric field is a parse error, not a placeholder.</strong> An unsupplied
-            position is <span class="mono">null</span>, and is reported as a problem by name.</p>
-        <p><strong>snake_case is not the house style.</strong> sail-jinx and sailing-pf are camelCase throughout, and matching
-            them matters more than which is nicer.</p>
+            <span class="mono">type</span> key that is derivable from the ends anyway.</p>
+        <p><strong>No compass letters for a sense.</strong> <span class="mono">cross: S</span> for "southbound" collides with
+            <span class="mono">S</span> the sequence letter for the start, and a compass sense is ambiguous for a line lying
+            near the direction of travel and silently wrong the moment somebody edits the line. Forward/reverse moves with
+            the line.</p>
+        <p><strong>No <span class="mono">marks:</span>.</strong> It re-imports the word the whole design exists to remove, and
+            leaves nothing to call a real mark when mixed courses arrive.</p>
+        <p><strong>No <span class="mono">TBD</span> in a numeric field</strong>, which is a parse error, not a placeholder. An
+            unsupplied position is <span class="mono">null</span>, and is reported as a problem by name.</p>
+        <p><strong>No snake_case.</strong> sail-jinx and sailing-pf are camelCase throughout, and matching them matters more
+            than which is nicer.</p>
     </div>
 
-    <h3>Races are their own files</h3>
-    <p>A programme file holds what is reusable all season: the surveyed points, the lines, the courses. A race is one night
-        &mdash; a course chosen from that programme, the format, that format's parameters, and the entry list &mdash; and lives
-        in its own file at <span class="mono">clubs/&lt;club&gt;/races/&lt;raceId&gt;.yaml</span>. Filing the two together would
-        mean opening the file that holds the coordinates every time somebody enters a boat.</p>
-    <p><strong>The race schema is still open.</strong> What each format actually needs is unsettled, so its parameters are
-        carried as a free map that round-trips, rather than a schema asserted ahead of the requirement.</p>
+    <h3>Races: a definition in the series file, a record of the afternoon in the store</h3>
+    <p>A race's <em>definition</em> &mdash; a date, a format, a course and variant for each division, a planned start, and
+        the race that follows it &mdash; is configuration, and lives in the series file under
+        <span class="mono">races:</span>, beside the courses it names. What <em>happened</em> &mdash; who joined, what was
+        said, which flags were raised &mdash; is conduct, and is written to the store, never to the programme file. See
+        <a href="client-server-dialog.md">the client&ndash;server dialog</a>, &sect;12.</p>
+    <p><strong>What each format needs is still open</strong>, so <span class="mono">format</span> is a free string and no
+        format-specific parameters are asserted ahead of the requirement.</p>
 
     <h2><span class="n">08</span>Technology</h2>
 
@@ -1551,7 +1556,7 @@
 
     <div class="callout">
         <div class="h">Conventions taken from the repositories</div>
-        <p>The sail-jinx and sailing-pf repositories have now been read, and the conventions here are theirs rather than
+        <p>The conventions here are those of the sail-jinx and sailing-pf repositories rather than
             assertions: records for models with compact constructors for defaults, Allman braces, defensive loading that reports
             and skips rather than throwing, unknown YAML and JSON properties ignored so a newer file loads on an older build,
             clubs keyed by domain, atomic writes with an append-only journal, and a

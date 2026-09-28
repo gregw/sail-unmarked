@@ -29,7 +29,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * THE CONVERSATION. The dialog document, §§3–8, on the server side.
+ * THE CONVERSATION. {@code wiki/client-server-dialog.md} §§3–8, on the server side.
  *
  * <p>Everything a boat and the server say to each other passes through {@link #exchange}, and
  * everything a committee does passes through {@link #publish}. What this class is NOT is the
@@ -48,16 +48,15 @@ import org.slf4j.LoggerFactory;
  * last message to arrive for a tag is that tag's state. {@link Standing} is that reduction, held
  * per tag, and it is also exactly what a reconnecting boat is re-stated from (§4.1).
  *
- * <h2>What is not built yet, deliberately</h2>
+ * <h2>What is not built</h2>
  * <ul>
  * <li><b>The WebSocket.</b> Only the polling transport is wired (§3). The envelopes, the
- *     ordering rules and the schemas are the ones the socket will carry — the document's
- *     promise is that the fallback is the same conversation, so the socket is a pipe to add
- *     rather than a protocol to design. What it will need beyond this file is a ticker, because
- *     {@code fleet} is currently enqueued when a boat polls (see {@link #fleetDue}).
- * <li><b>{@code ask}.</b> Every join answers itself today; a question is a gap in what the
- *     server knows, and with the division taken from the course there is no gap yet.
- * <li><b>Rate capping and muting.</b> §13, deferred on purpose.
+ *     ordering rules and the schemas are the ones a socket would carry, so a socket is a pipe
+ *     to add rather than a protocol to design. What it would need beyond this file is a ticker,
+ *     because {@code fleet} is enqueued when a boat polls (see {@link #fleetDue}).
+ * <li><b>{@code ask}.</b> Every join answers itself: the join screen names the race and the
+ *     division, and where it does not the division is found from the course.
+ * <li><b>Muting a sail number</b> (§8.4), and the rate cap and impersonation defences (§13).
  * </ul>
  */
 public class Dialog
@@ -78,7 +77,7 @@ public class Dialog
     /** What a boat is asked to report at, when there is a fleet to report to. */
     public static final int FIX_SECONDS = 2;
 
-    /** How often a polling client comes back. The socket will make this moot. */
+    /** How often a polling client comes back. A socket would make this moot. */
     public static final int POLL_MS = 1000;
 
     /**
@@ -123,8 +122,8 @@ public class Dialog
     /**
      * ONE EXCHANGE: what the boat said, and what it is told back.
      *
-     * <p>This is the whole of the transport's contract, and it is written this way so that the
-     * WebSocket can use it unchanged: a socket frame is an exchange of one message with an empty
+     * <p>This is the whole of the transport's contract, and it is written this way so that a
+     * WebSocket could use it unchanged: a socket frame is an exchange of one message with an empty
      * reply, and a poll is an exchange of several with whatever is queued. A protocol with two
      * dialects has two sets of bugs (§3).
      */
@@ -356,10 +355,11 @@ public class Dialog
      * timers and no flags. What is left is the join, the crossings and the record, which is
      * exactly what the record needs and nothing more.
      *
-     * <p>The race is FOUND rather than asked for. A boat drills club → series → course →
-     * variant, which is what a sailor holds; the race is whichever one today maps a division to
-     * that course and variant. So the same join message serves both cases and the client does
-     * not have to know which it is in.
+     * <p>The join screen asks club → series → race → division, so the join ordinarily NAMES its
+     * race and division and carries the course and variant that division sails. Where it names
+     * no race — a boat that chose "no race, just sail a course", or an older client — the race
+     * is FOUND: whichever race today maps a division to that course and variant. So one join
+     * message serves both cases.
      */
     private Session join(Envelope message, List<Envelope> out) throws IOException
     {
@@ -489,13 +489,11 @@ public class Dialog
     /**
      * Which division of this race sails that course and variant.
      *
-     * <p><b>This is the whole of how a boat gets a division today, and it is enough for one
-     * division per course and WRONG the moment two share one.</b> Two divisions sailing the
-     * same variant — a handicap split over one course, which is an ordinary thing to want —
-     * would both match here and the first would win. The fix is {@code ask} (§8.2): a question
-     * is a gap in what the server knows, and that is exactly what this would be. Until then a
-     * race wanting two divisions on one shape needs two variants, which is a real design of a
-     * course either way.
+     * <p><b>The fallback for a join that did not name its division, and it is right only while
+     * one division sails one course.</b> Two divisions sailing the same variant — a handicap
+     * split over one course, which is an ordinary thing to want — would both match here and the
+     * first would win. A join that names its division never gets here; one that does not is
+     * where {@code ask} (§8.2) would come in.
      */
     private static String divisionFor(Race race, String courseId, String variant)
     {
@@ -513,6 +511,10 @@ public class Dialog
 
     /**
      * A boat that has stopped racing is entered for the next race of the day (§12.6).
+     *
+     * <p>Called on {@code retire}. TODO: a finish (a {@code crossing} with {@code finish}) and a
+     * committee {@code outcome} also mean the boat has stopped racing this one, and do not yet
+     * chain.
      *
      * <p><b>A division the next race does not have breaks the chain, and that is the safe way
      * round.</b> Entering a boat with a tag that maps to no course would put it on the fleet list
@@ -850,10 +852,10 @@ public class Dialog
         /**
          * What the race screen reads: the fleet table, the channel, the states, the acks.
          *
-         * <p>Over REST rather than through the dialog, for now. The committee IS a participant
-         * (§12.3) and its messages go into the same channel — this is a laptop on a desk polling
-         * a page, not a second facility. TODO: give the screen a session of its own so it is one
-         * party in the conversation rather than a reader of it.
+         * <p>Over REST rather than through the dialog. The committee IS a participant (§12.3)
+         * and its messages go into the same channel — this is a laptop on a desk polling a page,
+         * not a second facility. TODO: give the screen a session of its own so it is one party
+         * in the conversation rather than a reader of it.
          */
         public Map<String, Object> conduct()
         {

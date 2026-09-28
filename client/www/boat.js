@@ -11,9 +11,9 @@
  * <h2>The seam, from the other side</h2>
  * `emit()` in `client.js` reads a fix off `boatsim.js`; this page reads one off `receiver.js`.
  * Both then call `device.feed(fix)` and neither says anything else. That is the claim the
- * architecture rests on, and it is worth noticing what it bought: putting the client on a real
- * phone took a receiver and a page, and changed nothing in `crossing.js`, `raceclient.js`,
- * `markscreen.js` or `device.js` — the four files that decide a race.
+ * architecture rests on, and it is why this page is only a receiver and some glue: nothing in
+ * `crossing.js`, `raceclient.js`, `markscreen.js` or `device.js` — the four files that decide a
+ * race — knows it is on a phone.
  *
  * <h2>Three things a real phone needs that a desk does not</h2>
  * <ul>

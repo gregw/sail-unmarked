@@ -18,8 +18,9 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * belong in the file: on screen a bad transcription can be seen and corrected by the
  * person who made it, and in the file it is a silently displaced mark.
  *
- * <p>No coordinates are asserted anywhere in this repository. Everything under
- * {@code data/config/} is null until somebody supplies a survey.
+ * <p>Nothing in this repository is a survey. The sample programmes under {@code data/config/}
+ * carry positions placed by eye on a chart, and a position nobody has supplied is null and
+ * reported as a problem rather than guessed.
  */
 public record Position(
     @JsonProperty("latitude") double latitude,

@@ -132,7 +132,7 @@ export function run(check) {
   check('crossings are marked as such', plain.filter((s) => s.kind === 'crossing').length === 3);
   check('legs are marked as such', plain.filter((s) => s.kind === 'leg').length === 2);
 
-  // Direction, which the first version had no way of showing at all.
+  // Direction.
   const firstLeg = plain.find((s) => s.kind === 'leg');
   check('a leg knows its midpoint', Math.abs(firstLeg.mid.y - 50) < 0.01);
   check('...and which way it runs', Math.abs(firstLeg.angle + 90) < 0.01);

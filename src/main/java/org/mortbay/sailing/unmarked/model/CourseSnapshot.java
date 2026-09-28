@@ -27,14 +27,14 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * names or notes: renaming a mark changes nothing about where a boat had to sail, and
  * bumping the revision for it would split one course into two that cannot be compared.
  *
- * <p>The snapshot itself keeps the names and notes anyway, because it is also what gets
- * shown when somebody asks what a boat sailed months later.
+ * <p>The snapshot still carries the course's name and each line's id, because it is also
+ * what gets shown when somebody asks what a boat sailed months later.
  *
  * <h2>Always inlined, immediately</h2>
- * Every named reference is resolved to coordinates when the snapshot is taken, and the
- * snapshot keeps no names. Lazy inlining — keeping the names so that moving a shared mark
- * could be seen to affect published courses — was seriously considered and rejected on two
- * counts that reinforce each other. <b>The revision is a hash over resolved coordinates</b>,
+ * Every named reference is resolved to coordinates when the snapshot is taken, and nothing
+ * in a snapshot is looked up by name afterwards. Lazy inlining — keeping the names so that moving a shared mark
+ * could be seen to affect published courses — is wrong on two counts that reinforce each
+ * other. <b>The revision is a hash over resolved coordinates</b>,
  * so a snapshot that resolved names later would have an identifier that could silently stop
  * describing its own contents; and <b>the variant a snapshot was taken from remains</b>,
  * still holding its named references, so the impact question is answered there, where the

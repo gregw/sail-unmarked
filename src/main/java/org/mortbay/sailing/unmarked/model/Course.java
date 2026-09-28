@@ -32,8 +32,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * where nobody ever thinks about the word. See {@code wiki/course-lifecycle.html}.
  *
  * <h2>Two shapes in the file, one model in memory</h2>
- * A course with one plain variant is written flat, exactly as courses were written before
- * variants existed:
+ * A course with one plain variant is written flat, with no variant level at all:
  *
  * <pre>
  *   manly-to-shark:
@@ -95,9 +94,8 @@ public record Course(
         Map<String, CourseVariant> keyed = new LinkedHashMap<>();
         // A `variants:` key means the nested shape, WHATEVER it holds — an empty one is a
         // course with no design, which is an ordinary state: a course exists before its
-        // first variant does, and its last variant can be deleted. Treating empty as "fold
-        // the flat fields in" put a phantom `main` back on such a course the moment it was
-        // read, which is what made deleting the last variant pointless.
+        // first variant does, and its last variant can be deleted. Reading an empty map as
+        // "fold the flat fields in" would put a phantom `main` back on such a course.
         if (variants != null)
         {
             variants.forEach((key, variant) ->

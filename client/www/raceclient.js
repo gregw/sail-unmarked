@@ -77,14 +77,14 @@ export const APPROACH = {
    */
   enterS: 25,
   /**
-   * The time test's own hysteresis, and its absence is what made the screen FLASH.
+   * The time test's own hysteresis, without which the screen FLASHES.
    *
    * The Mark screen is taken on either test — within `enterM` metres, or within `enterS`
-   * seconds at the speed being made — and was held on the distance one alone. So a boat coming
-   * in fast from three hundred metres took the screen on time, failed the distance-only hold
-   * on the very next fix, went back to the course, took it again on time, and flapped between
-   * the two several times a second until it got inside 160 m. Reported from a boat, which is
-   * the only place it shows: at a desk the flap is over before anybody sees it.
+   * seconds at the speed being made. Held on the distance test alone, a boat coming in fast
+   * from three hundred metres would take the screen on time, fail the distance-only hold on
+   * the very next fix, go back to the course, take it again on time, and flap between the two
+   * several times a second until it got inside 160 m. It shows only on the water: at a desk
+   * the flap is over before anybody sees it.
    *
    * Held at the same 1.6 ratio the distance pair uses, for the same reason — what the gap has
    * to beat is the jitter in the quantity being tested, and the speed a boat is making is by
@@ -133,14 +133,14 @@ export const TRAIL = 120;
  * whole leg, on a picture that may be a mile across, where a fix every five seconds says as
  * much as a fix every fifth of one and there is no room to draw the difference.
  *
- * <b>EVERY FIX, drawn as one pixel each.</b> It was decimated at twenty-five metres, on the
- * reasoning that a point closer than a pixel draws nothing — and on the water that came out
- * coarse: at overview scale a leg is a few hundred metres, so a point every twenty-five is a
- * dozen dots with the shape of the leg missing from between them, and the shape is the whole
- * of what this is for. A fix is a fix, and the picture of what a boat did is the fixes.
+ * <b>EVERY FIX, drawn as one pixel each.</b> Decimating by distance looks free — a point
+ * closer than a pixel draws nothing — but at overview scale a leg is a few hundred metres, so a
+ * point every twenty-five metres is a dozen dots with the shape of the leg missing from between
+ * them, and the shape is the whole of what this is for. The picture of what a boat did is the
+ * fixes.
  *
- * `everyM` therefore admits everything at zero and stays as the knob for turning that back on
- * if a long passage leg ever asks for it. `max` is the real bound: a cap in POINTS, which at
+ * `everyM` therefore admits everything at zero and stays as the knob for decimating if a long
+ * passage leg ever asks for it. `max` is the real bound: a cap in POINTS, which at
  * five a second is a quarter of an hour of leg, with the oldest dropped because the recent
  * shape of the leg is what somebody is reading.
  *
@@ -153,7 +153,7 @@ export const LEG_TRACK = { everyM: 0, max: 4000 };
  * How many of those the approach view is required to keep on screen.
  *
  * Enough to see that the boat is under way and which way it has come, and no more. Fitting
- * the whole trail is what kept the plot wide — at 5 Hz two minutes of it reaches back a
+ * the whole trail would keep the plot wide — at 5 Hz two minutes of it reaches back a
  * quarter of a mile — and the older dots say nothing an approach needs. Three is the fewest
  * that still shows a direction rather than a pair of points.
  */
@@ -247,18 +247,18 @@ export function bearingLocal(from, to) {
 }
 
 /**
- * One boat's run at one published snapshot.
- *
- * Constructed once, when the join succeeds, and then fed fixes for the rest of the race.
- * Everything it knows is in it; there is nothing to fetch and nothing to wait for.
- */
-/**
  * What may be asked for by name. Anything else reads as `auto`, so a stale value — a screen
  * that existed in a build somebody had before this one — cannot strand a sailor on a screen
  * with no way back.
  */
 export const VIEW_MODES = ['overview', 'mark', 'chat', 'place'];
 
+/**
+ * One boat's run at one published snapshot.
+ *
+ * Constructed once, when the join succeeds, and then fed fixes for the rest of the race.
+ * Everything it knows is in it; there is nothing to fetch and nothing to wait for.
+ */
 export class RaceClient {
   constructor(snapshot, options = {}) {
     this.snapshot = snapshot;
@@ -270,7 +270,7 @@ export class RaceClient {
      * join screen rather than assumed, because ten metres drawn under a five-metre dinghy is a
      * picture that lies about the one thing this screen is for — how much room there is.
      *
-     * Ten is the fallback, which is what every boat had before the field existed.
+     * Ten is the fallback, for a boat that did not say.
      */
     this.boatLengthM = Number(this.boat.lengthM) > 0 ? Number(this.boat.lengthM) : 10;
     this.approach = { ...APPROACH, ...(options.approach ?? {}) };
@@ -334,9 +334,8 @@ export class RaceClient {
      * it is the finish.
      *
      * A cycle with NO entry point cannot be joined at all, and the server refuses to
-     * snapshot one (`CourseVariant.problems`). The empty case here is therefore an archive
-     * from a build that did not check, and it falls back to beginning at step 0, which is
-     * what this did before there was a choice.
+     * snapshot one (`CourseVariant.problems`). The empty case here can only be an archive
+     * written without that check, and it falls back to beginning at step 0.
      */
     for (const step of this.steps) {
       for (const crossing of step.crossings) crossing.stepIndex = step.index;
@@ -517,12 +516,6 @@ export class RaceClient {
 
     if (!latched) return { accepted: true, verdict: 'ACCEPTED', reason: null, relocated };
 
-    // Held so the Mark screen can go on showing the line that was just crossed for the
-    // length of the dwell. Without this, `live()` has already moved on the instant the latch
-    // happens, so the screen that says CROSSED would be drawing the NEXT mark's line — a
-    // different picture, at a different scale, with the crossing ringed in a frame it did not
-    // happen in. The dwell exists to let somebody look at the crossing; it has to still be
-    // there to look at.
     /*
      * WHICH STEP WAS JUST CROSSED. Before a cycle's start the live "step" is the choice of
      * entry lines, and what the boat actually crossed is the one those candidate crossings
@@ -536,11 +529,18 @@ export class RaceClient {
       this.entryIndex = took.stepIndex;
       this.at = took.stepIndex;
     }
+    // Held so the Mark screen can go on showing the line that was just crossed for the
+    // length of the dwell. Without this, `live()` has already moved on the instant the latch
+    // happens, so the screen that says CROSSED would be drawing the NEXT mark's line — a
+    // different picture, at a different scale, with the crossing ringed in a frame it did not
+    // happen in. The dwell exists to let somebody look at the crossing; it has to still be
+    // there to look at.
     this.crossed = { step: crossedStep, crossing: took };
     // THE RACE CLOCK STARTS WHEN THE BOAT CROSSES, and that is a commitment rather than a
     // convenience: there is nothing in this system to fire a gun, so every start is self-timed
     // and elapsed has to run from the crossing of the first line, never from when the app was
-    // opened. On a cycle each lap restarts it, which is what makes the number a lap time.
+    // opened. On a cycle it runs from the entry line the boat took, which is what makes the
+    // number a lap time.
     if (wasStarting || (!this.snapshot.closed && step.index === 0)) {
       this.startAt = latched.time;
       this.finishAt = null;
@@ -561,10 +561,10 @@ export class RaceClient {
       point: latched.point,
       confirmBefore: latched.confirmBefore,
       confirmAfter: latched.confirmAfter,
-      // Which side of a gate the boat took. Recorded because the next leg's bearing
-      // depends on it — the one place a boat's own choice changes what it is shown.
-      // Which side of a GATE was taken — asked of the step actually crossed, not of the live
-      // one, or a cycle's choice of entry lines would be recorded as a gate it is not.
+      // Which side of a GATE the boat took. Recorded because the next leg's bearing depends
+      // on it — the one place a boat's own choice changes what it is shown. Asked of the step
+      // actually crossed, not of the live one, or a cycle's choice of entry lines would be
+      // recorded as a gate it is not.
       gateSide: crossedStep.crossings.length > 1 ? took.line : null,
     });
     this.dwellUntil = fix.time.getTime() + this.approach.dwellMs;
@@ -646,8 +646,8 @@ export class RaceClient {
     } else if (this.at + 1 < this.steps.length) {
       this.at += 1;
     } else if (this.snapshot.closed) {
-      // An archive with no entry point at all: it laps as it always did, because there is
-      // no line nominated to end on. See the constructor.
+      // An archive with no entry point at all: it laps from step 0 and never finishes, because
+      // there is no line nominated to end on. See the constructor.
       this.at = 0;
       this.lap += 1;
     } else {
@@ -669,7 +669,7 @@ export class RaceClient {
   /**
    * Add a point to the leg's track, if it is far enough from the last one to be worth having.
    *
-   * See `LEG_TRACK` for why this is decimated by distance and kept apart from `fixes`.
+   * See `LEG_TRACK` for why it is kept apart from `fixes`, and for the distance knob.
    */
   trackLeg(point) {
     const last = this.legTrack[this.legTrack.length - 1];
@@ -1059,8 +1059,7 @@ export class RaceClient {
    * the fleet meets square. A gate's sides do the opposite: they run out along the leg, half
    * infinite, so the fleet comes up between them and turns out through one. A boat FOUR
    * KILOMETRES down that leg is still only the gate's half-width from both lines'
-   * extensions, so the approach screen took over on the start line and never gave up — which
-   * is exactly what was seen on the water.
+   * extensions, so the approach screen would take over on the start line and never give up.
    *
    * So the boat is measured to the nearest point of the line BETWEEN ITS TWO DEFINED POINTS,
    * infinite ends included. That sounds like it contradicts "an infinite end is a bearing,
@@ -1096,21 +1095,27 @@ export class RaceClient {
    * THE ARTEFACT: everything a scorer or a protest could need, as a `CourseRecord`.
    *
    * <b>This is the only thing that leaves this system</b>, which is why it carries the awkward
-   * parts as well as the result: the latched crossings with their interpolated instants, the
-   * candidates that were rejected and why, and the QC refusals. Anything a scorer needs and
-   * cannot find here would pull race concepts back into this codebase.
+   * parts as well as the result: the latched crossings with their interpolated instants, and
+   * the QC refusals and relocations with their reasons. Anything a scorer needs and cannot find
+   * here would pull race concepts back into this codebase. (The candidates a detector refused —
+   * a wrong-sense crossing, a side change past an end — are drawn on the Mark screen and are
+   * not yet in the record.)
    *
    * <b>The instants are the INTERPOLATED ones</b>, taken from the crossings rather than from
    * the fixes that confirmed them. That is the entire reason the detector interpolates, and
    * using a fix time would throw the precision away at the last step — by up to the fix
    * interval, at both ends of an elapsed time.
    *
-   * <b>The full track is included when it is asked for, and not by default.</b> A record with
-   * its fixes is what makes a contested crossing examinable, and it is also megabytes over a
+   * <b>The track is included when it is asked for, and not by default.</b> A record with its
+   * fixes is what makes a contested crossing examinable, and it is also megabytes over a
    * phone's data connection at the end of a race. So the record posted the moment a boat
    * finishes is the thin one, and the same record can be posted again with `{ track: true }`
    * when there is wifi — the store supersedes rather than accumulates, which is what makes
-   * resubmission the ordinary case rather than a special one.
+   * resubmission the ordinary case rather than a special one. Nothing re-posts it yet.
+   *
+   * TODO: `{ track: true }` takes the plot's trail, which is the last `TRAIL` fixes rather than
+   * the whole run, and reads `point.t` where the trail stores `time`, so every fix goes out
+   * with a null time.
    */
   record({ track = false, joinMode = null, submittedAt = Date.now() } = {}) {
     const snapshot = this.snapshot ?? {};
@@ -1128,7 +1133,7 @@ export class RaceClient {
       sailNumber: this.boat?.sail ?? null,
       tcf: Number(this.boat?.tcf) > 0 ? Number(this.boat.tcf) : null,
       // Carried for whoever scores it: a length is what a handicapper and a protest both ask
-      // for first, and it is the one fact about the boat this application now knows precisely.
+      // for first, and it is the one fact about the boat this application knows precisely.
       lengthM: this.boatLengthM,
       startTime: iso(this.startAt),
       finishTime: iso(this.finishAt),
@@ -1158,12 +1163,11 @@ export class RaceClient {
           note: `${reject.what ?? 'REJECTED'}: ${reject.reason ?? ''}`.trim(),
         })),
       ],
-      // AS `CrossingEvent`s WITH `counted: false`, which is how the model already carries them —
-      // `counted` and `note` exist for exactly this. A separate `rejected` array was written
-      // first and was silently DROPPED by the server, because `CourseRecord` has no such field
-      // and unknown properties are ignored: the record arrived looking complete with the half
-      // that answers "why is there no crossing here?" missing. A record that carried only what
-      // counted would be a record that could not be argued with.
+      // AS `CrossingEvent`s WITH `counted: false`, which is how the model carries them —
+      // `counted` and `note` exist for exactly this. NOT as a separate `rejected` array:
+      // `CourseRecord` has no such field and unknown properties are ignored, so the server
+      // would silently drop the half that answers "why is there no crossing here?". A record
+      // that carried only what counted would be a record that could not be argued with.
       fixes: track ? this.fixes.map((point) => ({
         latitude: fromLocal(this.origin, point).latitude,
         longitude: fromLocal(this.origin, point).longitude,
@@ -1183,7 +1187,8 @@ export class RaceClient {
    *
    * The distance it reads is `approachM` and not the perpendicular one — see there, and note
    * that the two agree for every line the fleet meets square. Where they part company is a
-   * line running along the leg, and the screen was taking over four kilometres out.
+   * line running along the leg, where the perpendicular one would take the screen four
+   * kilometres out.
    *
    * <b>And the sailor can overrule it.</b> `viewMode` is `auto` by default, which is the design
    * above; set to any of the screens it simply says which, because somebody setting up or
@@ -1192,7 +1197,7 @@ export class RaceClient {
    * either way — the hysteresis is still updated below — so `auto` resumes with the right answer
    * rather than with whatever happened to be true when it was left.
    *
-   * <b>AUTO GAINED ONE CLAUSE when the channel arrived</b> (§9.5): a new channel entry brings up
+   * <b>AUTO HAS ONE CLAUSE FOR THE CHANNEL</b> (dialog §9.5): a new channel entry brings up
    * the channel, <em>unless the boat is approaching a line</em>. The test is the one that
    * already exists — if the Line screen would be taken, chat does not take it — so the priority
    * reads: the Mark screen while approaching or within the dwell, then a new channel entry, then
@@ -1222,8 +1227,8 @@ export class RaceClient {
 
     if (this.showingMark) {
       // Hysteresis, on BOTH tests: having taken the screen on either one, hold it on the
-      // looser version of either. Holding on distance alone is what made a boat coming in
-      // fast flap between the two screens — it took the screen on time and lost it on
+      // looser version of either. Holding on distance alone would make a boat coming in
+      // fast flap between the two screens — taking the screen on time and losing it on
       // distance, on alternate fixes. And a minimum hold under both, because neither gap
       // helps against a quantity that jumps rather than drifts. See `APPROACH`.
       const held = this.markSince != null && now - this.markSince < this.approach.holdMs;
@@ -1253,7 +1258,7 @@ export class RaceClient {
    *
    * Here rather than on the page, because `view()` is the single answer to "which screen" and a
    * page that second-guessed it would be a second rule to keep in agreement with the first.
-   * Anything other than the three is treated as `auto`, so a stale value cannot strand somebody
+   * Anything not in `VIEW_MODES` is treated as `auto`, so a stale value cannot strand somebody
    * on a screen with no way back.
    */
   setViewMode(mode) {

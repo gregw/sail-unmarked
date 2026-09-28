@@ -5,8 +5,8 @@
  * exactly the shape a real receiver hands over — a position, a time, a stated accuracy, a
  * satellite count, SOG and COG — and nothing else crosses the boundary. The client is
  * given fixes and is never given the truth, so it cannot accidentally be written against
- * the simulator: swapping this for `navigator.geolocation` is a change to one function in
- * `client.js` and to nothing else.
+ * the simulator. `receiver.js` is the same seam fed by `navigator.geolocation`, and
+ * `boat.html` is `client.html`'s device with that receiver behind it instead of this one.
  *
  * <h2>Why the receiver is modelled and not just the boat</h2>
  * A boat that reports its exact position every tick can never fail quality control and can
@@ -147,8 +147,8 @@ export const WHITE_FRACTION = 0.06;
  *
  * <b>What this number really sets is the TURNING RADIUS</b>, which is speed over turn rate: at
  * forty degrees a second a boat doing six knots comes round in about four and a half metres and
- * one doing twenty-five in about nineteen. It was twenty, which is a brisk tack in a dinghy and
- * a radius twice that — and on a short course that is the rig arcing out past the next mark
+ * one doing twenty-five in about nineteen. Twenty degrees a second is a brisk tack in a dinghy
+ * and a radius twice that — and on a short course that is the rig arcing out past the next mark
  * before it is pointing at it, which is time spent steering the simulator rather than watching
  * the screen it exists to exercise. A tighter turn is the lesser lie here: this is the boat the
  * rig sails, not a claim about how any real one handles.
@@ -221,7 +221,7 @@ export class BoatSim {
   /**
    * Pick the boat up and put it somewhere else. <b>The helm order is kept.</b>
    *
-   * Clearing the target here made the boat stop dead wherever it was dropped and stay
+   * Clearing the target here would make the boat stop dead wherever it was dropped and stay
    * there — SOG zero, nothing moving, and no indication why, because from the outside it
    * looks identical to a boat that has arrived. Moving a boat is a statement about WHERE it
    * is, not about where it was going; whoever drops it forward along the course means "and

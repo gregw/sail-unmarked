@@ -117,9 +117,9 @@ export function run(check) {
 
   // ------------------------------- which side it is ON, and which side it CONFIRMS
   //
-  // Two questions that used to share one band, and sharing it made the plot unreadable: with
-  // the band set to the fix's own accuracy, a boat crossing at nine knots under a two-metre
-  // sky spends a second inside it and the picture of the crossing came out as a run of grey.
+  // Two questions with two bands. Sharing one would make the plot unreadable: with the band
+  // set to the fix's own accuracy, a boat crossing at nine knots under a two-metre sky spends
+  // a second inside it and the picture of the crossing would come out as a run of grey.
   const near = (metres) => toLocal(ORIGIN, at(0, metres));
 
   check('a fix is on a side once it is clear of the metre this system resolves to',

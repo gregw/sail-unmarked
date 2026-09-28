@@ -1,11 +1,12 @@
 /**
- * THE THREE SCREENS THE DIALOG ADDS — the channel, race progress, and the alerts.
+ * WHAT THE DIALOG ADDS TO THE BOAT'S SCREENS — the start row, the channel, race progress, and
+ * the alerts. Section numbers (§) are `wiki/client-server-dialog.md`'s.
  *
  * Kept out of `markscreen.js` because that file is about one thing: the approach plot and the
  * course overview, which are the screens a boat sails by and which work with the server
  * switched off. Everything here needs a channel behind it, and a screen with nothing behind it
- * is not offered at all (dialog document §8.2) — so the split in the files is the same split the
- * view selector makes.
+ * is not offered at all (§8.2) — so the split in the files is the same split the view selector
+ * makes.
  *
  * Markup only, and every one of these takes a plain object rather than the {@link Dialog}
  * itself where it can, for the same reason `markScreen` takes a state: a screen that can be
@@ -123,7 +124,10 @@ export function chatPanel(dialog, options = {}) {
 }
 
 /**
- * RACE PROGRESS — the brief's Live place, fed by `fleet` (§9.1).
+ * RACE PROGRESS — the Place screen, fed by `fleet` (§9.1).
+ *
+ * A ranked table standing in for the brief's Live place (§5), which draws every boat along the
+ * course at the moment its corrected time equals yours; that picture is not built.
  *
  * <b>It ages rather than blanks, and says how old it is.</b> The brief specifies that for
  * exactly this reason: live standings are the one thing boats want promptly from the server and

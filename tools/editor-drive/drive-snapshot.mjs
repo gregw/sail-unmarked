@@ -80,18 +80,16 @@ ok('and the row offers what you can do ABOUT it',
 /* ------------------------------------------------------- and the way back out */
 
 /*
- * THE WAY BACK, WHICH WAS A DEAD END AND WHICH THIS FILE USED TO PASS ON.
+ * THE WAY BACK FROM A CAPTURE TO THE DESIGN.
  *
- * It was a toggle — choosing the capture already chosen put the design back — and that was
- * right while this level was a list of rows. The moment it became a selector it could never
- * run again, because a `<select>` fires no `change` for the option already selected. The
- * assertion here said it worked and was believed, because `choose()` in the stub fired
- * `change` unconditionally: it modelled a browser behaviour that does not exist.
+ * Not a toggle on the chosen capture: a `<select>` fires no `change` for the option already
+ * selected, so that could never run in a browser (and `choose()` in the stub fires nothing
+ * for it either, so this driver cannot be fooled into thinking it does).
  *
- * The way back is now an option in the list, and the discriminator below is what the old
- * assertion lacked. `#variantForm` carries `v_id` EITHER WAY — a capture is handed to the
- * drawing and form code as an all-ad-hoc variant, which is the whole trick that makes it
- * render — so asking whether that field is there proved nothing at all. What actually
+ * The way back is an option in the list, and the discriminator below is what matters.
+ * `#variantForm` carries `v_id` EITHER WAY — a capture is handed to the drawing and form code as
+ * an all-ad-hoc variant, which is the whole trick that makes it render — so asking whether that
+ * field is there would prove nothing at all. What actually
  * distinguishes the two is the capture's own detail block, and the three view tickboxes,
  * which stand down while what is on screen is a record rather than a draft.
  */

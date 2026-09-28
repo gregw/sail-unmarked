@@ -42,11 +42,11 @@
     scores, because drops, penalties and protests belong to the club's own software.
   </p>
   <p class="muted" style="margin-top:10px">
-    <strong>Still a scaffold.</strong> Live Place, the chat and the race-management screens
-    described in <span class="mono">wiki/unmarked-racing-brief.html</span> &sect;3 is not built,
-    and a boat's record is posted without its full track until there is wifi to send one over.
-    The crossing detector, which is the part that decides a race, <em>is</em> built and
-    specified.
+    <strong>A prototype.</strong> The crossing detector, which is the part that decides a race,
+    is built and specified, and so are the boat's screens, the channel and the race screen.
+    Not built: the brief's Live place picture (the boat's Place screen is a ranked table), the
+    native wrapper and offline tiles, and re-posting a record with its full track once there is
+    wifi &mdash; a boat's record goes in without it.
   </p>
   <p class="muted" style="margin-top:6px">
     Run the specs in a browser:
@@ -100,9 +100,9 @@ try {
   el('server').innerHTML = `<span class="warn">${e.message}</span>`;
 }
 
-/* The server already says what is wrong with a file, one sentence per problem. The page
-   used to print the COUNT beside a guess at the cause ("positions not yet supplied"),
-   which was wrong as soon as anything else went wrong — and read as an accusation against
+/* The server already says what is wrong with a file, one sentence per problem, and the
+   page prints them. A COUNT beside a guess at the cause ("positions not yet supplied")
+   would be wrong as soon as anything else went wrong — and read as an accusation against
    whichever course happened to be last in the list above it. */
 const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;' };
 const esc = (v) => String(v ?? '').replace(/[&<>]/g, (c) => ESC[c]);

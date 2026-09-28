@@ -11,7 +11,7 @@ LIVE="${UNMARKED_LIVE:-$ROOT/target/editor-drive}"
 # A second is usually enough and when it is not the failure is baffling: the new server cannot
 # bind, so the driver talks to the OLD one — whose data root this script has just deleted and
 # re-copied underneath it. What comes back is then a 404 for a race that was certainly written,
-# which reads as a bug in the thing under test. Seen, and it cost an hour.
+# which reads as a bug in the thing under test.
 PID=$(ss -ltnp 2>/dev/null | grep ":$PORT" | sed -n 's/.*pid=\([0-9]*\).*/\1/p' | head -1)
 if [ -n "$PID" ]; then
   kill "$PID" 2>/dev/null

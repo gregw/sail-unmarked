@@ -238,16 +238,16 @@
     <p class="tag">Course, variant, snapshot &mdash; and how you know what you are editing.</p>
     <p class="lede">A club edits its courses on the morning of a race, while boats are already looking at them. This note
         fixes the three things a course can be, the two kinds of geometry it can be made of, and the rule that tells an
-        editor whether the change in front of them lands on one course or on twenty. It is the model only. Where the data
-        lives, and how a boat registers for a start, come after.</p>
+        editor whether the change in front of them lands on one course or on twenty.</p>
 
     <div class="callout">
-        <div class="h">Status</div>
-        <p>The vocabulary and the rules below are settled and are what the editor is being built to. Registration, start
-            broadcast, divisions on the boat side and the storage layout are explicitly <em>not</em> settled and are not
-            described here.</p>
+        <div class="h">Where this sits</div>
+        <p>This is the reasoning. The rules as built &mdash; storage, public visibility, the audit log, templates in the
+            editor &mdash; are in <a href="course-model.md">course-model.md</a>, and the editor that operates it is
+            <a href="course-editor.md">course-editor.md</a>. How a boat joins and is started is
+            <a href="client-server-dialog.md">the client&ndash;server dialog</a>.</p>
         <p>The crossing model &mdash; lines, ends, sense and extent &mdash; is in
-            <a href="unmarked-racing-brief.html">the project brief</a> and is unaffected by any of this.</p>
+            <a href="crossing-detection.md">crossing-detection.md</a> and is unaffected by any of this.</p>
     </div>
 
     <h2><span class="n">01</span>The problem this solves</h2>
@@ -425,9 +425,8 @@
             &mdash; Sow&nbsp;and&nbsp;Pigs is Sow&nbsp;and&nbsp;Pigs whether one course uses it or nine. Sharing is a
             consequence of several courses choosing to refer to the same thing, and it is measured by counting
             references, never declared by a flag.</p>
-        <p>This is why the earlier <em>shared</em> / <em>local</em> naming was dropped. It stated as policy something
-            that is really an observation, and it would have gone stale the moment a second course adopted a "local"
-            mark.</p>
+        <p>This is why there is no <em>shared</em> / <em>local</em> flag. It would state as policy something that is
+            really an observation, and it would go stale the moment a second course adopted a "local" mark.</p>
     </div>
 
     <h3>A line's two ends are independent</h3>
@@ -534,8 +533,7 @@
         keeps no names.</p>
 
     <p>Lazy inlining &mdash; keeping the names and resolving them later, so that a change to a named point could be seen
-        to affect published courses &mdash; is attractive and was seriously considered. It is rejected, for two reasons
-        that reinforce each other:</p>
+        to affect published courses &mdash; is attractive, and wrong for two reasons that reinforce each other:</p>
 
     <ul>
         <li><strong>The revision is a hash over resolved coordinates.</strong> A snapshot that resolves names later has
@@ -605,7 +603,8 @@
         <p>"Dirty" on its own only says something changed. What an editor needs before publishing is <em>what</em>
             changed: this line moved 340&nbsp;m, this step was added, the course is 0.4&nbsp;nm shorter. The comparison
             between the last snapshot and the current resolved variant is the natural place to get it, since both sides
-            are fully resolved geometry.</p>
+            are fully resolved geometry. <em>Not built:</em> the editor shows which variants are dirty, not what
+            changed.</p>
     </div>
 
     <h2><span class="n">07</span>Snapshot and publish are two steps</h2>
@@ -636,9 +635,9 @@
     </ul>
 
     <p>These are the same operation at different scope: move a set of publication pointers, all or nothing. The
-        atomicity is the constraint with teeth &mdash; it means the pointers being moved have to be committed together,
-        which will shape where publications are stored. Since a shared line can dirty variants across
-        <em>different courses</em>, that scope is probably club&#8209;wide rather than per&#8209;course.</p>
+        atomicity is the constraint with teeth &mdash; it means the pointers being moved have to be committed together.
+        Since a shared line can dirty variants across <em>different courses</em>, that scope is club&#8209;wide: the
+        publications live in one document per club (<span class="mono">CourseLedger</span>), written atomically.</p>
 
     <h2><span class="n">08</span>Templates</h2>
 
@@ -660,8 +659,10 @@
 
     <h3>Cloning</h3>
 
-    <p>To race a template you clone it. The clone is an ordinary variant, with the template flag cleared &mdash;
-        otherwise the copy could not be snapshotted either.</p>
+    <p>To race a template you clone it, or expand it into the course you are building from the editor's template
+        picker. Either way the copy is an ordinary variant, with the template flag cleared &mdash; otherwise it could
+        not be snapshotted either &mdash; and it is named for the race it is, <span class="mono">yyyymmdd-race-n</span>,
+        rather than for the shape it came from.</p>
 
     <ul>
         <li><strong>A variant may be cloned into any course</strong>, existing or new. That is what makes two
@@ -678,11 +679,13 @@
     </ul>
 
     <div class="callout warnbox">
-        <div class="h">Translate and rotate are a bulk detach</div>
-        <p>Sliding or turning a freshly cloned course to suit today's wind converts every named line it inherited into
-            ad&#8209;hoc geometry, in one gesture. That is correct &mdash; you are moving this course, not the club's
-            marks &mdash; but it is the one action that quietly makes most of a course ad&#8209;hoc, so it should say
-            <em>this will detach 6 shared lines</em> before it does it.</p>
+        <div class="h">Translate and rotate ask which scope</div>
+        <p>Sliding or turning a course built on shared marks is the one gesture that could detach most of it, or move
+            every course built on the same marks. So it asks, naming how many shared marks there are and which courses
+            use them: <em>detach them and move only this course</em>, or <em>move them for everybody</em>. The wider
+            answer is offered here, unlike on a single mark's drag, because on race morning "the whole fleet's course has
+            shifted twenty degrees" is a real thing somebody means. The invariant is only that scope is never widened by
+            accident.</p>
     </div>
 
     <h3>The warning on editing a template</h3>
@@ -700,7 +703,8 @@
             exactly as they were, retrievable by revision. They simply leave the dirty conversation, because nothing
             living is being compared against them any more.</li>
         <li>A snapshot that has been <strong>replaced</strong> by a newer publication is likewise kept.</li>
-        <li>Snapshots go only when explicitly deleted.</li>
+        <li>A snapshot leaves the list only when somebody explicitly <em>forgets</em> it, and even then its geometry
+            stays readable by revision. The published one cannot be forgotten.</li>
     </ul>
 
     <p>The reason is the record. A record names a revision, and a record whose geometry cannot be retrieved is a time
@@ -731,27 +735,20 @@ snapshot             Div 1, Div 2
 publish              Div 1 + Div 2 <span class="k">atomically</span>
                      <span class="c">Twilight is left dirty on purpose — it races Wednesday</span></pre>
 
-    <h2><span class="n">11</span>What this note does not settle</h2>
+    <h2><span class="n">11</span>What this model leaves open</h2>
 
     <ul>
-        <li><strong>Storage.</strong> Where courses, variants, snapshots and publications live on disk, and in what
-            format. The atomic multi&#8209;variant publish is the constraint that will decide most of it.</li>
-        <li><strong>Registration and start.</strong> How a boat registers, how a division is determined or asked for,
-            how a start timer reaches a registered fleet, and how a live edit is broadcast to boats that already hold a
-            snapshot.</li>
-        <li><strong>Force&#8209;registration</strong> and the club's view of who is out there.</li>
         <li><strong>Scoped names as a mechanism.</strong> Generated names such as
-            <span class="mono">manly-to-shark/windward</span> are a convention today, not a namespace. Deliberately on
-            the back burner.</li>
-        <li><strong>Write protection.</strong> A named point that published courses depend on can still be dragged by
-            anybody with the page open. Which is a specific instance of the general gap: there is no authentication on
-            any write.</li>
+            <span class="mono">manly-to-shark/windward</span> are a convention, not a namespace. Deliberately on the back
+            burner.</li>
+        <li><strong>Who may drag a club mark.</strong> Every officer the login admits may edit every named point, and
+            one tier of officer is all there is (<a href="open-questions.md">open question 8</a>).</li>
     </ul>
 
     <div class="foot">
         <p>Companion to <a href="unmarked-racing-brief.html">the project brief</a>. The brief describes what a virtual
             mark is; this describes how a set of them gets published and kept honest. Where the two disagree about the
-            lifecycle, this is later.</p>
+            lifecycle, this note is right.</p>
     </div>
 
 </div>

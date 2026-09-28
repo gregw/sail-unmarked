@@ -408,8 +408,8 @@ export function run(check) {
 
   /*
    * DARK IS THE BACKGROUND'S JOB, NOT THE COURSE'S. These screens are dark because they are
-   * read in glare, and everything on this one used to be drawn faint on top of that — which on
-   * a desk reads as a tasteful picture and on the water at midday reads as an empty screen. The
+   * read in glare, and a course drawn faint on top of that reads, on a desk, as a tasteful
+   * picture and, on the water at midday, as an empty screen. The
    * ranking between the marks is carried by COLOUR and WEIGHT (green live, blue ahead, thinner
    * dashed track) rather than by fading them out, so only what is genuinely behind the boat is
    * dimmed, and only to "still legible".
@@ -463,10 +463,10 @@ export function run(check) {
   check('...and the elapsed has stopped moving, because it is a result now',
     frozen && frozen[1] === clock(startedClient.elapsed(ticking + 600000))
     && frozen[1] === clock(startedClient.finishAt - startedClient.startAt));
-  // MARKED AS FINAL BY THE COLOUR, NOT BY THE LABEL. It used to say "Elapsed — final", written
-  // with an `&mdash;` and then put through `esc` like every other label — which escaped the
-  // ampersand and printed the entity, so the screen read "ELAPSED &MDASH; FINAL". `.readout.done`
-  // turns the row green, which says result in the place somebody is already looking.
+  // MARKED AS FINAL BY THE COLOUR, NOT BY THE LABEL. A label is text and goes through `esc`
+  // like every other, so a label carrying markup (`Elapsed &mdash; final`) would print the
+  // entity. `.readout.done` turns the row green, which says result in the place somebody is
+  // already looking.
   check('...and is marked as final, by the row that carries the colour',
     done.includes('class="readout done"'));
   check('...with the label still just the word, and no entity printed at it',
@@ -689,9 +689,9 @@ export function run(check) {
 
   /*
    * WHAT THE PLOT HOLDS IS THE BOAT, THE PART OF THE LINE IT WILL CROSS, AND ITS TRAIL — and
-   * that is the whole list. It used to hold the line's midpoint and its nearer end as well, on
-   * the reasoning that a picture of a line should say how much line there is. Tested on the
-   * water, that reasoning loses: on a long line the mark and the end may be hundreds of metres
+   * that is the whole list. Not the line's midpoint and its nearer end as well, though a
+   * picture of a line should say how much line there is: on a long line the mark and the end
+   * may be hundreds of metres
    * from where the boat is crossing, so the picture is pinned wide open and the last few
    * metres — the whole reason this screen exists — are drawn a few pixels across.
    */
@@ -729,7 +729,7 @@ export function run(check) {
       + 'is for, and no part of the line that is not being crossed may hold it open',
       frames[frames.length - 1].across < 60);
   }
-  check('...and identically, since the picture no longer depends on where along the line the '
+  check('...and identically, since the picture does not depend on where along the line the '
     + 'boat comes in', Math.abs(pin[pin.length - 1].across - middle[middle.length - 1].across) < 1);
   check('...having closed in by better than ten times over the approach',
     middle[middle.length - 1].across < middle[0].across / 10);
@@ -761,10 +761,10 @@ export function run(check) {
       > middle[middle.length - 1].across + 20);
   check('...with a floor under all of it, because a plot cannot draw detail the system does '
     + 'not resolve', minSpanM(1, 1) === FLOOR_SPAN_M && minSpanM(10, 3) === 30);
-  // A boat that says nothing is the ten metres every boat was drawn as before there was a
-  // field to say it in — and the line stays three metres for everybody, because that width is
-  // the accuracy band and belongs to the sky rather than to the boat.
-  check('...and a boat that declares no length is the ten metres it always was',
+  // A boat that says nothing is drawn as ten metres — and the line stays three metres for
+  // everybody, because that width is the accuracy band and belongs to the sky rather than to
+  // the boat.
+  check('...and a boat that declares no length is drawn as ten metres',
     realFor(null).boatM === REAL.boatM && realFor(0).boatM === 10 && realFor(6).lineM === REAL.lineM);
   check('...with the line\'s pixel bounds derived from the boat\'s, so no length can put the '
     + 'pair out of proportion',
@@ -1301,11 +1301,10 @@ export function run(check) {
   });
   check('the boat and the line keep their true proportion at EVERY range, floors and caps '
     + 'included', ratios.every((r) => Math.abs(r.ratio - REAL.boatM / REAL.lineM) < 0.05));
-  // THE COMPARISON A READER ACTUALLY MAKES is the hull's beam against the line's thickness,
-  // and the figure moved when the arrow became a boat: the dart was 0.67 of its length across
-  // and a hull is 0.42, so what was 2.2x is now 1.4x. Still wider than the line at every
-  // range, which is the rule — and the length, which is what a hull shape makes legible, is
-  // over three times it. Asserted a little under the 1.4 so there is slack, and asserted at
+  // THE COMPARISON A READER ACTUALLY MAKES is the hull's beam against the line's thickness. A
+  // hull is 0.42 of its length across, so a 10 m boat on a 3 m line is 1.4x. Wider than the
+  // line at every range, which is the rule — and the length, which is what a hull shape makes
+  // legible, is over three times it. Asserted a little under the 1.4 so there is slack, and asserted at
   // all because the two are clamped together and a change to either could invert them.
   check('...so the boat is wider than the line is thick at every range, its beam by half '
     + 'again and its length by over three times',

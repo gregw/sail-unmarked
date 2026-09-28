@@ -1,10 +1,9 @@
 /**
  * A DOM stub good enough to drive editor.js headlessly against a running server.
  *
- * The editor is where the course lifecycle is actually operated, and none of it was in the
- * build — the drivers lived in a scratch directory and were lost the first time /tmp was
- * cleared. They live here now, for the same reason the crossing spec does: what decides a
- * result and is not in the build rots.
+ * The editor is where the course lifecycle is actually operated, so it is driven here, in the
+ * repository, for the same reason the crossing spec is in the build: what decides a result and
+ * is not exercised rots. `run.sh` runs every driver against a freshly copied config.
  *
  * It is a stub, not a browser. It parses the markup the editor writes and hands back
  * memoised element objects, so a handler that sets an attribute is observable through a
@@ -46,9 +45,9 @@ const mk = (id) => ({
   },
   set value(v) { this._value = v; },
   /*
-   * A class list that REMEMBERS. It used to be three no-ops, which was fine while nothing but
-   * appearance hung off a class — and stopped being fine when the phone started marking itself
-   * as being dragged, since "is it being dragged" is then a question with no answer.
+   * A class list that REMEMBERS. No-ops would do while nothing but appearance hung off a class;
+   * the rig's phone marks itself as being dragged with one, so "is it being dragged" needs an
+   * answer.
    */
   classList: (() => {
     const held = new Set();
@@ -119,12 +118,12 @@ const mk = (id) => ({
       }
       return out;
     }
-    // AN ATTRIBUTE SELECTOR, which the page really uses — `[data-view]`, `[data-orient]` — and
-    // which this stub used to get silently and spectacularly wrong: it fell through to the tag
-    // branch below, where `[data-view]` is a CHARACTER CLASS and `<[data-view]...>` happily
-    // matches `<div>`. So the handlers were wired to nodes that stood for divs, and a driver
-    // could see the buttons in the markup but never press one. Keyed by the attribute's value
-    // rather than by position, so a handler wired on one render is found on the next.
+    // AN ATTRIBUTE SELECTOR, which the page really uses — `[data-view]`, `[data-orient]`. It must
+    // be caught HERE: falling through to the tag branch below, `[data-view]` is a CHARACTER
+    // CLASS and `<[data-view]...>` happily matches `<div>`, so handlers would be wired to nodes
+    // standing for divs and a driver could see the buttons but never press one. Keyed by the
+    // attribute's value rather than by position, so a handler wired on one render is found on
+    // the next.
     const byAttr = /^\[data-([a-z]+)\]$/.exec(sel);
     if (byAttr) {
       const want = byAttr[1];
@@ -257,10 +256,9 @@ export const chosenIn = (level) => {
  * Choose a value at one level, the way a person does.
  *
  * <b>Re-choosing the option that is already selected fires NOTHING</b>, because that is what a
- * `<select>` does: `change` means the value changed. A stub that fired it anyway modelled a
- * browser behaviour that does not exist — and hid a real dead end for exactly as long as it
- * did, since the snapshot level's way back to the design was written as "choose the chosen one
- * again" and could never once have run in a browser. A driver asserted it and passed.
+ * `<select>` does: `change` means the value changed. A stub that fired it anyway would model a
+ * browser behaviour that does not exist, and would let a driver pass on an interaction — "choose
+ * the chosen one again" — that can never run in a browser.
  *
  * The empty option is still choosable this way (`choose('snapshot', '')`), because an empty
  * value IS a change from a chosen one.

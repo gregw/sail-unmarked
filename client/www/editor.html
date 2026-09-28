@@ -43,17 +43,17 @@
   /* Armed for a chart click, the whole chart IS the target. */
   #map.picking { cursor: crosshair; }
 
-  /* ONE scrolling surface, top to bottom. The rows and the form used to be two flex
-     children that each scrolled, which split a 495px pane into two short windows with a
-     bar on each — so reaching a field could mean scrolling the wrong one, and the bars
-     said the two halves were separate things when they are one drill-down: the level, and
-     the fields of the level. The pane scrolls; nothing inside it does, except a list slot,
+  /* ONE scrolling surface, top to bottom. The rows and the form as two flex children that
+     each scrolled would split a 495px pane into two short windows with a bar on each — so
+     reaching a field could mean scrolling the wrong one, and the bars would say the two
+     halves were separate things when they are one drill-down: the level, and the fields of
+     the level. The pane scrolls; nothing inside it does, except a list slot,
      which is a fixed-height box on purpose (see below). */
   /*
    * THE PANE IS A SCROLLING SURFACE WITH A FIXED FOOT. The three view tickboxes are settings
-   * for the chart, not part of the drill-down, and they were buried at the bottom of a
-   * scrolling variant form where reaching them meant scrolling past the whole sequence. Pinned,
-   * they are always where they were last time.
+   * for the chart, not part of the drill-down, and at the bottom of a scrolling variant form
+   * reaching them would mean scrolling past the whole sequence. Pinned, they are always where
+   * they were last time.
    */
   aside {
     width: 495px; flex: 0 0 495px; border-left: 1px solid var(--panel2);
@@ -71,7 +71,7 @@
   #courseForm, #seriesForm, #variantForm, #snapshotForm { margin: 0 0 8px 14px; }
   #courseForm:empty, #seriesForm:empty, #variantForm:empty, #snapshotForm:empty { margin: 0; }
   /* A rule, not a region: it separates the level from the level's fields, and nothing
-     more. It needs no height floor now that it does not compete with the rows for one. */
+     more. It needs no height floor, since it does not compete with the rows for one. */
   #formWrap { padding: 4px 14px 14px; border-top: 1px solid var(--panel2); margin-top: 8px; }
 
   .paneHead { display: flex; align-items: center; gap: 8px; margin: 10px 0 6px; }
@@ -204,11 +204,11 @@
    * A LEVEL IS A LABEL, A SELECTOR AND ITS COMMANDS — one line, always the same three parts
    * in the same three places.
    *
-   * It was a breadcrumb that opened a fixed-height list underneath it, and several of those
-   * could be open at once: a pane of stacked boxes, each with its own scrollbar and resize
-   * grip, where the thing you wanted was one of four places depending on what was open. A
-   * selector says what is chosen without being open, takes one line instead of a hundred and
-   * fifty pixels, and is the control everybody already knows.
+   * Not a breadcrumb opening a fixed-height list underneath it, several of which could be open
+   * at once: that is a pane of stacked boxes, each with its own scrollbar and resize grip, where
+   * the thing you want is one of four places depending on what is open. A selector says what is
+   * chosen without being open, takes one line instead of a hundred and fifty pixels, and is the
+   * control everybody already knows.
    *
    * The label is a fixed width so that every selector on the pane starts at the same column;
    * the commands are a fixed width at the right so they do not move when a name is long. What
@@ -222,9 +222,9 @@
   .sel .state { flex: 0 0 auto; }
 
   /*
-   * A FORM SECTION'S HEADING, which is where the chevron went. It used to open a list; it now
-   * folds the fields of the level above it, which is the thing actually worth getting out of
-   * the way — a course's fields and a variant's sequence are long, and a selector is one line.
+   * A FORM SECTION'S HEADING, which is where the chevron is. It folds the fields of the level
+   * above it, which is the thing actually worth getting out of the way — a course's fields and a
+   * variant's sequence are long, and a selector is one line.
    */
   .fold {
     display: flex; align-items: center; gap: 6px; width: 100%;

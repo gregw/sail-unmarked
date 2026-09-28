@@ -46,7 +46,8 @@ import org.slf4j.LoggerFactory;
  * variant or course has since been deleted. A record names a revision, and a record whose
  * geometry cannot be retrieved is a time with no course attached — unscoreable,
  * unprotestable and comparable with nothing. Retiring a course is not a reason to make last
- * season's results meaningless. Snapshots go only when somebody explicitly deletes one.
+ * season's results meaningless. A snapshot leaves this index only when somebody forgets it,
+ * and even then its geometry stays in the store — see {@link #forget}.
  */
 public class CourseLedger
 {

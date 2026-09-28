@@ -10,17 +10,16 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
- * One message, in either direction, on either transport. The dialog document §4.
+ * One message, in either direction. Dialog §4.
  *
  * <p>The whole protocol is this record plus a {@code type} and a schema per type. Two things
- * about it are worth stating because both were decided against an alternative:
+ * about it are worth stating because each is the absence of something a reader might expect:
  *
  * <p><b>There is no ordinal.</b> A monotonic sequence number would make "which of these came
- * last" decidable without trusting anybody's clock, and it looked necessary for telling a boat
- * what it missed and for recognising a resend. It is neither: reconnection RE-STATES rather than
- * replaying (§4.1), {@code id} already makes a resend recognisable, and within one connection
- * the transport has done the ordering. A field on every message for somebody else's problem is a
- * field to leave out.
+ * last" decidable without trusting anybody's clock, and would seem to be needed for telling a
+ * boat what it missed and for recognising a resend. It is not: reconnection RE-STATES rather
+ * than replaying (§4.1), {@code id} already makes a resend recognisable, and within one
+ * connection the transport has done the ordering.
  *
  * <p><b>{@code at} is when the SENDER says it sent this, and nothing is derived from it.</b> A
  * crossing carries its own instant in the body, taken from the fix that produced it; that is the

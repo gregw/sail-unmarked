@@ -323,10 +323,10 @@ const record = {
       position: mid, confirmBefore: 3, confirmAfter: 3, counted: true, note: null,
     },
     // WHAT WAS REFUSED, AND WHY, carried as a crossing that did not count — which is what
-    // `counted` and `note` are for. A separate `rejected` array was written first and was
-    // silently dropped, because the model has no such field and unknown fields are ignored:
-    // the record arrived looking complete with the half that says "why is there no crossing
-    // here?" missing.
+    // `counted` and `note` are for. Not a separate `rejected` array: the model has no such
+    // field and unknown fields are ignored, so it would be silently dropped and the record
+    // would arrive looking complete with the half that says "why is there no crossing here?"
+    // missing.
     {
       step: -1, line: first.line, cross: null, time: crossedAt,
       position: null, confirmBefore: 0, confirmAfter: 0, counted: false,
@@ -340,10 +340,9 @@ await settle(300);
 // ASKED FOR BY THE DAY THE CLUB COUNTS IN, which is what the store files by: the start instant
 // in the club's own timezone, taken from its programme file.
 //
-// This was written twice wrong first, and both are worth remembering. It asked with the LOCAL
-// date of whatever machine runs the driver — which passed all evening and failed the moment the
-// clock crossed midnight in Sydney. Then it asked with the UTC date, which worked only because
-// the store was filing by UTC, which was the bug. Neither is "the race day"; the club's zone is.
+// Not the LOCAL date of whatever machine runs the driver, which passes all evening and fails
+// the moment the clock crosses midnight in Sydney; and not the UTC date, which would agree only
+// with a store that filed by UTC. Neither is "the race day"; the club's zone is.
 const zone = saved.timezone ?? 'UTC';
 const filedUnder = new Date(record.startTime).toLocaleDateString('en-CA', { timeZone: zone });
 const filed = await json(`/api/records/${programme.club}/${taken.course}/${filedUnder}`)
@@ -416,8 +415,8 @@ ok('a committee can record a DNF, which the software never infers',
 
 /* ------------------------------------- a join with no race behind it gets NO channel */
 
-// The same join, against a course with no race on it today — which is what the whole system was
-// for before there were committees.
+// The same join, against a course with no race on it today — a boat practising, or making a
+// record attempt.
 const other = Object.keys(saved.courses).find((id) => id !== taken.course);
 let plain = null;
 if (other) {

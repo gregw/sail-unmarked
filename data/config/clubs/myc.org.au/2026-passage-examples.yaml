@@ -1,14 +1,15 @@
-# Manly Cove circuit — the worked course from the brief, section 06.
+# Manly Cove passage courses — the worked course from the brief, section 07, and a harbour
+# circuit.
 #
 # One file per club and series. The path is the identity: this file is filed under
-# clubs/myc.org.au/ and named 2026-example, so its club is "myc.org.au" and its series
-# is "2026-example". Nothing here is resolved from any other file.
+# clubs/myc.org.au/ and named 2026-passage-examples, so its club is "myc.org.au" and its
+# series is "2026-passage-examples". Nothing here is resolved from any other file.
 #
 # ---------------------------------------------------------------------------------
-# NO COORDINATES ARE ASSERTED IN THIS FILE. Every position below is null, waiting on a
-# survey. The brief is explicit that real positions are to be supplied and not guessed,
-# so this file loads, reports every unsurveyed point as a problem, and refuses to
-# pretend it knows where Sow and Pigs is.
+# NOTHING IN THIS FILE IS A SURVEY. The positions below were placed by eye on a chart
+# in the editor, to have something to sail in the test rig. Real positions are to be
+# surveyed, not guessed, before anybody races these courses — a point left null loads,
+# and is reported as a problem by name rather than pretended.
 # ---------------------------------------------------------------------------------
 
 name: Example passage courses
@@ -34,7 +35,7 @@ defaults:
     maxSpeedKn: 40         # the kinematic gate — the primary defence against flyers
 
 # ---------------------------------------------------------------------------------
-# Points. Surveyed once, referred to by id, so a correction is one edit. Sow and Pigs
+# Points. Placed once, referred to by id, so a correction is one edit. Sow and Pigs
 # is shared by two lines, which is exactly why this section exists.
 # ---------------------------------------------------------------------------------
 points:

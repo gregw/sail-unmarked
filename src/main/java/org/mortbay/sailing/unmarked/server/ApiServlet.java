@@ -39,11 +39,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * The API boats and browsers talk to.
+ * The REST API boats and browsers talk to. The boats' live conversation is the other servlet,
+ * {@link DialogServlet}, on {@code /api/dialog}.
  *
  * <h2>Endpoints</h2>
  * <pre>
- *   GET  /api/config                                     version, site, store health
+ *   GET  /api/config                                     version, site, display, who is signed in
  *   GET  /api/programmes                                 every club/series, with problems
  *   GET  /api/templates                                  every template, wherever it lives
  *   GET  /api/public                                     public courses, and what each offers
@@ -60,7 +61,11 @@ import org.slf4j.LoggerFactory;
  *   POST /api/lifecycle/{club}/{series}/publications     move pointers, all of them or none
  *   DEL  /api/lifecycle/{club}/{series}/snapshots/{rev}  forget one; its geometry is kept
  *
- *   POST /api/join/{club}/{series}/{course}              a boat takes a course to sail
+ *   GET  /api/races/{club}/{series}                      the series' race definitions
+ *   GET  /api/conduct/{club}/{series}/{race}             one race live: fleet, channel, states, acks
+ *   POST /api/conduct/{club}/{series}/{race}             the committee publishes one envelope
+ *
+ *   POST /api/join/{club}/{series}/{course}              a boat takes a course, with no dialog
  *   GET  /api/courses/{revision}                         the geometry somebody sailed
  *   POST /api/records                                    a boat posts what it did
  *   GET  /api/records/{club}/{course}/{date}             a day's runs at a course
@@ -72,26 +77,27 @@ import org.slf4j.LoggerFactory;
  * </pre>
  *
  * <h2>The shape of this API is the architecture</h2>
- * Note what is absent. There is <b>no race</b>, no entrant list, no start sheet, no
- * scoring. This system publishes courses and collects what boats did on them; places,
- * OCS, corrected times and series scoring belong to the club's own software, which
- * already has rules for all of it.
+ * Note what is absent. There is <b>no scoring</b>: no places, no OCS, no penalties, no series
+ * table. Races exist — a definition in the series file, and a conduct record of the afternoon
+ * — but this system publishes courses, runs the committee's side of a start, and collects what
+ * boats did; places, OCS, corrected times and series scoring belong to the club's own software,
+ * which already has rules for all of it.
  *
  * <p>There is also no endpoint that decides a crossing, none that a boat must call before
  * it can score a mark, and none that returns a boat its own elapsed time — the boat knows,
- * because it computed it. A boat joins a course before the start and caches it; it posts
- * what it did afterwards. Between those two moments the server can be switched off without
- * a boat on the water noticing.
+ * because it computed it. A boat joins a course before the start and holds it; it reports
+ * what it did as it goes and when it finishes. Between those moments the server can be
+ * switched off without a boat on the water noticing.
  *
  * <p>Everything readable is readable by anybody. A club publishes its results, and results
  * only people with accounts can read are results nobody reads — the same judgement
  * sail-jinx makes.
  *
- * <p><b>The officer's writes are behind a login; the boat's are deliberately not.</b> The
- * programme PUT rewrites a course file on disk and the publications POST decides what a whole
- * fleet is handed, so both need a signed-in officer ({@link UnmarkedSecurityHandler}) as well as
- * {@code server.configWrites}. The record POST stays open, because a boat's own account of its
- * race is trusted by construction and a login there would name a claim nothing can check. See
+ * <p><b>The officer's writes are behind a login; the boat's are deliberately not.</b> Every
+ * non-GET on {@code /api/programmes}, {@code /api/lifecycle} and {@code /api/conduct} needs a
+ * signed-in officer ({@link UnmarkedSecurityHandler}) as well as {@code server.configWrites}.
+ * The join and record POSTs stay open, because a boat's own account of its race is trusted by
+ * construction and a login there would name a claim nothing can check. See
  * {@code wiki/deployment.md}.
  */
 public class ApiServlet extends HttpServlet
@@ -404,6 +410,9 @@ public class ApiServlet extends HttpServlet
             resp.sendError(400, String.join("; ", complaints));
             return;
         }
+        // TODO: a record posted here has no session, so nothing stamps its race — and it is
+        // stored with whatever `race` and `division` it carries. Over the dialog those two fields
+        // are the server's to say (CourseRecord#race); here they should be cleared.
         try
         {
             store.save(record, programmes.zone(record.club(), record.series()));
@@ -425,9 +434,9 @@ public class ApiServlet extends HttpServlet
     }
 
     /**
-     * Retire a series.
+     * Retire a series, or forget one snapshot (see {@link #forgetSnapshot}).
      *
-     * <p>Refused with 409 while any of its courses is still published, unless
+     * <p>Retiring is refused with 409 while any of its courses is still published, unless
      * {@code ?force=true}: deleting a programme boats can still join is a decision, not a
      * keystroke, and the refusal names what is on offer so the editor can ask about it. Its
      * <b>snapshots are kept either way</b> — a record names a revision, and a record whose
@@ -512,8 +521,8 @@ public class ApiServlet extends HttpServlet
     /**
      * Create a series, empty or as a byte copy of another.
      *
-     * <p>This is the one write that turns a user-supplied string into a <b>new path</b>, so
-     * it is the one place an id is refused rather than reported —
+     * <p>This and a series rename are the writes that turn a user-supplied string into a
+     * <b>new path</b>, so they are where an id is refused rather than reported —
      * {@link ProgrammeLibrary#resolve} validates and then checks the resolved path is still
      * inside the config tree, and throws for the servlet to turn into a 400.
      */
@@ -606,15 +615,6 @@ public class ApiServlet extends HttpServlet
     }
 
     /**
-     * What a record must carry to be filed at all.
-     *
-     * <p>Deliberately thin, and it checks identity rather than plausibility. The server
-     * has no standing to reject a boat's account of its own race — it did not see the
-     * race, and the boat did. What it can insist on is knowing where to file the thing and
-     * who it belongs to, and refusing a record it cannot place is better than inventing a
-     * location for it.
-     */
-    /**
      * THE COMMITTEE PUBLISHES: a start, a flag, a course, a message, an outcome.
      *
      * <p>One endpoint taking one envelope, because they are one act as far as the protocol is
@@ -627,10 +627,11 @@ public class ApiServlet extends HttpServlet
      * arithmetic that turned "in five minutes" into that instant was done in the operator's
      * browser against the operator's own clock.
      *
-     * <p>TODO: gated by {@code configWrites} like the other writes, and that is not the answer.
-     * Abandoning a race is the most consequential act in this system and the one that most
-     * obviously wants a name attached to it — which is §7.1's "authenticate authority, trust
-     * data", and open question 8.
+     * <p>Behind the officer's login ({@link UnmarkedSecurityHandler}) and {@code configWrites},
+     * like the other writes. Abandoning a race is the most consequential act in this system
+     * and the one that most obviously wants a name attached to it — §7.1's "authenticate
+     * authority, trust data". There is one tier of officer: any account the login admits may
+     * do any of this.
      */
     private void conduct(HttpServletRequest req, HttpServletResponse resp, String club,
         String series, String raceId) throws IOException
@@ -668,16 +669,14 @@ public class ApiServlet extends HttpServlet
     }
 
     /**
-     * A boat takes a course to sail.
+     * A boat takes a course to sail, with no conversation behind it.
      *
-     * <p>This is the one write a boat makes before the start, and it exists so that the
-     * geometry it sailed can still be read afterwards: the snapshot is ARCHIVED under its
-     * revision here, not when the course is edited. Nothing is kept for a design nobody
-     * took, which is most of what an editing session produces.
+     * <p>The REST fallback for {@code join} over the dialog: what a boat uses when the dialog
+     * cannot be had at all, so it can still sail. It hands over the PUBLISHED snapshot and
+     * nothing else — no session, no race, no channel.
      *
      * <p>Nothing about the boat is recorded by joining. Who sailed, and why, arrives with
-     * the record afterwards — a boat that joins and never sails leaves no trace beyond a
-     * design that was worth keeping anyway.
+     * the record afterwards.
      */
     private void join(HttpServletResponse resp, String club, String series, String courseId,
         String variantId) throws IOException
@@ -1059,6 +1058,15 @@ public class ApiServlet extends HttpServlet
         return now.revision().equals(latest.revision()) ? "current" : "dirty";
     }
 
+    /**
+     * What a record must carry to be filed at all.
+     *
+     * <p>Deliberately thin, and it checks identity rather than plausibility. The server
+     * has no standing to reject a boat's account of its own race — it did not see the
+     * race, and the boat did. What it can insist on is knowing where to file the thing and
+     * who it belongs to, and refusing a record it cannot place is better than inventing a
+     * location for it.
+     */
     private List<String> complaints(CourseRecord record)
     {
         List<String> complaints = new ArrayList<>();
@@ -1216,11 +1224,6 @@ public class ApiServlet extends HttpServlet
     }
 
     /**
-     * Every variant's length in nautical miles, keyed course then variant, null where it
-     * cannot be measured. Computed here so the midpoint-to-midpoint rule has one
-     * implementation rather than two that drift.
-     */
-    /**
      * What anybody may see: the public courses, and what is published under each.
      *
      * <p><b>Two gates, both required.</b> The course must be public, and the variant must
@@ -1326,6 +1329,11 @@ public class ApiServlet extends HttpServlet
         }
     }
 
+    /**
+     * Every variant's length in nautical miles, keyed course then variant, null where it
+     * cannot be measured. Computed here so the midpoint-to-midpoint rule has one
+     * implementation rather than two that drift.
+     */
     private static Map<String, Object> lengths(Programme programme)
     {
         Map<String, Object> out = new LinkedHashMap<>();

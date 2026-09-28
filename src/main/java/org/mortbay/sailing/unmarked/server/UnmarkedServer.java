@@ -41,13 +41,14 @@ import org.slf4j.LoggerFactory;
  * <p>The single argument, when supplied, is the data root; it defaults to {@code ./data}.
  *
  * <h2>What this server is not</h2>
- * <b>It is outside the rounding path.</b> It distributes course and format definitions and
- * it aggregates the records boats send it. It does not detect a crossing, does not time
- * one, and does not adjudicate one — all of that happened on the boat, from raw GNSS, with
- * no network, and a boat's own rounding and timing never wait on this process.
+ * <b>It is outside the rounding path.</b> It serves course definitions, carries the race
+ * committee's side of a race — starts, flags, the channel, the fleet feed — and stores the
+ * records boats send it. It does not detect a crossing, does not time one, and does not
+ * adjudicate one — all of that happened on the boat, from raw GNSS, with no network, and a
+ * boat's own rounding and timing never wait on this process.
  *
- * <p>That is the architectural line to defend. Live circuit rankings are the one thing
- * here boats actually want promptly, and they are explicitly allowed to degrade to
+ * <p>That is the architectural line to defend. The live fleet feed and standings are the one
+ * thing here boats actually want promptly, and they are explicitly allowed to degrade to
  * last-known standings, precisely so that nothing on the water depends on this being up.
  * If you find yourself adding a call the client must complete before it can score a mark,
  * that is the regression.
@@ -131,9 +132,9 @@ public class UnmarkedServer
         connector.setPort(port >= 0 ? port : config.server().port());
         server.addConnector(connector);
 
-        // THE CONVERSATION (dialog document §3). One service, and for now one transport: the
-        // polling one, because the document's promise is that the WebSocket carries the same
-        // envelopes and building the socket first would have meant designing the fallback twice.
+        // THE CONVERSATION (dialog §3). One service and one transport: polling. A WebSocket
+        // would carry the same envelopes through the same Dialog.exchange, so it is a pipe to
+        // add rather than a protocol to design.
         Schemas schemas = new Schemas();
         if (!schemas.missing().isEmpty())
             LOG.error("Message schemas missing from the build: {}", schemas.missing());
@@ -153,13 +154,13 @@ public class UnmarkedServer
 
         LOG.info("unmarked {} started on http://localhost:{}/ — data root {}",
             version, connector.getLocalPort(), dataRoot.toAbsolutePath());
-        if (config.server().configWrites())
+        if (config.server().configWrites() && !auth.enabled())
         {
             // Loud, because it is easy to forget and the failure is silent: a course
             // file rewritten by anybody who found the port.
             LOG.warn("Course editing is ON and UNAUTHENTICATED — anything that can reach "
-                + "this port can rewrite the course files. Correct on a desk; set "
-                + "server.configWrites: false before exposing this.");
+                + "this port can rewrite the course files. Correct on a desk; configure "
+                + "auth.yaml or set server.configWrites: false before exposing this.");
         }
         if (!programmes.loadErrors().isEmpty())
             LOG.error("{} programme file(s) had problems — see errors above",

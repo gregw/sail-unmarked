@@ -18,8 +18,8 @@ import org.mortbay.sailing.unmarked.model.NamedPoint;
 import org.mortbay.sailing.unmarked.model.Race;
 
 /**
- * Writes the {@code points:} block back into a programme file, leaving every other byte
- * of it alone.
+ * Writes the {@code points:}, {@code lines:}, {@code courses:} and {@code races:} blocks back
+ * into a programme file, leaving every other byte of it alone.
  *
  * <h2>Why this is a splice and not a serialiser</h2>
  * The obvious implementation — deserialise the {@link org.mortbay.sailing.unmarked.model.Programme},
@@ -31,12 +31,18 @@ import org.mortbay.sailing.unmarked.model.Race;
  * autosave would silently strip the file down to its values, and nobody would notice
  * until they next went looking for the explanation.
  *
- * <p>So the file is edited as text. Find the {@code points:} block, replace exactly that,
- * and copy everything else through unchanged.
+ * <p>So the file is edited as text. Find each block being written, replace exactly that,
+ * and copy everything else through unchanged — top-level comments, the banner before each
+ * section, and any key this class does not write.
  *
- * <p>The one thing that <em>is</em> lost is a comment written <em>inside</em> the points
- * block, because the points themselves are regenerated. That is what a point's
- * {@code notes} field is for, and it survives, because it is data.
+ * <p>The one thing that <em>is</em> lost is a comment written <em>inside</em> a block,
+ * because the block itself is regenerated. That is what every {@code notes} field is for,
+ * and notes survive, because they are data.
+ *
+ * <p><b>Anything added to the programme file has to be added in four places</b>: the model,
+ * the editor's payload, the emitter here — and the change guard in {@code editor.js}'s
+ * {@code endEdit()}, with {@code snapshot()} and {@code takeUndo()} beside it. The fourth is
+ * the one that fails silently: everything works on screen and nothing reaches the disk.
  */
 public final class ProgrammeWriter
 {
@@ -126,7 +132,7 @@ public final class ProgrammeWriter
     }
 
     /**
-     * Substitute {@code block} for the existing {@code points:} block in {@code yaml}.
+     * Substitute {@code block} for the existing top-level {@code name:} block in {@code yaml}.
      *
      * <p>The subtle part is where the block <em>ends</em>. A run of blank lines and
      * top-level comments before the next key introduces that key rather than trailing the
@@ -187,11 +193,10 @@ public final class ProgrammeWriter
     /**
      * Splice a block in, or append it if the file has never had one.
      *
-     * <p>{@code races:} is the first section added to this format after clubs had files, so
-     * every existing file is missing it — and {@link #splice} is deliberately strict about a
-     * block it cannot find, because for points, lines and courses a missing block means the
-     * file is not what we think it is. Here it means the file is simply older than the feature,
-     * which is the ordinary case and not an error.
+     * <p>{@code races:} is optional — a series of courses sailed whenever a boat likes has no
+     * races, and {@link #skeleton} writes none — while {@link #splice} is deliberately strict
+     * about a block it cannot find, because for points, lines and courses a missing block means
+     * the file is not what we think it is. A missing {@code races:} is the ordinary case.
      *
      * <p>Appended at the END, after everything else, so nothing already in the file moves: a
      * section inserted in the middle would show up as a diff against every line below it.
@@ -221,7 +226,7 @@ public final class ProgrammeWriter
         {
             // An empty MAP, never a bare key: a key with nothing under it reads back as null,
             // and null is indistinguishable from absent — which is how a deleted section
-            // quietly comes back to life. The courses block learned this the hard way.
+            // quietly comes back to life. The `variants:` level follows the same rule.
             return "races: {}\n";
         }
         races.forEach((id, race) ->
@@ -356,8 +361,8 @@ public final class ProgrammeWriter
                 out.append("    public: true\n");
             notes(out, course.notes(), 4);
 
-            // A course with one plain variant is written FLAT, exactly as courses were
-            // written before variants existed — and reads back the same way. The level
+            // A course with one plain variant is written FLAT, with no `variants:` level,
+            // and reads back the same way. The level
             // appears in the file only once it is being used for something, so the ordinary
             // club course is not taxed with an empty layer of nesting to serve the rare one.
             if (course.flat())

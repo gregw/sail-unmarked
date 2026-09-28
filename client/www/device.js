@@ -41,6 +41,15 @@ import { alertBanner, alertModal, chatPanel, placePanel, startRow } from './scre
 export const PLOT = { width: 400, height: 330 };
 
 /**
+ * "No race — just sail a course", which is an ANSWER rather than the absence of one.
+ *
+ * The empty option on every other level means *not yet chosen*; this one means *there is nobody
+ * running a race on this* — a boat practising, or making a record attempt — which is a thing
+ * somebody means (§8.2). Two different facts need two different values.
+ */
+export const NO_RACE = '__course';
+
+/**
  * What the join screen remembers between visits: who the boat is, and whose racing it joins.
  *
  * <b>The boat is the same boat every time; the course is not.</b> A sail number, a name and a
@@ -57,15 +66,6 @@ export const PLOT = { width: 400, height: 330 };
  * — and a join screen that threw rather than opening would be the worst possible trade for
  * remembering a sail number.
  */
-/**
- * "No race — just sail a course", which is an ANSWER rather than the absence of one.
- *
- * The empty option on every other level means *not yet chosen*; this one means *there is nobody
- * running a race on this*, which is a thing somebody means and is what this system did before
- * there were committees (§8.2). Two different facts need two different values.
- */
-export const NO_RACE = '__course';
-
 export const REMEMBERED = 'unmarked.join';
 
 export function recall() {
@@ -194,8 +194,8 @@ export class Device {
   /**
    * THE RACES EACH SERIES HAS TODAY, because a boat joins a RACE where there is one.
    *
-   * A course can be joined without a race behind it — that is the whole of §8.2 and it is what
-   * this system did before there were committees — but where a club is running one, joining the
+   * A course can be joined without a race behind it — that is the whole of §8.2, and it is how a
+   * boat practises or makes a record attempt — but where a club is running one, joining the
    * course and hoping to be matched to the race is the wrong way round: it works only while one
    * division sails one course, and it leaves the boat unable to say which division it is in.
    *
@@ -216,8 +216,8 @@ export class Device {
         this.races[key] = Object.entries(held ?? {})
           .map(([id, race]) => ({ id, ...race }));
       } catch {
-        // No races, or an older server with no such endpoint. Either way the screen falls back
-        // to choosing a course, which is what it did before there were races at all.
+        // No races, or an older server with no such endpoint. Either way the screen offers
+        // the courses to sail with no race behind them.
         this.races[key] = [];
       }
     }));
@@ -240,9 +240,8 @@ export class Device {
      *
      * This panel is rebuilt from scratch on every fix, and rebuilding it destroys the elements
      * in it — including a `<select>` whose popup is open, which the browser then closes. At a
-     * fix a second that made the background unpickable: the list appeared, the next fix
-     * arrived, and it vanished before the pointer reached the option. It reads as the menu
-     * closing when you move the mouse over it, which is exactly what somebody reported.
+     * fix a second that would make the background unpickable: the list appears, the next fix
+     * arrives, and it vanishes before the pointer reaches the option.
      *
      * So the render is held while that control has focus — the same rule the editor follows
      * for a field somebody is typing in, for the same reason. Held on FOCUS rather than on a
@@ -286,14 +285,13 @@ export class Device {
     const approaching = mark != null;
 
     /*
-     * CHAT AND PLACE CARRY THE VIEW BAR TOO, and leaving it off trapped a boat on them.
+     * CHAT AND PLACE CARRY THE VIEW BAR TOO, or they would trap a boat on them.
      *
      * The Mark screen and the overview each emit their own — they have an orientation bar to
-     * put it beside — so it was easy to believe every screen had one. These two have no chart
-     * and no orientation, so nothing drew the selector and there was no way off them but a
-     * reload, which on the water costs the joined race. The rule the selector exists for is
-     * the rule that was broken: it is on EVERY screen, because any one of them may be the one
-     * you want to leave.
+     * put it beside. These two have no chart and no orientation, so the device passes the
+     * selector in; without it there would be no way off them but a reload, which on the water
+     * costs the joined race. The selector is on EVERY screen, because any one of them may be
+     * the one you want to leave.
      */
     const bars = viewBar(this.client.viewMode, shared);
 
@@ -518,11 +516,13 @@ export class Device {
   /* ================================================================= the join */
 
   /**
-   * The join screen: who the boat is, then club, series, course and variant.
+   * The join screen: who the boat is, then club → series → race → division — or, with no race,
+   * club → series → course → variant.
    *
-   * The drill is the shape of the answer somebody actually holds — "the Saturday sprints, the
-   * short course" — and it is built from `/api/public`, so what can be joined here is exactly
-   * what the club made public and published.
+   * The drill is the shape of the answer somebody actually holds — "today's race, division 2",
+   * "the Saturday sprints, the short course" — and it is built from `/api/public` and
+   * `/api/races`, so what can be joined here is exactly what the club made public and
+   * published.
    */
   renderJoin() {
     const options = (values, chosen) => values.map((v) =>
@@ -577,7 +577,7 @@ export class Device {
      *
      * `NO_RACE` is a real answer rather than an absent one, which is why it is a value and not
      * the empty placeholder: *I am sailing this course with nobody running a race on it* is a
-     * thing somebody means, and it is what this system did before there were committees.
+     * thing somebody means.
      */
     const today = Device.today();
     const all = (this.races?.[`${club}/${chosenSeries}`] ?? []);
@@ -686,7 +686,7 @@ export class Device {
                 label: `${r.name ?? r.id}${r.format ? ` — ${r.format}` : ''}`,
               })),
               // A REAL ANSWER, not an absent one: "nobody is running a race on this" is a thing
-              // somebody means, and it is what this system did before there were committees.
+              // somebody means. See NO_RACE.
               { value: NO_RACE, label: 'No race — just sail a course' },
             ], this.boat.race, 'Choose a race', 'Choose a series first')}</select>
             ${chosenRace ? `
@@ -733,16 +733,15 @@ export class Device {
               without a number — and the closest the plot will ever zoom is measured in this
               boat's own lengths, since how much room there is at a start line is a question
               answered in boats rather than in metres. Ten metres until somebody says
-              otherwise, which is what every boat was drawn as before there was a field.
+              otherwise.
             -->
             <div><label for="j_length">Length (m)</label>
               <input id="j_length" value="${esc(this.boat.lengthM)}" inputmode="decimal"></div>
           </div>
           <p class="muted" style="font-size:11px; margin-top:4px">
-            The handicap is carried, not applied. Turning a TCF into a distance is
-            <span class="mono">CLAUDE.md</span> open question 5 and is not answered yet, so no
-            sub-line is being computed for you. The length is drawn and zoomed to, and goes on
-            the record.</p>
+            The handicap is carried, not applied. How a TCF becomes a distance is not decided
+            yet, so no sub-line is being computed for you. The length is drawn and zoomed to,
+            and goes on the record.</p>
 
           <!--
             The button SAYS WHAT IS MISSING rather than sitting greyed out with no explanation.
@@ -822,10 +821,10 @@ export class Device {
   /**
    * Take the course.
    *
-   * This is the one network call the client makes in anger, and it is a real one: the same
-   * `POST /api/join` a boat on the water would make, answering with the snapshot that was
-   * published rather than whatever the editor currently holds. After it returns, the server
-   * can be switched off and nothing on this page will notice.
+   * A `join` over the dialog, falling back to the REST `POST /api/join` when there is no
+   * conversation to be had. Either way the answer is the snapshot that was PUBLISHED rather than
+   * whatever the editor currently holds, and once it is in hand the server can be switched off
+   * and nothing on the path from a fix to a latch will notice.
    */
   async join(club, series, course, variant, entered = {}) {
     this.message = null;

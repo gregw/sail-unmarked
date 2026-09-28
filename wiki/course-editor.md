@@ -1,8 +1,14 @@
 # The course editor
 
 **Shore-side authoring: points, lines, courses, variants, races and the file they are written back
-to.** `editor.html` / `editor.js`, with the geometry in `coursedraw.js` and the file handling in
-`ProgrammeWriter.java`. Those files' comments carry the detail; this is the shape and the rules.
+to — and the lifecycle that turns a design into what a fleet is handed.** `editor.html` /
+`editor.js`, with the geometry in `coursedraw.js` and the file handling in `ProgrammeWriter.java`.
+Those files' comments carry the detail; this is the shape and the rules. What the lifecycle *means*
+— course, variant, snapshot, publish, public, templates — is
+[course-model.md](course-model.md#the-lifecycle-as-built).
+
+The editor is behind the officers' login when one is configured ([deployment.md](deployment.md)),
+and every write is also gated by `server.configWrites`.
 
 ---
 
@@ -90,7 +96,7 @@ pixels, and is a control nobody has to be taught. The rules that hold it togethe
   questions worth asking from outside it. The count is of **rows, not steps**: a gate is one step and
   two lines to cross. The fold is part of the form's render key.
 
-### Three traps in the rendering, each of which was a bug
+### Three traps in the rendering
 
 - **`formsChanged()` clears every form's guard, and that is why it exists as one call.** The guards stop
   a form being rewritten while somebody is typing in it; a caller that cleared one and forgot another is
@@ -282,8 +288,9 @@ comments before the next key introduces **that** key, so it is walked back over 
   what makes a second autosave a no-op.
 - `key()` emits a legal id bare, so no real file changes by a byte, and quotes an illegal one, so a
   hand-edited oddity round-trips instead of corrupting the file.
-- `spliceOrAppend` exists because `races:` is the first section added since clubs had files: a *missing*
-  block there means something different from what it means for points, lines and courses.
+- `races:` is optional, so it is spliced **or appended** (`spliceOrAppend`): a missing `races:` block is
+  the ordinary case, where a missing `points:`, `lines:` or `courses:` means the file is not what the
+  writer thinks it is and is refused.
 
 > **ANYTHING ADDED TO THE FILE HAS TO BE ADDED IN FOUR PLACES**: the model, the payload, the writer — and
 > **the change guard in `endEdit()`**, with `snapshot()` and `takeUndo()` beside it. The fourth is the one

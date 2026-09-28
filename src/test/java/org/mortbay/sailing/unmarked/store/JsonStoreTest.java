@@ -48,12 +48,12 @@ public class JsonStoreTest
     }
 
     /**
-     * A RACE DAY IS THE CLUB'S LOCAL DAY, and this is the case that used to be filed wrong.
+     * A RACE DAY IS THE CLUB'S LOCAL DAY, tested where it differs from the UTC one.
      *
-     * <p>07:00 UTC on 1 January is 18:00 the same day in Sydney, so both agree — which is why
-     * every other test here passed while the rule was wrong. 19:25 UTC on 17 September is 05:25
-     * on the EIGHTEENTH in Sydney, and that is the one that matters: a race sailed on Friday
-     * morning must not be filed under Thursday.
+     * <p>07:00 UTC on 1 January is 18:00 the same day in Sydney, so both agree — which is why a
+     * test at that hour proves nothing about the rule. 19:25 UTC on 17 September is 05:25 on the
+     * EIGHTEENTH in Sydney, and that is the one that matters: a race sailed on Friday morning
+     * must not be filed under Thursday.
      */
     @Test
     public void aRecordIsFiledUnderTheClubsOwnDay(@TempDir Path root) throws Exception
@@ -72,8 +72,8 @@ public class JsonStoreTest
     /**
      * An evening race west of Greenwich, which is the other half of the same fault.
      *
-     * <p>20:00 on Thursday in New York is 00:00 on FRIDAY in UTC, so a whole club's Thursday
-     * series used to file under Friday — every week, invisibly.
+     * <p>20:00 on Thursday in New York is 00:00 on FRIDAY in UTC, so filed by UTC day a whole
+     * club's Thursday series would land under Friday — every week, invisibly.
      */
     @Test
     public void anEveningRaceWestOfGreenwichStaysOnItsOwnDay(@TempDir Path root) throws Exception
@@ -90,9 +90,8 @@ public class JsonStoreTest
     /**
      * The FILENAME carries the offset, so a file says what it means without its directory.
      *
-     * <p>A date segment with an offset on it was considered and rejected: it is neither an
-     * instant nor a day, cannot be compared, and two offsets for one race day would be two
-     * directories. The offset belongs on the instant, which is the only thing that has one.
+     * <p>Not on the date segment: a date with an offset is neither an instant nor a day, cannot
+     * be compared, and two offsets for one race day would be two directories. The offset belongs on the instant, which is the only thing that has one.
      */
     @Test
     public void theFilenameCarriesTheOffset(@TempDir Path root) throws Exception

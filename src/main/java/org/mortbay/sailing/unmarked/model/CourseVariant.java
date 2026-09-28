@@ -111,8 +111,7 @@ public record CourseVariant(
         //
         // From ZERO, so the numbering lines up with the open course rather than running one
         // ahead of it: the leg into step 1 is leg 1 either way, and the first numbered mark
-        // is 1 either way. Numbering a cycle from 1 made its first leg "leg 2", which is a
-        // different answer to the same question depending only on a tickbox.
+        // is 1 either way. A leg is named by the step it runs into.
         if (closed)
             return Integer.toString(index);
         if (index == 0)
@@ -173,8 +172,8 @@ public record CourseVariant(
         }
 
         // THE CLOSING LEG. A cycle's last mark runs back to its first, and that water is as
-        // much of the course as any other — a boat sails it every lap. Leaving it out made a
-        // lap measure short by one leg, which is a length people navigate and handicap by.
+        // much of the course as any other — a boat sails it every lap, and a lap length is
+        // something people navigate and handicap by.
         // It is the leg INTO step 0, which is exactly what the numbering already says, so
         // step 0's lengthNm overrides it like any other step's overrides its own.
         // `previous` is the last placed reference point, which is where it runs from.

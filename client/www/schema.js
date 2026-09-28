@@ -1,5 +1,5 @@
 /**
- * A JSON Schema validator small enough to put on a boat — dialog document §10.
+ * A JSON Schema validator small enough to put on a boat — dialog §10.
  *
  * <b>The client's validator is a deliberate constraint on the schemas, not the other way
  * round.</b> This codebase has no framework, no npm build and no bundler, and the client is
@@ -15,10 +15,10 @@
  * cannot be strict about what it has not heard of — and why an unknown message TYPE is accepted
  * here rather than refused, since every future type will meet clients that predate it.
  *
- * `Schemas.java` is the same subset in Java, because the document says both sides validate.
- * Two validators is the price of that rule; the alternative is one side trusting the other,
- * which is the thing the rule exists to prevent. `schema-test.js` is the spec they are both
- * held to.
+ * `Schemas.java` is the same subset in Java, because the document says both sides validate:
+ * each checks what it receives. Two validators is the price of that rule; the alternative is
+ * one side trusting the other, which is the thing the rule exists to prevent. `dialog-test.js`
+ * holds this one to the subset, and `DialogTest.java` holds the Java one to the same cases.
  */
 
 /** ISO-8601 with a timezone, which is the whole of what `format: date-time` means here. */

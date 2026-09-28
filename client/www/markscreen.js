@@ -316,27 +316,25 @@ export const ARROW = { shaft: 38, head: 11, width: 3.6, offset: 0.6 };
  * together as the view closes in, and the moment the boat is a third the width of the line is
  * a moment nobody has to read a number to understand.
  *
- * Ten metres is an assumption and will be until a boat declares a length. Three for the line is
- * the accuracy band, which is what that width really is — it varies with the sky and belongs to
- * `crossing.js` rather than to a drawing, and three metres is what a receiver reporting two or
- * three metres actually gives you.
+ * Ten metres is the fallback for a boat that declared no length (see `realFor`). Three for the
+ * line is the accuracy band, which is what that width really is — it varies with the sky and
+ * belongs to `crossing.js` rather than to a drawing, and three metres is what a receiver
+ * reporting two or three metres actually gives you.
  *
- * <b>IT WAS FIVE, AND FIVE IS WHY THE PICTURE LOOKED WRONG.</b> The glyph's beam is two thirds
- * of its length, so a 10 m boat is drawn 6.7 m across — against a 5 m line that is a third
- * wider than the line is thick, and a narrow dart a third wider than a bright band running the
- * whole width of the plot does not read as the bigger object. At three the beam is over twice
- * the line's thickness at every range, which is the proportion somebody looking at it expects
- * from a 10 m boat and a line.
+ * <b>Three, not more, because of the proportion.</b> The glyph's beam is two thirds of its
+ * length, so a 10 m boat is drawn 6.7 m across. Against a 5 m line that is only a third wider
+ * than the line is thick, and a narrow dart a third wider than a bright band running the whole
+ * width of the plot does not read as the bigger object. At three the beam is over twice the
+ * line's thickness at every range, which is the proportion somebody looking at it expects.
  *
  * <b>ONE CLAMP, NOT TWO, AND THIS IS THE IMPORTANT PART.</b> The bounds are floored because at
  * four hundred metres a 10 m boat is ten pixels and would vanish, and capped because neither
  * should ever swallow the plot — but the line's bounds are DERIVED from the boat's by the same
- * ratio as their lengths, so the clamp can never put the two out of proportion. Asserting them
- * independently is what broke it: the boat sat frozen on a 13 px floor from about 130 m out
- * while the line went on scaling down to 3 px, so over the part of an approach that takes
- * longest the line visibly thickened and the boat did not move at all. Their ratio drifted from
- * 4.3:1 at four hundred metres to 2.4:1 at a hundred and seventy-five. Derived, it is exactly
- * `boatM / lineM` at every scale, floored, capped and in between.
+ * ratio as their lengths, so the clamp can never put the two out of proportion. Clamped
+ * independently, the boat would sit frozen on a 13 px floor from about 130 m out while the line
+ * went on scaling down to 3 px — over the part of an approach that takes longest the line would
+ * visibly thicken and the boat not move at all. Derived, the ratio is exactly `boatM / lineM` at
+ * every scale, floored, capped and in between.
  */
 const BOAT_M = 10;
 const LINE_M = 3;
@@ -345,11 +343,10 @@ const BOAT_PX = { min: 13, max: 90 };
 /**
  * The real sizes for a boat of a given length.
  *
- * <b>Ten metres is the fallback, not the assumption it used to be</b>: the join screen asks
- * each boat for its length, because a plot drawn to scale is a plot that has to know the scale
- * of the thing in it, and a thirty-foot keel boat and a dinghy are not the same picture. A boat
- * that says nothing gets ten, which is what every boat got before there was a field to say it
- * in.
+ * <b>Ten metres is the fallback, not an assumption</b>: the join screen asks each boat for its
+ * length, because a plot drawn to scale is a plot that has to know the scale of the thing in it,
+ * and a thirty-foot keel boat and a dinghy are not the same picture. A boat that says nothing
+ * gets ten.
  *
  * The line stays THREE metres for every boat, because that width is not a boat's anything — it
  * is the accuracy band, which belongs to the sky and to `crossing.js`. What is derived per boat
@@ -402,8 +399,8 @@ export function triangleFor(lineW) {
 /**
  * The boat, as a hull seen from above rather than as an arrow.
  *
- * <b>An arrow says which way something is pointing and nothing else.</b> It was a dart, which
- * on a chart reads as a cursor or a bearing marker — the two things this is not. What a sailor
+ * <b>An arrow says which way something is pointing and nothing else.</b> A dart, on a chart,
+ * reads as a cursor or a bearing marker — the two things this is not. What a sailor
  * looking at a plot wants to recognise without deciding to is *a boat on the water, heading
  * that way*, and a plan view gives that for the same pixels: a pointed bow, the beam carried
  * aft of midships, and a transom that squares off the stern, which is what makes the forward
@@ -489,18 +486,18 @@ export const arrowLength = (grow = 1) => (ARROW.shaft + ARROW.head) * grow;
  * So the frame is FROZEN and the boat moves across it, and it is given up only for the two
  * reasons that make holding it useless: the boat is about to leave the picture, or the amount
  * of water worth showing has changed enough that the scale is doing real harm. Both are
- * generous on purpose — a frame that re-fits on any small pretext is a frame that never held
- * still, which is the thing being fixed.
+ * generous on purpose — a frame that re-fits on any small pretext is a frame that never holds
+ * still.
  */
 export const HOLD = {
   /**
    * How close to the edge a component may get before the frame is rebuilt around it.
    *
-   * <b>Well inside the boundary, not a hair inside it.</b> The rule was "still in the view",
-   * which waited until something had already vanished for a frame — the one moment somebody
-   * is looking hardest at it — and even once that was fixed it let the boat and the triangle
-   * drift to within a few pixels of the border before anything was done about it. This is the
-   * number that decides how close a key element ever actually gets, since the fit only decides
+   * <b>Well inside the boundary, not a hair inside it.</b> "Still in the view" would wait until
+   * something had already vanished for a frame — the one moment somebody is looking hardest at
+   * it — and "a hair inside" lets the boat and the triangle drift to within a few pixels of the
+   * border before anything is done about it. This is the number that decides how close a key
+   * element ever actually gets, since the fit only decides
    * where it starts: see `FIT_FRACTION`, which is the margin things are placed at, and keep
    * this comfortably inside it or the frame is rebuilt the moment it is built.
    */
@@ -576,7 +573,7 @@ export class Turner {
  *
  * State, deliberately, and owned by the page rather than by the drawing — the plot is handed
  * one and asks it what to do, so the decision can be exercised on its own and a caller that
- * passes none simply gets the old fit-every-time behaviour.
+ * passes none simply gets a fresh fit every time.
  */
 export class PlotView {
   constructor() {
@@ -717,15 +714,14 @@ export function plot(state, options = {}) {
   // The triangle and the arrow come in below, because they are pixel sizes and cannot be
   // fitted until the scale is known.
   //
-  // <b>THE LINE'S OWN GEOMETRY IS NOT IN IT ANY MORE, and that is the lesson of a real boat on
-  // real water.</b> The midpoint and the nearer end used to be held in view, on the reasoning
-  // that a picture of a line must say how much line there is and where the mark is. On a club
-  // start line it cost little. On the long lines this system is actually raced round it cost
-  // everything: the picture is pinned to a mark and an end that may be two hundred metres away
-  // from where the boat will cross, so the last few metres — the whole reason the approach
-  // screen exists — are drawn a few pixels wide. The questions those two answered are answered
-  // elsewhere and better: DTW counts down to the mark on the screen above, and the overview
-  // draws the line whole.
+  // <b>THE LINE'S OWN GEOMETRY IS NOT IN IT, and that is the lesson of a real boat on real
+  // water.</b> Holding the midpoint and the nearer end in view looks right — a picture of a
+  // line should say how much line there is and where the mark is — and on a club start line it
+  // costs little. On the long lines this system is actually raced round it costs everything:
+  // the picture is pinned to a mark and an end that may be two hundred metres away from where
+  // the boat will cross, so the last few metres — the whole reason the approach screen exists
+  // — are drawn a few pixels wide. Those questions are answered elsewhere and better: DTW
+  // counts down to the mark on the screen above, and the overview draws the line whole.
   const seatAlong = Math.max(0, Math.min(prepared.length, offset));
   const seat = at(seatAlong);
   const alongCog = (distance) => {
@@ -800,7 +796,7 @@ export function plot(state, options = {}) {
    * Where the next-leg mark sits and which way it runs, in pixels from the seat — for a
    * triangle of a given height, off a given crossing normal, along a given leg.
    *
-   * A function of the height rather than a constant, because the triangle is now sized against
+   * A function of the height rather than a constant, because the triangle is sized against
    * the line, the line against the scale, and the scale is what the fit is solving for. The
    * same circularity the arrow already had, one level deeper, and answered the same way.
    *
@@ -869,13 +865,13 @@ export function plot(state, options = {}) {
     solved = fit([...rotated, ...inMetres]);
   }
   const wantScale = solved.scale;
-  // Centred on everything that has to be seen, which is now a precise list — rather than
-  // between the boat and the line, which was a guess made when the list was not.
+  // Centred on everything that has to be seen, which is a precise list — rather than between
+  // the boat and the line, which would be a guess.
   const wantCentre = unspin(solved.centre);
 
   // ...and then held still, so the boat is seen to move across it. Without a view passed in
-  // this is the old fit-every-frame behaviour, which is what the specs that draw one picture
-  // want and what nothing on screen should use.
+  // this is a fresh fit every frame, which is what the specs that draw one picture want and
+  // what nothing on screen should use.
   const { centre, scale } = view.frame({
     up,
     subject: `${state.step.index}:${state.watched.line}:${state.lap ?? 1}:${orientation}`,
@@ -1117,8 +1113,8 @@ export function crossingArt(prepared, required, options) {
   const starboard = to(at(prepared.length));
   const span = Math.hypot(starboard.x - port.x, starboard.y - port.y) || 1;
   const screenUnit = { x: (starboard.x - port.x) / span, y: (starboard.y - port.y) / span };
-  // The joining boat's own sizes, so the line's drawn width keeps its proportion to a hull
-  // that is no longer assumed to be ten metres. See `realFor`.
+  // The joining boat's own sizes, so the line's drawn width keeps its proportion to the hull
+  // actually being drawn. See `realFor`.
   const real = options.real ?? REAL;
   const lineW = atScale(real.lineM, scale, real.linePx);
   const fade = focused ? 0.9 : 0.3;
@@ -1304,17 +1300,16 @@ export const OTHER_SIDE = { label: 0.5, label_opacity: 0.6, ink: 0.4 };
  * to reach the other side, and the reader would be comparing two numbers drawn to two rules
  * without being told.
  *
- * The figure sits ON the dashes with no label, which is what freed the room the time to line
- * now uses: a cell elsewhere headed "Perp dist" makes a reader match a word to a picture,
- * where the figure on the line it measures needs no legend to be learned.
+ * The figure sits ON the dashes with no label, which is what leaves room for the time to line:
+ * a cell elsewhere headed "Perp dist" makes a reader match a word to a picture, where the
+ * figure on the line it measures needs no legend to be learned.
  *
  * <b>The figure is the LINE's colour, and the dashes stay muted.</b> Two big numbers share
- * this plot and they were `--muted` and `--cog` — two cool greys a shade apart, which at a
- * glance from a cockpit is one colour: nothing said which of them was the distance to the
- * line and which was the distance along the COG. The perpendicular is about the line, so it
- * takes the line's own cyan and is unmistakable beside the COG's grey. The dashes are a
- * construction line rather than a virtual mark and keep the muted stroke they had — cyan
- * there would put a second line on the water.
+ * this plot, and two cool greys a shade apart are, at a glance from a cockpit, one colour:
+ * nothing would say which was the distance to the line and which the distance along the COG.
+ * The perpendicular is about the line, so it takes the line's own cyan and is unmistakable
+ * beside the COG's grey. The dashes are a construction line rather than a virtual mark and
+ * keep a muted stroke — cyan there would put a second line on the water.
  */
 export function perpArt(boatPx, footPx, metres, focused = true, view = {}) {
   const ink = focused ? 1 : OTHER_SIDE.ink;
@@ -1400,10 +1395,9 @@ export function clipToView(from, to, width, height, inset = 0) {
  */
 export function rejectMark(px, note = '') {
   if (note.startsWith('wrong sense')) {
-    // A BLUE CROSS, the same shape as the red one and unmistakably a different colour. It
-    // was a tick, which was the right sentiment and the wrong mark: a thin stroke in the
-    // orange already used for one side of the line, on a dark plot, at a glance, from a
-    // cockpit — it simply could not be seen. Shape carries the fact that something was
+    // A BLUE CROSS, the same shape as the red one and unmistakably a different colour. Not a
+    // tick, which is the right sentiment and the wrong mark: a thin stroke on a dark plot, at
+    // a glance, from a cockpit, cannot be seen. Shape carries the fact that something was
     // rejected; colour carries whether that matters.
     return `<g stroke="var(--fromside)" stroke-width="2.6" stroke-linecap="round">`
       + `<line x1="${(px.x - 7).toFixed(1)}" y1="${(px.y - 7).toFixed(1)}" x2="${(px.x + 7).toFixed(1)}" y2="${(px.y + 7).toFixed(1)}"/>`
@@ -1643,9 +1637,9 @@ export const BASEMAP_INK = 0.32;
  * HOW BRIGHT THE COURSE IS DRAWN ON THE OVERVIEW, and it is drawn for DAYLIGHT.
  *
  * The screens are dark because they are read in glare and at dusk — but dark is the
- * BACKGROUND's job, not the course's. Everything here was drawn faint, which on a desk reads as
- * a tasteful picture with the live mark standing out of it, and on the water in sunshine reads
- * as an empty screen: a phone in a bracket at midday loses half its contrast to the sky before
+ * BACKGROUND's job, not the course's. A course drawn faint reads, on a desk, as a tasteful
+ * picture with the live mark standing out of it, and on the water in sunshine as an empty
+ * screen: a phone in a bracket at midday loses half its contrast to the sky before
  * anything on it is even looked at, and a 50% stroke over a dark panel is the first thing to
  * go.
  *
@@ -1823,7 +1817,7 @@ export function overview(client, options = {}) {
   const fitCentre = { x: midX * cos + midY * sin, y: midY * cos - midX * sin };
 
   // WHAT THE SAILOR HAS DONE TO THE PICTURE, on top of the fit. Untouched, this is the fit
-  // exactly as it was before there were any controls; see `OverviewView`.
+  // exactly; see `OverviewView`.
   const view = options.view ?? new OverviewView();
   const held = view.base(fitCentre, fitScale);
   const scale = held.scale * view.zoom;
@@ -1872,9 +1866,9 @@ export function overview(client, options = {}) {
     const a = to(uses[0].crossing.prepared.port);
     const b = to(uses[0].crossing.prepared.starboard);
     // THE LINE THE BOAT IS HEADING FOR IS DRAWN LIKE THE TRIANGLE ON IT. The live crossing's
-    // triangle has always been green while every other was blue or grey, and the line under it
-    // was the same blue as all the rest — so the one thing on the picture worth finding was
-    // marked on a shape a few pixels across and not on the hundred-metre stroke it sits on.
+    // triangle is green while every other is blue or grey; a line under it in the same blue as
+    // all the rest would mark the one thing on the picture worth finding on a shape a few
+    // pixels across rather than on the hundred-metre stroke it sits on.
     // A line may carry several crossings (the leeward line is start, mark 2 and finish), and it
     // counts as live while ANY of them is: it is the same piece of water either way.
     const live = uses.some(({ step }) => client.isLive(step.index));

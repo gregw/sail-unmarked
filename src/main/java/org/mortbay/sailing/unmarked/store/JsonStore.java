@@ -30,26 +30,31 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * On-disk JSON persistence for race records. One file per boat per race, no database,
- * following sail-jinx and sailing-pf.
+ * On-disk JSON persistence for what boats sent and what happened in a race: records,
+ * archived course geometry, and race conduct. No database, following sail-jinx and
+ * sailing-pf.
  *
  * <p>Layout under {@code <root>/store/}:
  * <pre>
- *   records/{club}/{course}/{date}/{boatId}-{HHmmss}.json  — one boat's run at a course
- *   courses/{revision}.json                                — a course design somebody sailed
- *   journal/{yyyy-MM}.jsonl                                — append-only, every accepted post
+ *   records/{club}/{course}/{date}/{boatId}-{HHmmss±hhmm}.json — one boat's run at a course
+ *   courses/{revision}.json                    — a snapshot's geometry, kept for good
+ *   conduct/{club}/{series}/{race}.json        — what happened in one race
+ *   journal/{yyyy-MM}.jsonl                    — append-only, every accepted write
  * </pre>
+ * The per-club {@code ledger/} beside these belongs to {@link CourseLedger}.
  *
  * <p>One file per run, because the writers are independent: forty phones post whenever
  * their own signal comes back, and a shared file would make every one of those a
- * read-modify-write of a document the others are also writing. Filed by course and day,
- * because without races that is what an evening's sailing has in common; the start time
- * in the name is what lets one boat sail the same course twice in a day.
+ * read-modify-write of a document the others are also writing. Filed by course and day
+ * with <b>no race in the path</b>, because a record is a run at a course and a race is
+ * something that sometimes happens on one; the race is a field on the record, and the
+ * results pages filter on it.
  *
- * <p><b>Course designs are archived by revision, and only once a boat has joined one.</b>
- * There is no value in keeping every geometry the editor ever produced — most were typed
- * over a second later — but a design somebody actually sailed has to survive being edited
- * afterwards, or its records become uninterpretable.
+ * <p><b>Course geometry is archived by revision when a snapshot is taken</b>, and never
+ * rewritten or deleted. There is no value in keeping every geometry the editor produced —
+ * most was typed over a second later — but anything captured may be published, and a
+ * design somebody sailed has to survive being edited afterwards, or its records become
+ * uninterpretable.
  *
  * <p>Three properties are not optional here, for the same reason as in sail-jinx, and one
  * more that is particular to this application:
@@ -118,21 +123,17 @@ public class JsonStore
     }
 
     /**
-     * Store a boat's record, superseding any earlier one for the same boat and race.
+     * Store a boat's record, filed under the race day in the CLUB's own timezone, superseding
+     * any earlier one for the same boat and start time.
      *
      * <p>Superseding rather than merging is the deliberate part. The ordinary reason for a
      * second post is the same record arriving again with its fixes attached, and the boat
      * is the authority on its own race — the server has no basis on which to prefer half
      * of one version and half of another. The journal keeps what was replaced, so a
      * resubmission that quietly dropped a crossing is still visible afterwards.
-     */
-    /**
-     * Store a record, filed under the race day in the CLUB's own timezone.
      *
-     * <p><b>The zone is required, and there is deliberately no overload that omits it.</b> There
-     * was one, and it took null and warned — so the only callers left using it were the tests,
-     * which meant every build printed a misconfiguration warning about a misconfiguration nobody
-     * had. A convenience that lets a caller skip the one fact the file layout depends on is a
+     * <p><b>The zone is required, and there is deliberately no overload that omits it.</b> A
+     * convenience that lets a caller skip the one fact the file layout depends on is a
      * convenience that will eventually file somebody's race on the wrong day.
      *
      * @param zone the club's zone, from its programme file. Null is still possible — a record
@@ -178,13 +179,13 @@ public class JsonStore
         {
             loadErrors.add(file + ": " + e.getMessage());
             // THE MESSAGE, NOT THE TRACE. A corrupt file is an expected condition here — the
-                // whole point of loading defensively — and a Jackson stack trace tells nobody
-                // anything they can act on: the line and column are in the message, and that is
-                // what says where to look. A passing build that prints stack traces teaches
-                // people to scroll past stack traces. The trace is kept at debug for the case
-                // where it is not the file that is wrong.
-                LOG.error("Could not read course {}: {}", file, e.toString());
-                LOG.debug("Could not read course {}", file, e);
+            // whole point of loading defensively — and a Jackson stack trace tells nobody
+            // anything they can act on: the line and column are in the message, and that is
+            // what says where to look. A passing build that prints stack traces teaches
+            // people to scroll past stack traces. The trace is kept at debug for the case
+            // where it is not the file that is wrong.
+            LOG.error("Could not read course {}: {}", file, e.toString());
+            LOG.debug("Could not read course {}", file, e);
             return Optional.empty();
         }
     }
@@ -261,26 +262,22 @@ public class JsonStore
      * when the full track arrives later over wifi — lands on the same file and supersedes it
      * rather than accumulating.
      *
-     * <p><b>A RACE DAY IS THE CLUB'S LOCAL DAY, and it used to be a UTC one.</b> Everything
-     * else in this system already agreed on local: {@code raceId} names a variant for the local
-     * day, {@code Race.on()} compares against {@code LocalDate.now(programme timezone)}, and the
-     * chain from one race to the next fires only within one local day. This did not, and the two
-     * agree for most of a Sydney afternoon and part company at the edges — a Thursday evening
-     * race in New York (20:00 EDT) filed under Friday, and any Sydney morning before 10:00 filed
-     * under yesterday. Found by a driver that passed all evening and failed the moment the clock
-     * crossed midnight.
+     * <p><b>A RACE DAY IS THE CLUB'S LOCAL DAY</b>, the same day everything else in this system
+     * means: {@code raceId} names a variant for the local day, {@code Race.on()} compares against
+     * {@code LocalDate.now(programme timezone)}, and the chain from one race to the next fires
+     * only within one local day. A UTC day would part company with all of those at the edges —
+     * a Thursday evening race in New York (20:00 EDT) would file under Friday, and any Sydney
+     * morning before 10:00 under yesterday.
      *
      * <p><b>The CLUB's zone rather than the boat's</b>, which is the part worth being deliberate
      * about. A race day belongs to the club running it, so a visitor whose phone is on another
      * zone — or set wrong — still files under the day everybody else sailed. Taking it from the
-     * boat would be self-describing and would let one race day land in two directories, which is
-     * worse than the ambiguity it fixed.
+     * boat would let one race day land in two directories.
      *
      * <p><b>And the FILENAME carries the offset</b> ({@code 002312+1000}), so the file says what
-     * it means without its directory: a date segment with an offset on it was considered and is
-     * not a thing that can be compared — it is neither an instant nor a day, and two offsets for
-     * one day would be two directories. The offset belongs on the instant, which is the only
-     * thing that has one.
+     * it means without its directory. The offset does not go on the date segment: that would be
+     * neither an instant nor a day, and two offsets for one day would be two directories. The
+     * offset belongs on the instant, which is the only thing that has one.
      *
      * <p>Zero offset writes {@code +0000} rather than {@code Z}, so every name in every club's
      * store is the same shape and the same width.
@@ -307,8 +304,7 @@ public class JsonStore
     /**
      * What happened in one race: who joined, what was said, which flags were raised.
      *
-     * <p><b>Here rather than in the series YAML, and the line matters</b> (dialog document
-     * §12.5). A race's DEFINITION is configuration — a date, a format, a course per division —
+     * <p><b>Here rather than in the series YAML, and the line matters</b> (dialog §12.5). A race's DEFINITION is configuration — a date, a format, a course per division —
      * and belongs in the file a club diffs and could hand to another club. Its CONDUCT is a
      * record of an afternoon involving real people, which is what this directory is for and why
      * it is gitignored. Keeping the line is what stops a programme file filling up with a
@@ -357,12 +353,6 @@ public class JsonStore
     public List<String> loadErrors()
     {
         return Collections.unmodifiableList(loadErrors);
-    }
-
-    private Path recordFile(String club, String series, String raceId, String boatId)
-    {
-        return recordsDir.resolve(safe(club)).resolve(safe(series))
-            .resolve(safe(raceId)).resolve(safe(boatId) + ".json");
     }
 
     /**

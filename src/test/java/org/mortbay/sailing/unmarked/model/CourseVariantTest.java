@@ -161,7 +161,7 @@ public class CourseVariantTest
         assertThat(spelt.legLengthsNm(square(), Map.of())[0], is(0.0));
         assertThat(spelt.problems("course 'c'", square(), Map.of()), is(List.of()));
         // And it measures exactly what the same loop written without the repeat measures:
-        // `A B C A` and `A B C` are the same water, and now come out as the same number.
+        // `A B C A` and `A B C` are the same water, and come out as the same number.
         assertThat(spelt.lengthNm(square(), Map.of()),
             is(of(true, 3).lengthNm(square(), Map.of())));
     }

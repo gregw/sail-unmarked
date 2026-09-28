@@ -12,7 +12,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 /**
  * A race: a day, a format, and a course for each division that is sailing it.
  *
- * <p><b>This is the DEFINITION, not the conduct</b> — see the dialog document §12.5. What is
+ * <p><b>This is the DEFINITION, not the conduct</b> — see dialog §12.5. What is
  * here is configuration: authored ahead of time, diffable, and part of the file a club could
  * hand to another club whole. What happened on the day — who joined, what was said, which flags
  * were raised, where the boats were — lives in {@code data/store/} with the real-people data,
@@ -135,10 +135,10 @@ public record Race(
     /**
      * One division of one race: who it is, what it sails, and when it was planned to start.
      *
-     * <p><b>A DIVISION IS NOT A VARIANT</b>, and this is where the two finally meet without
-     * becoming each other. A variant is a design; a division is a group of boats. This record is
-     * the mapping between them, for one race — which is exactly why the model could go on not
-     * knowing the word "division" until there was a race to need it.
+     * <p><b>A DIVISION IS NOT A VARIANT</b>, and this is where the two meet without becoming
+     * each other. A variant is a design; a division is a group of boats. This record is the
+     * mapping between them, for one race, which is why nothing below the race needs the word
+     * "division" at all.
      *
      * <p>{@code start} is the <b>planned</b> start, and publishing it is a separate act. A
      * planned instant in a file is a rehearsal; the {@code timer} a fleet counts down to is

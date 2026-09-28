@@ -58,7 +58,7 @@ ok('both race-morning buttons sit with the public tickbox, where the scope is th
 // course with several variants a list to walk.
 choose('variant', variants()[0]);
 await settle(800);
-ok('the old per-variant Publish latest is gone', !$('rows').innerHTML.includes('cmd_publish"'));
+ok('there is no per-variant Publish latest', !$('rows').innerHTML.includes('cmd_publish"'));
 ok('...while Snapshot stays, since capturing ONE design is still a thing worth doing',
   $('rows').innerHTML.includes('cmd_snapshot'));
 

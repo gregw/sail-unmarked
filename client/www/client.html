@@ -20,11 +20,11 @@ body { padding: 0; height: 100vh; overflow: hidden; }
 /*
  * THE RIG IS THE PAGE, and the phone floats over it.
  *
- * It was a two-column grid, which made the device a panel of the page — and a panel is not what
- * is being prototyped. What ships is a phone in a bracket, and a phone sits ON the chart the
- * way it sits on a cockpit bulkhead: over the water, in the way of some of it, movable when it
- * is in the way of the wrong part. Giving the rig the whole window also gives it back the
- * quarter of the screen it was paying for a column that is now a floating object.
+ * Not a two-column grid, which would make the device a panel of the page — and a panel is not
+ * what is being prototyped. What ships is a phone in a bracket, and a phone sits ON the chart
+ * the way it sits on a cockpit bulkhead: over the water, in the way of some of it, movable when
+ * it is in the way of the wrong part. Giving the rig the whole window also gives it the quarter
+ * of the screen a column would take.
  */
 .split {
   display: grid;
@@ -97,11 +97,11 @@ body { padding: 0; height: 100vh; overflow: hidden; }
 /*
  * FULL HEIGHT, ALWAYS. The rig is the chart the boat is sailed on and the knobs that lie to it,
  * and every pixel of it is worth having — it is the desk, not the device. Constraining the
- * DEVICE's height must never reach it: `align-items: start` on the split did, which left the
- * rig at its content height and the chart, being a flex child free to shrink, collapsed to a
+ * DEVICE's height must never reach it: `align-items: start` on the split would leave the rig at
+ * its content height, and the chart, being a flex child free to shrink, would collapse to a
  * thin strip. So the constraint lives on `.device` alone, as `align-self`, and the rig takes
- * the whole of the definite row by stretching into it — the default, and now the row is
- * definite it means something.
+ * the whole of the definite row by stretching into it — the default, which means something
+ * because the row is definite.
  *
  * `min-height: 0` so the chart can shrink inside it rather than pushing it open, and
  * `overflow: hidden` as the backstop for the same thing.
@@ -156,9 +156,9 @@ body { padding: 0; height: 100vh; overflow: hidden; }
  * tiller, not a desktop window, and a prototype shown wider than the thing it prototypes
  * flatters itself about how much will fit.
  *
- * <b>AND PHONE-SHAPED, not merely phone-wide.</b> It was 400px against the full window height,
- * which on a desktop monitor is 1:2.5 and on a tall one worse — a panel that shape has room
- * for things a phone has not, so anything laid out until it "fits" fits nothing. 9:19.5 is an
+ * <b>AND PHONE-SHAPED, not merely phone-wide.</b> 400px against the full window height is 1:2.5
+ * on a desktop monitor and worse on a tall one — a panel that shape has room for things a phone
+ * has not, so anything laid out until it "fits" fits nothing. 9:19.5 is an
  * iPhone from the X onwards and near enough every Android flagship; 20:9 and 19:9 are within a
  * few percent of it, so one ratio stands in for all of them.
  *
@@ -189,8 +189,8 @@ select.basemap {
  * THE FIXES ARE A FIXED FIVE LINES AND THEN A SCROLLBAR.
  *
  * It is an append-only log at up to five a second, so anything that grows with it eats the
- * page: unbounded, the knobs went off the bottom of the window and most of the rig became a
- * list of accepted fixes. Five lines is enough to see the last second or two of decisions,
+ * page: unbounded, the knobs would go off the bottom of the window and most of the rig would
+ * become a list of accepted fixes. Five lines is enough to see the last second or two of decisions,
  * which is what the log is read for while something is happening; the rest is scrollback, for
  * afterwards.
  *
@@ -236,7 +236,7 @@ select.basemap {
       <button class="plain" id="run">Start</button>
       <!--
         THERE IS NO "PLACE BOAT" BUTTON: the boat is DRAGGED. Arming a mode and then clicking
-        was two gestures and a state to remember, and it put "teleport the boat" one click away
+        is two gestures and a state to remember, and it puts "teleport the boat" one click away
         from "steer the boat" with nothing between them but a highlighted button. Picking the
         hull up and putting it down says what is happening while it happens, can be abandoned
         by dropping it back, and cannot be done by accident because it starts on the boat.

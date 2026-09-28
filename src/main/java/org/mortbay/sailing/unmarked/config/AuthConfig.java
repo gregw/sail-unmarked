@@ -19,7 +19,7 @@ import org.slf4j.LoggerFactory;
  * it. The shape is deliberately the same so a club running both does not have two different
  * ideas of how to register an OAuth client.
  *
- * <p><b>AUTHENTICATE AUTHORITY, TRUST DATA</b> — the dialog document §7.1, and the whole of why
+ * <p><b>AUTHENTICATE AUTHORITY, TRUST DATA</b> — dialog §7.1, and the whole of why
  * this is asymmetric. A boat's positions and instants are trusted by design, so a login on a
  * boat would only put a name to a claim nothing can check. Publishing a course, scheduling a
  * start, abandoning a race: those are decisions imposed on a fleet, and <em>who did this</em>
@@ -31,9 +31,9 @@ import org.slf4j.LoggerFactory;
  * committed; this is in {@code .gitignore} and must stay there. {@code auth.yaml.example}
  * beside it shows the shape without the secret.
  *
- * <p><b>Absent means off.</b> No file, or {@code enabled: false}, and the server behaves
- * exactly as it did before there was a login — which is right for the machine on a desk and
- * wrong for anything with a network around it.
+ * <p><b>Absent means off.</b> No file, or {@code enabled: false}, and the editor, the race
+ * screen and the writes behind them are open to anything that can reach the port — which is
+ * right for the machine on a desk and wrong for anything with a network around it.
  */
 public record AuthConfig(
     @JsonProperty("enabled") boolean enabled,
@@ -110,9 +110,9 @@ public record AuthConfig(
     /**
      * Whether this signed-in account may use the officer's screens.
      *
-     * <p><b>Any authenticated account, unless a domain is named.</b> That is the setting this
-     * was asked for and it is the honest one for now: a club that has not said who its officers
-     * are has not said it, and inventing a list here would be pretending to a policy nobody set.
+     * <p><b>Any authenticated account, unless a domain is named.</b> A club that has not said
+     * who its officers are has not said it, and inventing a list here would be pretending to a
+     * policy nobody set.
      * Naming {@code allowedDomain} narrows it to a club's own Workspace.
      *
      * <p>Checked against the {@code hd} claim — the domain Google itself asserts — falling back

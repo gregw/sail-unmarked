@@ -1,13 +1,13 @@
 /**
- * RUNNING A RACE — the committee's screen, dialog document §12.
+ * RUNNING A RACE — the committee's screen, `wiki/client-server-dialog.md` §12. Section numbers
+ * (§) below are that document's.
  *
  * <h2>What this page is for, and what it deliberately is not</h2>
  * It publishes state and it reads back what the fleet said. It does not score, it does not
  * measure, and it has <b>no GO button</b> — which is not an omission but §1.2: the server keeps
- * no clock, so a start cannot be triggered. It is SCHEDULED as an absolute instant, and the
- * arithmetic that turns "in five minutes" into that instant happens here, in this browser,
- * against this operator's clock. Which suits sailing anyway: a start sequence is planned, not
- * pressed.
+ * no clock, so a start cannot be triggered. It is SCHEDULED as an absolute instant — the form
+ * asks for a time of day in this operator's own zone, and the conversion to an instant happens
+ * here, in this browser. Which suits sailing anyway: a start sequence is planned, not pressed.
  *
  * <h2>The two rules that are enforced HERE and nowhere else</h2>
  * Both are arithmetic against *now*, and the only *now* that matters is the one belonging to the
@@ -37,8 +37,11 @@
  * <li><b>`window` (a start range) is not offered.</b> The protocol carries it and the client
  *     holds it as state; nothing here publishes one.
  * <li><b>Muting a sail number</b> (§8.4) — the instrument against a person jamming the channel.
- * <li><b>Any authentication at all.</b> Abandoning a race is the most consequential act in this
- *     system and the one that most wants a name attached to it: §7.1, open question 8.
+ * <li><b>A second tier of officer.</b> The page is behind the login (`UnmarkedSecurityHandler`),
+ *     and any account the login admits may abandon a race; *some may abandon, others only
+ *     watch* is not enforced (`wiki/open-questions.md`, question 8).
+ * <li><b>A session of its own.</b> It reads conduct and publishes over REST, so the committee
+ *     writes into the same channel without being one party in the conversation.
  * </ul>
  */
 
@@ -80,7 +83,7 @@ const state = {
   /*
    * WHAT IS TYPED INTO EACH DIVISION'S START, kept per division and not shared.
    *
-   * With "start in five minutes" one number could serve every division; with absolute times it
+   * A relative "start in N minutes" could share one number between divisions; absolute times
    * cannot, because that is the whole point — div-1 starts at 14:05 and div-2 at 14:10, and a
    * shared field would make the second edit overwrite the first. Seeded once per division from
    * the race's PLANNED start where it has one, else five minutes from now, and never re-seeded:
@@ -362,8 +365,7 @@ function render() {
 
     <h2>Starts</h2>
     <p class="hint">There is no GO button, and there cannot be: the server keeps no clock, so a
-      start is scheduled as an absolute instant. "In five minutes" is arithmetic done here,
-      against this computer's clock.</p>
+      start is scheduled as an absolute instant, typed here in this computer's own time zone.</p>
     ${Object.keys(row.race.divisions ?? {}).map((name) =>
       startCard(name, row.race.divisions[name], states[`division:${name}`], now)).join('')}
 
@@ -416,14 +418,6 @@ function render() {
 }
 
 /**
- * One division's start: publish, suspend, edit, publish — the whole of the control (§8.4).
- *
- * <b>Each division is entirely independent and there is no rolling sequence.</b> A real race
- * committee's postponement of one start delays the next; here it does not, deliberately,
- * because there is no "now" on the server to count five minutes from. Five divisions is this
- * done five times, which is no cascade to compute and none to get wrong.
- */
-/**
  * THE OPERATOR'S OWN ZONE, said on the form.
  *
  * Every time typed here is local and every time on the wire is an instant, so the conversion is
@@ -465,6 +459,14 @@ function seeded(name, division) {
   return state.starts[name];
 }
 
+/**
+ * One division's start: publish, suspend, edit, publish — the whole of the control (§8.4).
+ *
+ * <b>Each division is entirely independent and there is no rolling sequence.</b> A real race
+ * committee's postponement of one start delays the next; here it does not, deliberately,
+ * because there is no "now" on the server to count five minutes from. Five divisions is this
+ * done five times, which is no cascade to compute and none to get wrong.
+ */
 function startCard(name, division, standing, now) {
   const which = standing?.state ?? 'none';
   const timer = standing?.timer?.body ?? null;

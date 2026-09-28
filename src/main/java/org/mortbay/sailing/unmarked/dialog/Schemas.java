@@ -15,7 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * THE SCHEMAS, AND BOTH SIDES VALIDATE — dialog document §10.
+ * THE SCHEMAS, AND BOTH SIDES VALIDATE — dialog §10.
  *
  * <p>They live in {@code client/www/schemas/}, which is what makes one copy reach both sides:
  * Maven already packages {@code client/www} as {@code /static/}, so the server reads them off
@@ -40,10 +40,15 @@ import org.slf4j.LoggerFactory;
  * updated server go on talking, and it is why validation cannot be strict about what it has not
  * heard of.
  *
- * <p>This is the second implementation of the subset; {@code client/www/schema.js} is the first,
- * and {@code schema-test.js} is the spec they are both held to. Two validators is the price of
- * the rule that both sides validate, and the alternative — one side trusting the other — is the
- * thing the rule exists to prevent.
+ * <p>This is the second implementation of the subset; {@code client/www/schema.js} is the first.
+ * {@code dialog-test.js} holds the JavaScript one to the subset and {@code DialogTest} holds this
+ * one to the same cases. Two validators is the price of the rule that both sides validate, and
+ * the alternative — one side trusting the other — is the thing the rule exists to prevent.
+ *
+ * <p><b>Each side checks what it RECEIVES</b>: the server in
+ * {@link org.mortbay.sailing.unmarked.server.DialogServlet}, the boat in {@code dialog.js}'s
+ * {@code receive}. So everything that crosses the wire is checked once, by the party about to
+ * act on it, against the same files.
  */
 public class Schemas
 {

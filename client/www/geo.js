@@ -2,11 +2,11 @@
  * Web Mercator projection, tile layers and a pannable/zoomable view, for drawing
  * course geometry over a chart.
  *
- * NETWORK BOUNDARY. Tiles are fetched from the internet. That is fine here, because
- * the course editor is a shoreside activity at a desk.
- * If used in an on-boat screen, they must always be optional and the UI functional
- * even if the tiles cannot be fetched. Alternately, a good caching mechanism could
- * be implemented.
+ * NETWORK BOUNDARY. Tiles are fetched from the internet. That is fine in the editor and on
+ * the race screen, which are shore-side activities at a desk. On a boat's screens they are
+ * optional and never waited on: the course overview draws them as plain `<image>` elements
+ * behind the course, defaults to no background at all, and works identically when none of
+ * them arrive. The Mark screen draws none. An offline tile cache is not built.
  */
 
 import { RESOLUTION_M, resolve } from './crossing.js';
@@ -73,7 +73,6 @@ export function bearingDeg(from, to) {
   return (r2d(Math.atan2(y, x)) + 360) % 360;
 }
 
-/** Degrees and decimal minutes, which is what a chart and a plotter show. */
 /**
  * The centre of a set of positions — the middle of what they span, not their average.
  *
@@ -127,6 +126,7 @@ export function translateBy(position, dLat, dLon) {
   return { ...position, latitude: position.latitude + dLat, longitude: position.longitude + dLon };
 }
 
+/** Degrees and decimal minutes, which is what a chart and a plotter show. */
 export function formatPosition(position) {
   const part = (value, positive, negative) => {
     const hemisphere = value >= 0 ? positive : negative;
@@ -338,9 +338,9 @@ export class MapView {
 /**
  * How far one wheel event should move the zoom.
  *
- * Taking a fixed step per EVENT is what made the chart uncontrollable: a mouse notch and
+ * A fixed step per EVENT makes the chart uncontrollable: a mouse notch and
  * a trackpad flick are wildly different amounts of intent, and a trackpad sends dozens of
- * tiny events for one gesture, so a gentle two-finger nudge leapt several zoom levels.
+ * tiny events for one gesture, so a gentle two-finger nudge would leap several zoom levels.
  * Scaling by how far the wheel actually moved makes a notch a small repeatable step and a
  * trackpad glide smooth.
  *

@@ -1,7 +1,8 @@
-# series
+# test-series — a scratch series for trying the editor and the race screen.
 #
 # One file per club and series, and THE PATH IS THE IDENTITY: this file is filed
-# under clubs/myc.org.au/ and named series, so its club is "myc.org.au" and its series is "series".
+# under clubs/myc.org.au/ and named test-series, so its club is "myc.org.au" and its
+# series is "test-series". Positions were placed on a chart in the editor; none is a survey.
 # Nothing here is resolved from any other file, so it can be read, diffed and
 # handed to another club whole.
 

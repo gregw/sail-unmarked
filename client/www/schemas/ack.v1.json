@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ack",
-  "description": "C→S. By envelope id, whatever the type — so the channel gets one unseen-badge rule rather than three (§9.4).",
+  "description": "C→S. By envelope id, whatever the type — so the channel gets one unseen-badge rule rather than one per type (§9.4).",
   "type": "object",
   "properties": {
     "session": {

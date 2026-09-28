@@ -21,24 +21,20 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * THE TRANSPORT — the polling half of dialog document §3.
+ * THE TRANSPORT — the polling half of dialog §3, and the only half there is.
  *
  * <p>One endpoint, one exchange: the boat posts an array of envelopes and the response carries
  * whatever was queued for it. {@code POST /api/dialog} before there is a session (which is
  * {@code hello} and {@code join}), {@code POST /api/dialog/{session}} afterwards.
  *
- * <p><b>The WebSocket is not built, and this is deliberately the half that was built first.</b>
- * The document's promise is that the fallback is the same conversation — identical envelopes,
- * identical schemas, identical ordering — so the socket is a pipe to add rather than a protocol
- * to design, and everything it will carry is settled by {@link Dialog#exchange}. Building the
- * socket first would have meant writing the fallback twice: once as a design and once as the
- * thing that turned out to be needed.
+ * <p><b>There is no WebSocket.</b> Polling is the same conversation a socket would carry —
+ * identical envelopes, identical schemas, identical ordering — so a socket is a pipe to add
+ * rather than a protocol to design, and everything it would carry is settled by
+ * {@link Dialog#exchange}. What a socket would need beyond this is a ticker, because
+ * {@code fleet} is enqueued when a boat polls rather than pushed on a schedule. That is exactly
+ * right for polling and not enough for a socket.
  *
- * <p>What the socket will need beyond this: a ticker, because {@code fleet} is currently
- * enqueued when a boat polls rather than pushed on a schedule. That is exactly right for
- * polling and not enough for a socket.
- *
- * <p><b>Validated in both directions</b> (§10). A message that does not match its schema is
+ * <p><b>Everything received is validated</b> (§10). A message that does not match its schema is
  * refused with a {@code rejected} carrying the reason, rather than being half-understood — and
  * the same schemas are what the client validates against, because there is one copy of them and
  * it is packaged into both.

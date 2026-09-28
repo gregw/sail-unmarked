@@ -26,7 +26,11 @@ public enum FixVerdict
      */
     UNRESOLVED;
 
-    /** Tolerant of case and separators, as {@link RaceFormat#parse} is and for the same reason. */
+    /**
+     * Tolerant of case and separators — {@code rejected-kinematic}, {@code REJECTED_KINEMATIC}
+     * and {@code rejectedKinematic} are one verdict — because a record is written by a client
+     * in another language and one spelling difference should not make it unreadable.
+     */
     @JsonCreator
     public static FixVerdict parse(String raw)
     {

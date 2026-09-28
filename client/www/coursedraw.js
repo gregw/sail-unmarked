@@ -121,7 +121,7 @@ export function triangle(at, along, normal) {
 /**
  * What a leg is FOR, as a colour.
  *
- * Sequence position was the wrong thing to colour by. On a cycle there is no sequence to
+ * Not sequence position. On a cycle there is no sequence to
  * be far through — a boat begins and ends wherever it joined — and even on an open course
  * the useful question about a leg is not "how far along" but "does a lap start here, or
  * end here". Green and red are the same green and red the start and finish already use;

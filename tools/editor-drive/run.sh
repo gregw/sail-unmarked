@@ -10,9 +10,9 @@ for d in "$HERE"/drive-*.mjs; do
   printf '%-28s %s\n' "$(basename "$d" .mjs)" "$line"
   echo "$out" | grep FAIL | sed 's/^/    /'
   # A driver that DIED rather than reporting counts as a failure rather than as nothing. Its
-  # last line is then a stack trace, which parses to no number at all — and the arithmetic
-  # below used to fail on the empty string, print a shell syntax error, and abandon the rest of
-  # the suite with a TOTAL that looked like a pass.
+  # last line is then a stack trace, which parses to no number at all — and unguarded, the
+  # arithmetic below would fail on the empty string, print a shell syntax error, and abandon the
+  # rest of the suite with a TOTAL that looked like a pass.
   passed=$(echo "$line" | sed -n 's/^\([0-9]*\) passed.*/\1/p')
   failed=$(echo "$line" | sed -n 's/.*, \([0-9]*\) failed$/\1/p')
   if [ -z "$passed" ]; then

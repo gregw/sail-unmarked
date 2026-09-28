@@ -23,7 +23,7 @@ await settle();
 
 ok('every level of the drill-down is a selector', ['club', 'series', 'course']
   .every((level) => paneHtml().includes(`id="sel_${level}"`)));
-ok('...the club among them, split from the series it used to be glued to',
+ok('...the club among them, a question of its own rather than half of the series',
   optionsOf('club').includes(programmes[0].club));
 ok('...and the club carries NO commands, being a domain: not created, renamed or deleted here',
   !paneHtml().includes('cmd_club'));

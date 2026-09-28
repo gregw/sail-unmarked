@@ -144,7 +144,8 @@ public class ProgrammeLibraryTest
     @Test
     public void unsurveyedPointsAreProblemsNotFailures()
     {
-        // The shipped programmes carry no coordinates at all, and must still load.
+        // The fixture places every point, so it loads with no unsurveyed-point problem; a
+        // null position is reported as a problem, never a reason not to load.
         assertThat(fixture.problems().stream()
             .filter(p -> p.contains("has no position")).count(), is(0L));
     }
