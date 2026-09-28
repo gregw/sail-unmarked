@@ -490,6 +490,6 @@ result about nothing.
 goes on the record and the results multiply by it. On a course handicapped by distance it is
 sailed instead: `device.js` hands `RaceClient` the snapshot as `handicap.js`'s `personalise` makes
 it for this TCF, each handicapped step's track replaced by the boat's own line, and the join screen
-says which TCFs the course takes. The overview and the Mark screen stripe the parallelogram of
+says which TCFs the course takes. The overview and the Mark screen stripe the zone of
 every line a boat could be given, faintly, under the boat's own, so a boat rounding somewhere else
 is no surprise — see [course-model.md](course-model.md#distance-corrected-handicap-each-boats-own-line).

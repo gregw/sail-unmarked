@@ -62,7 +62,7 @@ public record Programme(
         points = keyById(points, NamedPoint::id, (p, id) ->
             new NamedPoint(id, p.name(), p.latitude(), p.longitude(), p.notes()));
         lines = keyById(lines, Line::id, (l, id) ->
-            new Line(id, l.name(), l.port(), l.starboard(), l.notes()));
+            new Line(id, l.name(), l.port(), l.starboard(), l.notes(), l.handicapWidthM()));
         courses = keyById(courses, Course::id, (c, id) ->
             new Course(id, c.name(), c.notes(), c.isPublic(), c.variants()));
         races = keyById(races, Race::id, (r, id) ->

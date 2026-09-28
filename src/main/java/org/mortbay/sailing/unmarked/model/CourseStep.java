@@ -46,14 +46,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * leg is measured between the reference points of this step and the one before it — see
  * {@link Line#referencePoint}. A measured leg of zero is an error, not a short leg: it
  * means the same reference point twice running, which no course means.
- *
- * <h2>Handicap width</h2>
- * {@code handicapWidthM} makes this step <b>distance-corrected</b>: the line it names is no
- * longer crossed itself but is the track along which each boat's own line is placed, by its
- * TCF, and the number is how wide that boat's line is. See {@link Handicap}. It belongs to the
- * step rather than the line because whether a line can be handicapped depends on the legs
- * either side of it, which only a course has — and every step of one course naming the same
- * line must give the same width, since it is one line on the water.
+
  */
 public record CourseStep(
     @JsonProperty("line") String line,
@@ -61,28 +54,13 @@ public record CourseStep(
     @JsonProperty("gate") List<CourseStep> gate,
     @JsonProperty("lengthNm") Double lengthNm,
     @JsonProperty("entry") boolean entry,
-    @JsonProperty("notes") String notes,
-    @JsonProperty("handicapWidthM") Double handicapWidthM)
+    @JsonProperty("notes") String notes)
 {
     public CourseStep
     {
         gate = (gate == null) ? List.of() : List.copyOf(gate);
         if (cross == null && line != null)
             cross = Direction.FORWARD;
-    }
-
-    /** A step with no handicap width, which is every step a course has not corrected. */
-    public CourseStep(String line, Direction cross, List<CourseStep> gate, Double lengthNm,
-        boolean entry, String notes)
-    {
-        this(line, cross, gate, lengthNm, entry, notes, null);
-    }
-
-    /** True when each boat is given its own line here, placed by its handicap. */
-    @JsonIgnore
-    public boolean handicapped()
-    {
-        return handicapWidthM != null;
     }
 
     /** True when this step offers a choice rather than naming one line. */

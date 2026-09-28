@@ -45,9 +45,9 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * has already been handed. A published course changes only when somebody publishes.
  *
  * <h2>A handicapped course</h2>
- * A step with a {@code handicapWidthM} carries its TRACK as its one crossing — the line each
- * boat's own line is placed along — and {@code handicapNear} says which end of it the lowest
- * TCF gets. {@code tcfMin} and {@code tcfMax} are the TCFs the course can take, and a join
+ * A step naming a handicap line carries that line — its TRACK — as its one crossing, with the
+ * line's {@code handicapWidthM} beside it, and {@code handicapNear} says which end of it the
+ * lowest TCF gets. {@code tcfMin} and {@code tcfMax} are the TCFs the course can take, and a join
  * outside them is refused. What any one boat must cross is worked out on the boat, from these,
  * by {@code client/www/handicap.js}; see {@link Handicap}.
  */
@@ -160,7 +160,7 @@ public record CourseSnapshot(
             }
             steps.add(new Step(variant.sequenceLetter(i), variant.closed() && step.entry(),
                 Double.isNaN(legs[i]) ? null : legs[i], crossings,
-                plan == null ? null : step.handicapWidthM(),
+                plan == null ? null : Handicap.widthAt(step, lines),
                 plan == null ? null : plan.near()[i]));
         }
 
@@ -228,9 +228,10 @@ public record CourseSnapshot(
         for (Step step : steps)
         {
             canonical.append("|S").append(step.entry());
-            // Only when present, so a course nobody handicapped keeps the revision it had.
+            // Only when present, so a course nobody handicapped keeps the revision it had. `R`
+            // for the rectangle each boat's line is placed in: square to the track.
             if (step.handicapWidthM() != null)
-                canonical.append("|H").append(step.handicapWidthM());
+                canonical.append("|R").append(step.handicapWidthM());
             for (Crossing crossing : step.crossings())
             {
                 canonical.append("|C").append(crossing.line()).append(':').append(crossing.cross());

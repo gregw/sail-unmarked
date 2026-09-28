@@ -30,7 +30,7 @@
 
 import { ROLE_COLOUR, roleColour } from './coursedraw.js';
 import { ARROW_CENTROID, LABEL, TRIANGLE, arrowHead, darken, forwardNormal, seats, stripes, track, triangle } from './coursedraw.js';
-import { envelope, geometry, outward, widthHandle, widthThrough } from './handicap.js';
+import { envelope, geometry, outward, widthHandle, widthThrough, zone } from './handicap.js';
 import {
   BASEMAPS,
   MapView,
@@ -348,18 +348,15 @@ function variantFromSnapshot(snap) {
         lines.set(c.line, {
           id: c.line, name: c.line,
           port: end(c.port), starboard: end(c.starboard), notes: null,
+          // A handicapped step's one crossing is its track, and the width goes with the line.
+          handicapWidthM: step.handicapWidthM ?? null,
         });
       }
       return { line: c.line, cross: String(c.cross ?? 'forward').toLowerCase(), gate: [] };
     });
     if (parts.length > 1)
       return { line: null, cross: null, gate: parts, entry: !!step.entry, notes: null };
-    return {
-      ...(parts[0] ?? { line: null, cross: 'forward', gate: [] }),
-      entry: !!step.entry,
-      handicapWidthM: step.handicapWidthM ?? null,
-      notes: null,
-    };
+    return { ...(parts[0] ?? { line: null, cross: 'forward', gate: [] }), entry: !!step.entry, notes: null };
   });
   return {
     id: snap.revision, name: snap.label, template: false, closed: !!snap.closed,
@@ -1012,10 +1009,10 @@ function courseCrossings(variant) {
   /*
    * A HANDICAPPED STEP'S TRIANGLE POINTS ACROSS THE BOATS' LINES, not across its track. The track
    * is where the lines' centres slide and nobody crosses it; each boat's line lies square to the
-   * average of the legs either side, so the triangle is turned to that — its base along a boat's
-   * line and its apex the way a boat crosses one — and still seated on the track.
+   * track, so the triangle is turned to that — its base along a boat's line and its apex the way
+   * a boat crosses one, out along the track — and still seated on the track.
    */
-  const handicapped = (variant.sequence ?? []).some((step) => step.handicapWidthM != null)
+  const handicapped = (variant.sequence ?? []).some((step) => !step.gate?.length && trackWidth(step.line) != null)
     ? handicapShape(variant) : null;
   const hg = handicapped ? geometry(handicapped) : null;
   const acrossBoatLines = (index, reverse) => {
@@ -1494,7 +1491,7 @@ function render() {
       if (readOnly()) return;
       ev.stopPropagation();
       beginEdit();
-      state.dragging = { kind: 'hwidth', line: g.dataset.line, step: Number(g.dataset.step) };
+      state.dragging = { kind: 'hwidth', line: g.dataset.line };
       render();
     });
   }
@@ -2282,11 +2279,24 @@ function renderLineForm() {
     ${endFields('starboard', line.starboard, line)}
     ${endFields('port', line.port, line)}
     <div id="l_span" class="mono small muted"></div>
+    <label class="label" for="l_width">Handicap width (m)</label>
+    <input id="l_width" inputmode="decimal" placeholder="none — a line crossed as itself"
+      value="${esc(line.handicapWidthM ?? '')}">
+    <p class="small muted" style="margin:2px 0 8px">With a width this line is a handicap track:
+      never crossed itself, each boat is given its own line this wide, square to it, placed
+      along it by its TCF. Drag the grip on the chart, or type it; empty for an ordinary line.</p>
     <div id="l_used"></div>
     <label class="label" for="l_notes">Notes</label>
     <textarea id="l_notes" rows="3" spellcheck="false">${esc(line.notes ?? '')}</textarea>`;
 
-  for (const field of ['l_id', 'l_name', 'l_notes']) el(field).addEventListener('focus', beginEdit);
+  for (const field of ['l_id', 'l_name', 'l_notes', 'l_width']) el(field).addEventListener('focus', beginEdit);
+  el('l_width').addEventListener('change', (ev) => {
+    const width = parseFloat(ev.target.value);
+    if (Number.isFinite(width) && width > 0) line.handicapWidthM = Math.round(width);
+    else delete line.handicapWidthM;
+    render();
+  });
+  el('l_width').addEventListener('blur', endEdit);
   el('l_id').addEventListener('change', (ev) => renameLine(line.id, ev.target.value.trim()));
   el('l_id').addEventListener('blur', endEdit);
   el('l_name').addEventListener('input', (ev) => { line.name = ev.target.value; });
@@ -2438,6 +2448,8 @@ function syncLineForm(line) {
   el('l_span').innerHTML = a && b
     ? `${distanceM(a, b)} m, ${bearingDeg(a, b).toFixed(0).padStart(3, '0')}&deg; port&rarr;starboard`
     : '<span class="warn">both ends need a position before this line can be measured</span>';
+  const width = el('l_width');
+  if (width && width !== active) width.value = line.handicapWidthM ?? '';
   const used = el('l_used');
   if (used) used.innerHTML = affectsBlock('line', line.id);
 }
@@ -4038,10 +4050,8 @@ function renderSteps(variant) {
             ${variant.closed && j === 0
               ? `<button data-step="${i}" class="s_entry${step.entry ? ' on' : ''}" title="a boat may begin and end a lap here">&#8635;</button>`
               : ''}
-            ${!gate && handicappable(variant, i)
-              ? `<button data-step="${i}" class="s_hcap${step.handicapWidthM != null ? ' on' : ''}" title="${step.handicapWidthM != null
-                ? `handicapped by distance: each boat's line is ${step.handicapWidthM} m wide, placed along this line by its TCF — drag the handle on the chart to change the width`
-                : 'handicap by distance: each boat is given its own line, placed along this one by its TCF'}">${step.handicapWidthM != null ? `hcp ${step.handicapWidthM}` : 'hcp'}</button>`
+            ${!gate && trackWidth(entry.line) != null
+              ? `<span class="s_hcap mono small" title="a handicap line: each boat is given its own line, ${trackWidth(entry.line)} m wide, placed along this one by its TCF — its width is set on the Lines tab">hcp</span>`
               : ''}
             ${j === 0
               ? `<button data-step="${i}" class="s_up" title="earlier">&uarr;</button>
@@ -4085,62 +4095,20 @@ function renderSteps(variant) {
   // crossing twice. That is what keeps the scoring from having to decide which of several
   // crossings closed the loop, and it puts the burden on course design instead.
   on('s_entry', (i) => { variant.sequence[i].entry = !variant.sequence[i].entry; });
-  on('s_hcap', (i) => {
-    const step = variant.sequence[i];
-    setHandicapWidth(variant, step.line, step.handicapWidthM != null ? null : defaultWidth(step.line));
-  });
   on('s_up', (i) => { if (i > 0) variant.sequence.splice(i - 1, 0, variant.sequence.splice(i, 1)[0]); });
   on('s_down', (i) => {
     if (i < variant.sequence.length - 1) variant.sequence.splice(i + 1, 0, variant.sequence.splice(i, 1)[0]);
   });
 }
 
-/**
- * Whether a step may be handicapped by distance: a single line that is not a start or a finish.
- *
- * Offered only where it could be accepted. The server says the rest — that one use of a line
- * is somewhere a start, that the turn is too gentle — because those depend on the whole course.
- */
-function handicappable(variant, i) {
-  const step = variant.sequence[i];
-  if (!step || step.gate?.length || !step.line) return false;
-  if (variant.closed) return !step.entry;
-  return i > 0 && i < variant.sequence.length - 1;
+/** A line's handicap width where it is a handicap track, or null. */
+function trackWidth(lineId) {
+  const width = GEO.lines.get(lineId)?.handicapWidthM;
+  return width > 0 ? width : null;
 }
 
 /**
- * Set — or with null, clear — the handicap width of EVERY step of this variant naming the line.
- *
- * One line is one piece of water, and a boat's line on it is one width however many times the
- * course passes it; the server refuses a course where two passings disagree, so the editor
- * never makes one.
- */
-function setHandicapWidth(variant, lineId, widthM) {
-  for (const step of variant.sequence ?? []) {
-    if (step.gate?.length || step.line !== lineId) continue;
-    if (widthM == null) delete step.handicapWidthM;
-    else step.handicapWidthM = widthM;
-  }
-}
-
-/**
- * The width a newly handicapped line starts at: whatever another passing of it already has, or
- * a third of the track's own length — a starting shape to drag, drawn in proportion to the
- * water it sits on, and not a number anybody should keep without looking at it.
- */
-function defaultWidth(lineId) {
-  const variant = currentVariant();
-  const held = (variant?.sequence ?? []).find((s) => s.line === lineId && s.handicapWidthM != null);
-  if (held) return held.handicapWidthM;
-  const line = GEO.lines.get(lineId);
-  const port = endPosition(line?.port);
-  const starboard = endPosition(line?.starboard);
-  if (!port || !starboard) return 50;
-  return Math.max(10, Math.round(distanceM(port, starboard) / 3));
-}
-
-/**
- * The variant shaped as enough of a snapshot for `handicap.js` to draw its parallelograms from:
+ * The variant shaped as enough of a snapshot for `handicap.js` to draw its zones from:
  * each step's lines resolved, and its handicap width. Null while anything is still unplaced.
  */
 function handicapShape(variant) {
@@ -4155,36 +4123,52 @@ function handicapShape(variant) {
       crossings.push({ line: alternative.line, cross: alternative.cross, port, starboard });
     }
     if (!crossings.length) return null;
-    steps.push({ crossings, handicapWidthM: step.gate?.length ? null : (step.handicapWidthM ?? null) });
+    steps.push({ crossings, handicapWidthM: step.gate?.length ? null : trackWidth(step.line) });
   }
   return steps.length ? { closed: !!variant.closed, steps } : null;
 }
 
 /**
- * Every handicapped line's parallelogram, striped, with a grip to drag its width by — one grip
- * per LINE, since every passing of it shares the width.
+ * Every handicap line's zone, striped: on the Courses tab each handicapped step's, as the course
+ * places it; elsewhere every handicap line's own rectangle, with a grip on the selected one's
+ * side to drag its width by. The grip is on the Lines tab alone, because the width is the line's
+ * and from a course a line belongs to somebody else's courses too — which is the question the
+ * tab rule exists to ask.
  */
 function renderHandicaps(variant) {
-  const shape = handicapShape(variant);
-  if (!shape || !shape.steps.some((step) => step.handicapWidthM != null)) return '';
-  const g = geometry(shape);
-  if (!g) return '';
   const px = (position) => { const [x, y] = state.view.toPx(position); return { x, y }; };
   let out = '';
-  const gripped = new Set();
-  shape.steps.forEach((step, i) => {
-    const corners = envelope(shape, i, g);
-    if (!corners) return;
+  if (variant) {
+    const shape = handicapShape(variant);
+    const g = shape && shape.steps.some((step) => step.handicapWidthM != null) ? geometry(shape) : null;
+    const drawn = new Set();
+    shape?.steps.forEach((step, i) => {
+      const line = step.crossings[0].line;
+      const corners = g ? envelope(shape, i, g) : null;
+      if (!corners || drawn.has(line)) return;
+      drawn.add(line);
+      out += stripes(corners.map(px), { colour: 'var(--toside)' });
+    });
+    return out;
+  }
+  if (state.tab !== 'lines' && state.tab !== 'points') return '';
+  const used = inUse();
+  for (const [id, line] of GEO.lines) {
+    if (used && !used.lines.has(id)) continue;
+    const width = trackWidth(id);
+    const port = endPosition(line.port);
+    const starboard = endPosition(line.starboard);
+    const corners = width ? zone(port, starboard, width) : null;
+    if (!corners) continue;
     out += stripes(corners.map(px), { colour: 'var(--toside)' });
-    const line = step.crossings[0].line;
-    if (readOnly() || gripped.has(line)) return;
-    gripped.add(line);
-    const at = px(widthHandle(shape, i, g));
-    out += `<g class="hgrip" data-line="${esc(line)}" data-step="${i}" style="cursor:ew-resize">`
-      + `<title>${esc(`drag to change how wide each boat's line is: ${step.handicapWidthM} m`)}</title>`
+    if (state.tab !== 'lines' || id !== state.selectedLine || readOnly()) continue;
+    const at = px(widthHandle(port, starboard, width));
+    HANDLES += `<g class="hgrip" data-line="${esc(id)}" style="cursor:ew-resize">`
+      + `<title>${esc(`drag to change how wide each boat's line is: ${width} m`)}</title>`
+      + `<circle cx="${at.x.toFixed(1)}" cy="${at.y.toFixed(1)}" r="14" fill="transparent"/>`
       + `<circle cx="${at.x.toFixed(1)}" cy="${at.y.toFixed(1)}" r="6" fill="var(--sea)"`
       + ` fill-opacity="0.92" stroke="var(--toside)" stroke-width="1.5"/></g>`;
-  });
+  }
   return out;
 }
 
@@ -4530,6 +4514,7 @@ function coursesPayload() {
           port: cleanEnd(l.port),
           starboard: cleanEnd(l.starboard),
           notes: l.notes ?? null,
+          handicapWidthM: l.handicapWidthM ?? null,
         }])),
         sequence: v.sequence.map((step) => ({
           line: step.gate?.length ? null : (step.line ?? null),
@@ -4539,9 +4524,6 @@ function coursesPayload() {
           // Only meaningful on a closed course, and dropped with it — a step cannot be
           // left carrying a marking that says something untrue about an open one.
           entry: !!(v.closed && step.entry),
-          // A gate is never handicapped, so a width left on a step that became one is dropped
-          // rather than written for the server to complain about.
-          handicapWidthM: step.gate?.length ? null : (step.handicapWidthM ?? null),
           notes: step.notes ?? null,
         })),
         notes: v.notes ?? null,
@@ -4703,6 +4685,7 @@ async function doSave(renames) {
       port: cleanEnd(l.port),
       starboard: cleanEnd(l.starboard),
       notes: l.notes ?? null,
+      handicapWidthM: l.handicapWidthM ?? null,
     };
   }
   try {
@@ -4802,13 +4785,10 @@ function wire() {
         const line = GEO.lines.get(state.dragging.id);
         if (line) Object.assign(line[state.dragging.side], at);
       } else if (state.dragging.kind === 'hwidth') {
-        // The width follows the pointer out from the track, along the parallelogram's side,
-        // and every passing of the line takes it — to the metre, like everything else.
-        const variant = currentVariant();
-        const shape = handicapShape(variant);
-        const width = shape ? widthThrough(geometry(shape), state.dragging.step, at) : null;
-        if (width != null) setHandicapWidth(variant, state.dragging.line, Math.max(1, Math.round(width)));
-        formsChanged();
+        // The width follows the pointer out from the line, square to it, to the metre.
+        const line = GEO.lines.get(state.dragging.line);
+        const width = widthThrough(endPosition(line?.port), endPosition(line?.starboard), at);
+        if (line && width != null) line.handicapWidthM = Math.max(1, Math.round(width));
       } else if (state.dragging.kind === 'line') {
         const line = GEO.lines.get(state.dragging.id);
         if (line) {
@@ -4849,7 +4829,7 @@ function wire() {
       panning = null;
       // Put it back before asking. The move is applied by the mover, which may apply it
       // here, to a fresh ad-hoc copy, or to nothing at all.
-      // A width is the variant's own and reaches nobody else's course: nothing to ask.
+      // A width changed on the Lines tab is a club-wide edit by construction: nothing to ask.
       if (drag.kind === 'hwidth') {
         render();
         endEdit();

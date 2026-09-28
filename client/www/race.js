@@ -287,7 +287,7 @@ function renderChart() {
     }
 
     // The lines themselves, and the letter of each step on them. A step handicapped by distance
-    // has no one line: every boat has its own, somewhere in the striped parallelogram, and the
+    // has no one line: every boat has its own, somewhere in the striped zone, and the
     // track they are placed along is not crossed by anybody.
     const shape = geometry(snapshot);
     steps.forEach((step, index) => {

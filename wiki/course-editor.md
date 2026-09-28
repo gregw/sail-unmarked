@@ -95,16 +95,16 @@ pixels, and is a control nobody has to be taught. The rules that hold it togethe
 - **The sequence folds, and folded it still answers for itself** — how many lines and how far, the two
   questions worth asking from outside it. The count is of **rows, not steps**: a gate is one step and
   two lines to cross. The fold is part of the form's render key.
-- **`hcp` handicaps a step by distance** — offered only on a single line that is not a start, a finish
-  or a cycle entry, and it sets **every** step of the variant naming that line at once, because one
-  line is one width. On the chart the step's track draws as a striped parallelogram
-  (`coursedraw.stripes`), every stripe one of the lines a boat could be given, with a grip halfway
-  along its port side to drag the width by — to the metre, and again for every passing. The step's
-  triangle is turned to lie along a boat's line and point the way a boat crosses one, because the
-  track is where the lines' centres slide and nobody crosses it. The header
-  gives the TCFs the variant can take beside its length, as the server works them out; the rest of
-  what makes a track acceptable — the turn, the direction it runs — is the server's to say, in the
-  variant's problems. See [course-model.md](course-model.md#distance-corrected-handicap-each-boats-own-line).
+- **A handicap width is set on the LINE** — the Lines tab's form, or a grip halfway along one side of
+  the line's striped zone (`coursedraw.stripes`), every stripe one of the lines a boat could be given.
+  A line with a width is a track wherever it is named; a step naming one shows `hcp`, and the Courses
+  tab stripes the zone but offers no grip, since the line belongs to other courses too and changing it
+  from one is the question the tab rule asks. The header gives the TCFs a variant can take beside its
+  length, as the server works them out; the rest of what makes a track acceptable — that it is not a
+  start or finish, the turn, the way it runs — is the server's to say, in the variant's problems. The
+  step's triangle lies along a boat's line and points out along the track, because the track is where
+  the lines' centres slide and nobody crosses it. See
+  [course-model.md](course-model.md#distance-corrected-handicap-each-boats-own-line).
 
 ### Three traps in the rendering
 

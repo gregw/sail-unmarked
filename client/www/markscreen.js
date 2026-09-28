@@ -1906,7 +1906,7 @@ export function overview(client, options = {}) {
   }
 
   let out = background;
-  // Each handicapped step's parallelogram under everything else: this boat's own line is drawn
+  // Each handicapped step's zone under everything else: this boat's own line is drawn
   // over it, and the stripes say that the other boats' lines are somewhere in there too.
   for (const step of client.steps) {
     for (const crossing of step.crossings) {

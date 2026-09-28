@@ -1,7 +1,6 @@
 package org.mortbay.sailing.unmarked.model;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -12,13 +11,14 @@ import java.util.Set;
  * can correct.
  *
  * <h2>The model</h2>
- * A step with a {@code handicapWidthM} does not ask a boat to cross the line it names. That
- * line is the <b>track</b> along which each boat's own line is centred: the midpoint is where a
- * 1.000 boat's line sits, the <b>near</b> end — the one that makes the legs either side
- * shortest — is the lowest TCF the course can take, and the far end the highest. Each boat's
- * line is {@code handicapWidthM} wide, square to the average of the directions to the steps
- * either side, and the same orientation for every boat, so together they sweep a
- * parallelogram the designer can see and check.
+ * A line with a {@code handicapWidthM} is a <b>track</b>, and a step naming it does not ask a
+ * boat to cross it. Each boat's own line is centred on the track: the midpoint is where a 1.000
+ * boat's line sits, the <b>near</b> end — the one that makes the legs either side shortest — is
+ * the lowest TCF the course can take, and the far end the highest. Each boat's line is
+ * {@code handicapWidthM} wide and square to the track, so together they sweep a rectangle that
+ * belongs to the line, which the designer sees on the line itself and checks once. The width is
+ * the line's, not a step's, because a line is never suitable for both: every step naming a track
+ * is handicapped, and a track that is somewhere a start or a finish is refused.
  *
  * <p><b>One slide for the whole course.</b> Every handicapped step is placed at the same
  * fraction {@code u} of its track, −1 at the near end, 0 at the midpoint and +1 at the far end.
@@ -80,10 +80,26 @@ public final class Handicap
         return null;
     }
 
-    /** True when some step of this variant is handicapped. */
-    public static boolean correctable(CourseVariant variant)
+    /** True when some step of this variant, or a side of a gate in it, names a handicap track. */
+    public static boolean correctable(CourseVariant variant, Map<String, Line> lines)
     {
-        return variant.sequence().stream().anyMatch(CourseStep::handicapped);
+        return variant.sequence().stream()
+            .flatMap(step -> step.alternatives().stream())
+            .anyMatch(alt -> track(alt, lines) != null);
+    }
+
+    /** The handicap track a step or a gate's side names, or null. */
+    static Line track(CourseStep step, Map<String, Line> lines)
+    {
+        Line line = step.line() == null || lines == null ? null : lines.get(step.line());
+        return line != null && line.handicapped() ? line : null;
+    }
+
+    /** The width a boat's line at this step is given, or null where the step is not handicapped. */
+    public static Double widthAt(CourseStep step, Map<String, Line> lines)
+    {
+        Line line = step.isGate() ? null : track(step, lines);
+        return line == null ? null : line.handicapWidthM();
     }
 
     /**
@@ -93,7 +109,7 @@ public final class Handicap
     public static Plan plan(CourseVariant variant, Map<String, Line> lines,
         Map<String, NamedPoint> points)
     {
-        if (!correctable(variant) || !problems(variant, "", lines, points).isEmpty())
+        if (!correctable(variant, lines) || !problems(variant, "", lines, points).isEmpty())
             return null;
         double lengthNm = variant.lengthNm(lines, points);
         Geometry g = Geometry.of(variant, lines, points);
@@ -115,15 +131,15 @@ public final class Handicap
         Map<String, Line> lines, Map<String, NamedPoint> points)
     {
         List<String> problems = new ArrayList<>();
-        if (!correctable(variant))
+        if (!correctable(variant, lines))
             return problems;
         List<CourseStep> sequence = variant.sequence();
         int n = sequence.size();
 
         /*
-         * A START OR FINISH LINE IS NEVER HANDICAPPED, and neither is any other use of it in
-         * the same course: one line has one width, so a line that must be crossed as itself
-         * somewhere cannot be a track anywhere. On a cycle every entry is a start and a finish.
+         * A START OR FINISH IS NEVER A TRACK. A start and a finish are crossed as themselves,
+         * and a track never is, so a handicap line named there is refused. On a cycle every
+         * entry is a start and a finish.
          */
         Set<String> ends = new HashSet<>();
         for (int i = 0; i < n; i++)
@@ -133,50 +149,47 @@ public final class Handicap
                 sequence.get(i).alternatives().forEach(alt -> ends.add(alt.line()));
         }
 
-        Map<String, Integer> widthFrom = new HashMap<>();
+        // Said once per LINE, since it is the line's to fix, however many steps name it.
+        Set<String> said = new HashSet<>();
         boolean shaped = true;
         for (int i = 0; i < n; i++)
         {
             CourseStep step = sequence.get(i);
             String at = where + " step " + variant.sequenceLetter(i);
-            for (CourseStep alt : step.gate())
-            {
-                if (alt.handicapped())
-                    problems.add(at + " handicaps a side of a gate; only a step naming a single"
-                        + " line can be handicapped");
-            }
-            if (!step.handicapped())
-                continue;
             if (step.isGate())
             {
-                problems.add(at + " is a gate; only a step naming a single line can be handicapped");
-                shaped = false;
+                for (CourseStep alt : step.gate())
+                {
+                    if (track(alt, lines) != null)
+                    {
+                        problems.add(at + " is a gate with handicap line '" + alt.line() + "' as a"
+                            + " side; a handicap line can only be a step of its own");
+                        shaped = false;
+                    }
+                }
                 continue;
             }
-            if (step.handicapWidthM() <= 0)
-                problems.add(at + " has a handicap width of " + trim(step.handicapWidthM())
-                    + " m; give it a positive width");
+            Line line = track(step, lines);
+            if (line == null)
+                continue;
             if (ends.contains(step.line()))
             {
-                problems.add(at + " handicaps line '" + step.line() + "', which is a start or"
-                    + " finish of this course; a start or finish line cannot be handicapped");
+                problems.add(at + " names handicap line '" + step.line() + "', which is a start or"
+                    + " finish of this course; a start or finish must be a line crossed as itself");
                 shaped = false;
             }
-            Integer first = widthFrom.putIfAbsent(step.line(), i);
-            if (first != null && !step.handicapWidthM().equals(sequence.get(first).handicapWidthM()))
+            if (said.add(step.line()))
             {
-                problems.add(at + " gives line '" + step.line() + "' a handicap width of "
-                    + trim(step.handicapWidthM()) + " m where step "
-                    + variant.sequenceLetter(first) + " gives it "
-                    + trim(sequence.get(first).handicapWidthM()) + " m; one line has one width");
-            }
-            Line line = lines.get(step.line());
-            if (line != null && (line.port() == null || line.starboard() == null
-                || line.port().infinite() || line.starboard().infinite()))
-            {
-                problems.add(at + " handicaps line '" + step.line() + "', which has an infinite"
-                    + " end; a handicapped line must stop at both ends");
-                shaped = false;
+                if (line.handicapWidthM() <= 0)
+                    problems.add(where + " handicap line '" + step.line() + "' has a width of "
+                        + trim(line.handicapWidthM()) + " m; give it a positive width");
+                if (line.port() == null || line.starboard() == null
+                    || line.port().infinite() || line.starboard().infinite())
+                {
+                    problems.add(where + " handicap line '" + step.line() + "' has an infinite end;"
+                        + " a handicap line must stop at both ends");
+                    shaped = false;
+                }
             }
             // A fixed length cannot stretch, and the whole point of the step is that its legs do.
             if (step.lengthNm() != null)
@@ -195,7 +208,7 @@ public final class Handicap
 
         for (int i = 0; i < n; i++)
         {
-            if (!sequence.get(i).handicapped())
+            if (widthAt(sequence.get(i), lines) == null)
                 continue;
             String at = where + " step " + variant.sequenceLetter(i);
             if (g.near[i] == null)
@@ -206,9 +219,8 @@ public final class Handicap
             }
             /*
              * THE TURN MUST BE A RIGHT ANGLE OR SHARPER, at every boat's line and not only the
-             * 1.000 boat's. The line is square to the average of the two legs, and past 90° that
-             * average stops pointing anywhere a boat is going: the legs are nearly a straight
-             * run, and a line across them is a passage, which a handicap cannot lengthen.
+             * 1.000 boat's. Past 90° the legs are nearly a straight run: the step is a passage,
+             * and a track pushed out from a passage lengthens it by next to nothing.
              */
             for (double u : new double[]{-1, 0, 1})
             {
@@ -284,7 +296,7 @@ public final class Handicap
             for (int i = 0; i < n; i++)
             {
                 CourseStep step = sequence.get(i);
-                if (step.handicapped())
+                if (widthAt(step, lines) != null)
                 {
                     Line line = lines.get(step.line());
                     Position p = Line.resolve(line.port(), points);
@@ -310,7 +322,7 @@ public final class Handicap
             double[][] slide = new double[n][2];
             for (int i = 0; i < n; i++)
             {
-                if (!sequence.get(i).handicapped())
+                if (widthAt(sequence.get(i), lines) == null)
                     continue;
                 double[] prev = base[nominal.prev(i)];
                 double[] next = base[nominal.next(i)];

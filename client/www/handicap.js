@@ -1,12 +1,12 @@
 /*
  * DISTANCE-CORRECTED HANDICAPPING: each boat given its own line, placed by its TCF.
  *
- * A step with a `handicapWidthM` does not ask a boat to cross the line it names. That line is
- * the TRACK along which each boat's own line is centred: its midpoint is where a 1.000 boat's
- * line sits, its near end (`handicapNear`, decided by the server) is the lowest TCF the course
- * can take and its far end the highest. A boat's line is `handicapWidthM` wide, square to the
- * average of the directions to the steps either side, and every boat's line at one step has
- * that same orientation — so together they sweep the parallelogram the editor stripes.
+ * A line with a `handicapWidthM` is a TRACK, and a step naming it does not ask a boat to cross
+ * it: each boat's own line is centred on it. The midpoint is where a 1.000 boat's line sits, the
+ * near end (`handicapNear`, decided by the server) is the lowest TCF the course can take and the
+ * far end the highest. A boat's line is `handicapWidthM` wide and SQUARE TO THE TRACK, crossed
+ * forward going from the near end towards the far — so every boat's line on a track is
+ * parallel, and together they sweep the rectangle the editor stripes on the line itself.
  *
  * ONE SLIDE FOR THE WHOLE COURSE. Every handicapped step is placed at the same fraction `u` of
  * its track, −1 at the near end and +1 at the far end, and a boat of TCF t is given the `u` at
@@ -54,23 +54,18 @@ export function geometry(snapshot) {
   if (!first?.port || first.port.latitude == null) return null;
   const origin = { latitude: first.port.latitude, longitude: first.port.longitude };
 
+  const n = steps.length;
+  const closed = !!snapshot.closed;
   const base = [];
-  const slide = [];
-  const ends = [];
+  const tracks = [];
   for (const step of steps) {
     const crossings = step.crossings ?? [];
     if (!crossings.length || crossings.some((c) => c.port?.latitude == null || c.starboard?.latitude == null)) return null;
     if (step.handicapWidthM != null && crossings.length === 1) {
-      const track = crossings[0];
-      const port = toLocal(origin, track.port);
-      const starboard = toLocal(origin, track.starboard);
-      // The server's choice of near end, on a snapshot. The editor draws a track before there
-      // is one, and the parallelogram is the same shape whichever end is called near.
-      const near = step.handicapNear === 'starboard' ? starboard : port;
-      const far = step.handicapNear === 'starboard' ? port : starboard;
+      const port = toLocal(origin, crossings[0].port);
+      const starboard = toLocal(origin, crossings[0].starboard);
       base.push(scale(add(port, starboard), 0.5));
-      slide.push(scale(sub(far, near), 0.5));
-      ends.push({ near, far });
+      tracks.push({ port, starboard });
     } else {
       // A gate is measured to the midpoint between its sides, successively, as the server does.
       let at = null;
@@ -79,12 +74,30 @@ export function geometry(snapshot) {
         at = at ? scale(add(at, m), 0.5) : m;
       }
       base.push(at);
-      slide.push({ x: 0, y: 0 });
-      ends.push(null);
+      tracks.push(null);
     }
   }
-  const n = steps.length;
-  const closed = !!snapshot.closed;
+  const prev = (i) => (i > 0 ? i - 1 : closed ? n - 1 : i);
+  const next = (i) => (i < n - 1 ? i + 1 : closed ? 0 : i);
+
+  // WHICH END IS NEAR: the server's word on a snapshot. The editor draws a track before there is
+  // one, and decides it by the server's rule — the end that makes the legs either side shorter,
+  // against the nominal neighbours — because on a rectangle it sets which way forward points.
+  const slide = [];
+  const ends = [];
+  steps.forEach((step, i) => {
+    const track = tracks[i];
+    if (!track) { slide.push({ x: 0, y: 0 }); ends.push(null); return; }
+    let portNear = step.handicapNear === 'port';
+    if (!step.handicapNear) {
+      const via = (end) => norm(sub(end, base[prev(i)])) + norm(sub(base[next(i)], end));
+      portNear = via(track.port) <= via(track.starboard);
+    }
+    const near = portNear ? track.port : track.starboard;
+    const far = portNear ? track.starboard : track.port;
+    slide.push(scale(sub(far, near), 0.5));
+    ends.push({ near, far });
+  });
   const legs = [];
   for (let i = 1; i < n; i += 1) legs.push([i - 1, i]);
   if (closed && n > 1) legs.push([n - 1, 0]);
@@ -93,8 +106,8 @@ export function geometry(snapshot) {
     nominalM: (snapshot.lengthNm ?? 0) * M_PER_NM,
     at: (i, u) => add(base[i], scale(slide[i], u)),
     slides: (i) => slide[i].x !== 0 || slide[i].y !== 0,
-    prev: (i) => (i > 0 ? i - 1 : closed ? n - 1 : i),
-    next: (i) => (i < n - 1 ? i + 1 : closed ? 0 : i),
+    prev,
+    next,
   };
 }
 
@@ -133,15 +146,12 @@ export function fractionFor(g, tcf) {
 }
 
 /**
- * Which way a boat's line runs at step `i`: `out` is the direction a boat crosses it going away
- * from the turn — the opposite of the average of the directions to the steps either side — and
- * the line lies square to it. Taken at the 1.000 geometry, so every boat's line at one step is
- * parallel to every other's.
+ * Which way a boat crosses its line at step `i`: along the track, from the near end towards the
+ * far, which is outward — the way the track takes a boat further round the course. The line
+ * lies square to it.
  */
 export function outward(g, i) {
-  const here = g.base[i];
-  const avg = add(unit(sub(g.base[g.prev(i)], here)), unit(sub(g.base[g.next(i)], here)));
-  return unit(scale(avg, -1));
+  return unit(sub(g.ends[i].far, g.ends[i].near));
 }
 
 /**
@@ -163,8 +173,8 @@ export function lineAt(g, i, u, widthM) {
 }
 
 /**
- * Everywhere a boat's line at step `i` can lie, as four positions round the parallelogram:
- * near end to port, far end to port, far end to starboard, near end to starboard.
+ * Everywhere a boat's line at step `i` can lie, as four positions round the rectangle: near end
+ * to port, far end to port, far end to starboard, near end to starboard.
  */
 export function envelope(snapshot, i, g = geometry(snapshot)) {
   const step = snapshot?.steps?.[i];
@@ -200,7 +210,7 @@ export function place(snapshot, tcf) {
 
 /**
  * The snapshot as THIS boat sails it: every handicapped step's track replaced by the boat's
- * own line, and the track and its parallelogram kept beside it for drawing.
+ * own line, and the track and its zone kept beside it for drawing.
  *
  * The revision is left alone — the boat sailed the published course, at its handicap — and
  * `handicap` on the result says what was placed. A snapshot with nothing handicapped, or with
@@ -234,24 +244,37 @@ export function personalise(snapshot, tcf) {
 }
 
 /**
- * The width a boat's line at step `i` would have for its edge to pass through `position`: twice
- * how far the position is from the track, measured along the line rather than square to the
- * track — the parallelogram's side, which is what the editor's width handle is dragged along.
+ * THE ZONE OF A HANDICAP LINE ON ITS OWN, with no course round it: the rectangle its boats' lines
+ * sweep, as four positions — port end to one side, starboard end to that side, starboard end to
+ * the other, port end to the other. Which side is which needs a course; the shape does not, so
+ * the editor draws it on the line itself.
  */
-export function widthThrough(g, i, position) {
-  if (!g?.ends[i]) return null;
-  const out = outward(g, i);
-  const left = { x: -out.y, y: out.x };
-  const d = sub(g.ends[i].far, g.ends[i].near);
-  const p = sub(toLocal(g.origin, position), g.ends[i].near);
-  const denominator = d.x * left.y - d.y * left.x;
-  if (denominator === 0) return null;
-  return Math.abs(2 * (d.x * p.y - d.y * p.x) / denominator);
+export function zone(port, starboard, widthM) {
+  if (!port || !starboard || !(widthM > 0)) return null;
+  const p = { x: 0, y: 0 };
+  const s = toLocal(port, starboard);
+  const along = unit(sub(s, p));
+  if (along.x === 0 && along.y === 0) return null;
+  const side = scale({ x: -along.y, y: along.x }, widthM / 2);
+  return [add(p, side), add(s, side), sub(s, side), sub(p, side)].map((q) => fromLocal(port, q));
 }
 
-/** Where the width handle sits: halfway along the port side of the parallelogram. */
-export function widthHandle(snapshot, i, g = geometry(snapshot)) {
-  const corners = envelope(snapshot, i, g);
+/**
+ * The width a handicap line would have for its zone's edge to pass through `position`: twice how
+ * far the position is from the line, square to it — what the editor's width grip is dragged by.
+ */
+export function widthThrough(port, starboard, position) {
+  if (!port || !starboard || !position) return null;
+  const s = toLocal(port, starboard);
+  const q = toLocal(port, position);
+  const length = norm(s);
+  if (length === 0) return null;
+  return Math.abs(2 * (s.x * q.y - s.y * q.x) / length);
+}
+
+/** Where the width grip sits: halfway along one long side of the zone. */
+export function widthHandle(port, starboard, widthM) {
+  const corners = zone(port, starboard, widthM);
   if (!corners) return null;
   return {
     latitude: (corners[0].latitude + corners[1].latitude) / 2,

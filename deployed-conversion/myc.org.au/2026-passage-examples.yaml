@@ -1,0 +1,273 @@
+# Manly Cove passage courses — the worked course from the brief, section 07, and a harbour
+# circuit.
+#
+# One file per club and series. The path is the identity: this file is filed under
+# clubs/myc.org.au/ and named 2026-passage-examples, so its club is "myc.org.au" and its
+# series is "2026-passage-examples". Nothing here is resolved from any other file.
+#
+# ---------------------------------------------------------------------------------
+# NOTHING IN THIS FILE IS A SURVEY. The positions below were placed by eye on a chart
+# in the editor, to have something to sail in the test rig. Real positions are to be
+# surveyed, not guessed, before anybody races these courses — a point left null loads,
+# and is reported as a problem by name rather than pretended.
+# ---------------------------------------------------------------------------------
+
+name: Example passage courses
+datum: WGS84
+
+notes: >
+  The example course from the project brief, in the originator's words: an east-west
+  start and finish line in Manly Cove, a line going infinitely due east from Sow and
+  Pigs reef, a line going infinitely south from Shark Island, a 100 m line in Obelisk
+  Bay parallel to the coast, a line going infinitely south from Sow and Pigs, then
+  finish. The required crossing senses below are INFERRED from the course order, not
+  stated by the originator, and must be confirmed before anybody races this.
+
+# Detection tuning for this series. Every number is a default set against data that
+# does not exist yet — they are configuration so they can be tuned against real logged
+# tracks from these waters rather than argued about.
+defaults:
+  confirmFixes: 3          # N in the 3-and-3 rule
+  accuracyBandM: null      # fixed half-width, or null to use each fix's stated accuracy
+  qc:
+    minSatellites: 4       # receiver-metadata pre-filter: necessary, not sufficient
+    maxAccuracyM: 25
+    maxSpeedKn: 40         # the kinematic gate — the primary defence against flyers
+
+# ---------------------------------------------------------------------------------
+# Points. Placed once, referred to by id, so a correction is one edit. Sow and Pigs
+# is shared by two lines, which is exactly why this section exists.
+# ---------------------------------------------------------------------------------
+points:
+  sow-and-pigs:
+    name: Sow and Pigs reef
+    latitude: -33.836894
+    longitude: 151.270799
+    notes: >
+      Shared fixed end of both Sow and Pigs lines.
+  shark-island:
+    name: Shark Island
+    latitude: -33.858848
+    longitude: 151.258084
+  bombora:
+    latitude: -33.814463
+    longitude: 151.273347
+  middle-head:
+    name: middle head
+    latitude: -33.825377
+    longitude: 151.267497
+  steel-point:
+    name: Steel Point
+    latitude: -33.851518
+    longitude: 151.264877
+
+# ---------------------------------------------------------------------------------
+# Lines. Two ends, named port and starboard: a FORWARD crossing leaves the port end to
+# port and the starboard end to starboard, and a REVERSE crossing does the opposite.
+# The names are relative to a forward crossing, so a line crossed both ways — the
+# Manly Cove line, which is both the start and the finish — is forward once and
+# reverse once.
+#
+# An end with `infinite: true` is a BEARING, NOT A PLACE: the line runs out through
+# that point and keeps going, so the point says which way the line goes and not where
+# it stops. That is why the rule needs no exception at infinity — an infinite end is
+# always on the side its name says, and only a finite end can be missed.
+#
+# Lines are defined here rather than inside a course because they are reused: the same
+# start line appears in every course a club sails.
+# ---------------------------------------------------------------------------------
+lines:
+  reef-beach:
+    name: Reef Beach
+    port:      {latitude: -33.804312, longitude: 151.276820}
+    starboard: {latitude: -33.805875, longitude: 151.278183}
+    notes: >
+      Runs 090/270 between two shore points, spanning the cove. Crossed southbound to start
+      and northbound to finish. Both ends on shore, so there is no near-end crossing to
+      dispute.
+  sowpigs-east:
+    name: Sow and Pigs, east
+    port:      {at: sow-and-pigs}
+    starboard: {latitude: -33.836974, longitude: 151.276293, infinite: true}
+    notes: >
+      Half-infinite, running 090 from the reef. Required crossing southbound.
+  shark-south:
+    name: Shark Island, south
+    port:      {at: shark-island}
+    starboard: {latitude: -33.862693, longitude: 151.258346, infinite: true}
+    notes: >
+      Half-infinite, running 180 from the island; shore-limited in practice, which is why it
+      can be infinite without being crossable at the far end. Crossed westbound.
+  sowpigs-south:
+    name: Sow and Pigs, south
+    port:      {at: sow-and-pigs}
+    starboard: {latitude: -33.838520, longitude: 151.270777, infinite: true}
+    notes: >
+      Half-infinite, running 180 from the same reef as sowpigs-east. The two lines share
+      their finite end, which is why sow-and-pigs is a named point.
+  shark-west:
+    name: Shark west
+    port:      {latitude: -33.858660, longitude: 151.253058, infinite: true}
+    starboard: {at: shark-island}
+  vaucluse:
+    port:      {latitude: -33.844799, longitude: 151.272004}
+    starboard: {latitude: -33.845571, longitude: 151.274483}
+  grotto-point:
+    name: Grotto Point
+    port:      {latitude: -33.817652, longitude: 151.262347}
+    starboard: {latitude: -33.824389, longitude: 151.264440}
+  bombora:
+    name: Bombora passing
+    port:      {at: bombora}
+    starboard: {latitude: -33.816223, longitude: 151.275927, infinite: true}
+  middle-head:
+    name: Middle Head passing
+    port:      {at: middle-head}
+    starboard: {latitude: -33.822718, longitude: 151.273117, infinite: true}
+  steel-point:
+    name: Steel Point
+    port:      {at: steel-point}
+    starboard: {latitude: -33.848437, longitude: 151.256330, infinite: true}
+  hunters:
+    name: Hunters Bay
+    port:      {latitude: -33.826060, longitude: 151.257093}
+    starboard: {latitude: -33.818730, longitude: 151.253400}
+  kirribilli:
+    port:      {latitude: -33.850018, longitude: 151.222919}
+    starboard: {latitude: -33.850997, longitude: 151.226032}
+  bradleys:
+    name: Bradleys Head
+    port:      {latitude: -33.860447, longitude: 151.246687, infinite: true}
+    starboard: {latitude: -33.852982, longitude: 151.246597}
+  eastern:
+    name: Eastern Channel
+    port:      {latitude: -33.841969, longitude: 151.276521, infinite: true}
+    starboard: {latitude: -33.841807, longitude: 151.271808}
+  western:
+    name: Western Channel
+    port:      {latitude: -33.839077, longitude: 151.260474, infinite: true}
+    starboard: {latitude: -33.840487, longitude: 151.264298}
+  north-head:
+    name: North Head
+    port:      {latitude: -33.830462, longitude: 151.306251, infinite: true}
+    starboard: {latitude: -33.823248, longitude: 151.299684}
+  long-reef:
+    name: Long Reef Variable
+    port:      {latitude: -33.707124, longitude: 151.347956}
+    starboard: {latitude: -33.779105, longitude: 151.331208}
+    handicapWidthM: 492
+  bondi:
+    name: Bondi Variable
+    port:      {latitude: -33.945383, longitude: 151.343915}
+    starboard: {latitude: -33.875386, longitude: 151.319260}
+    handicapWidthM: 484
+  macquarie:
+    name: Macquarie Light
+    port:      {latitude: -33.850791, longitude: 151.304040, infinite: true}
+    starboard: {latitude: -33.853962, longitude: 151.285228}
+  hornby:
+    name: Hornby Light
+    port:      {latitude: -33.826779, longitude: 151.281194, infinite: true}
+    starboard: {latitude: -33.833624, longitude: 151.281022}
+  port-jackson:
+    name: Port JAckson Variable
+    port:      {latitude: -33.852605, longitude: 151.251077}
+    starboard: {latitude: -33.842373, longitude: 151.265783}
+    handicapWidthM: 388
+  grotto:
+    name: Grotto Variable
+    port:      {latitude: -33.821694, longitude: 151.257055}
+    starboard: {latitude: -33.821146, longitude: 151.265960}
+    handicapWidthM: 205
+  manly-cove:
+    name: Manly Cove
+    port:      {latitude: -33.801743, longitude: 151.279912}
+    starboard: {latitude: -33.802515, longitude: 151.280827}
+
+# ---------------------------------------------------------------------------------
+# Courses. A sequence of steps; THE FIRST STEP IS THE START AND THE LAST IS THE
+# FINISH, so there are no roles to write down and nothing that can disagree with the
+# order. The letters drawn on a course diagram (S, 1, 2, … F) are derived from
+# position for the same reason.
+#
+# A leg is measured between the midpoints of consecutive lines' two defined points.
+# `lengthNm` on a step overrides the leg INTO that step, for a length that is a matter
+# of record rather than of geometry.
+# ---------------------------------------------------------------------------------
+courses:
+  harbour-cycle:
+    name: Sydney Harbour Cycle
+    public: true
+    variants:
+      all-boats-circuit:
+        name: All boats circuit
+        closed: true
+        sequence:
+          - {line: reef-beach, cross: forward, entry: true}
+          - {line: manly-cove, cross: forward}
+          - {line: bombora, cross: reverse}
+          - {line: middle-head, cross: reverse}
+          - {line: steel-point, cross: forward}
+          - {line: shark-south, cross: reverse, entry: true}
+          - {line: bradleys, cross: forward}
+          - {line: kirribilli, cross: forward, entry: true}
+          - {line: bradleys, cross: reverse, entry: true}
+          - {line: steel-point, cross: reverse}
+          - {line: vaucluse, cross: forward, entry: true}
+          - {line: middle-head, cross: forward}
+          - {line: hunters, cross: reverse}
+          - {line: grotto-point, cross: forward, entry: true}
+          - {line: bombora, cross: forward}
+  distance-offshore:
+    name: Distance Corrected Offshore
+    public: true
+    variants:
+      div-all:
+        name: All Divisions
+        sequence:
+          - {line: sowpigs-east, cross: forward}
+          - {line: hornby, cross: forward}
+          - {line: north-head, cross: reverse}
+          - {line: long-reef, cross: forward}
+          - {line: bondi, cross: forward}
+          - {line: hornby, cross: reverse}
+          - {line: sowpigs-east, cross: reverse}
+  distance-inshore:
+    name: Distance Corrected Inshore
+    public: true
+    variants:
+      div-all-ne:
+        name: All Division NE
+        sequence:
+          - {line: reef-beach, cross: forward}
+          - {line: manly-cove, cross: forward}
+          - {line: bombora, cross: reverse}
+          - {line: grotto, cross: forward}
+          - {line: middle-head, cross: reverse}
+          - {line: sowpigs-east, cross: reverse}
+          - {line: port-jackson, cross: forward}
+          - {line: sowpigs-east, cross: forward}
+          - {line: middle-head, cross: forward}
+          - {line: grotto, cross: forward}
+          - {line: bombora, cross: forward}
+          - {line: reef-beach, cross: forward}
+
+races:
+  20260919-race-1:
+    name: Race 1
+    date: 2026-09-19
+    format: fleet
+    divisions:
+      open: {course: manly-to-shark}
+  20260919-race-2:
+    name: Race 2
+    date: 2026-09-19
+    format: fleet
+    divisions:
+      open: {course: harbour-cycle}
+  20260919-race-3:
+    name: Race 3
+    date: 2026-09-19
+    format: fleet
+    divisions:
+      open: {course: manly-to-shark}

@@ -14,8 +14,8 @@
 #      when real marks arrive, a gate with a virtual line one side and a buoy the
 #      other is just a list with one of each in it.
 #
-#   3. A HANDICAP BY DISTANCE. The `handicap` course's windward step names a track rather
-#      than a line to cross, and gives each boat's own line a width. Every boat's line is
+#   3. A HANDICAP BY DISTANCE. The `windward-track` line has a width, which makes it a
+#      track rather than a line to cross: every boat is given its own line that wide,
 #      placed along the track by its TCF, so the fleet starts and finishes together and
 #      the first boat home wins on handicap.
 #
@@ -50,9 +50,10 @@ lines:
     name: Windward handicap track
     port:      {latitude: -33.816300, longitude: 151.273680}
     starboard: {latitude: -33.818000, longitude: 151.273680}
+    handicapWidthM: 80
     notes: >
-      Runs up the course axis from below the windward line to above it. Not crossed
-      itself: a handicapped step places each boat's own line along it by its TCF.
+      Runs up the course axis from below the windward line to above it. A handicap
+      line: never crossed itself, each boat's own line is placed along it by its TCF.
 
 courses:
   windward-leeward:
@@ -143,5 +144,5 @@ courses:
         name: One lap
         sequence:
           - {line: leeward, cross: forward}
-          - {line: windward-track, cross: forward, handicapWidthM: 80}
+          - {line: windward-track, cross: forward}
           - {line: leeward, cross: reverse}

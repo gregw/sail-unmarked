@@ -8,7 +8,7 @@
 
 import { fromLocal, toLocal, prepareLine, signedDistanceM } from './crossing.js';
 import {
-  envelope, fractionFor, geometry, handicapped, outward, personalise, place, tcfAt,
+  envelope, fractionFor, geometry, handicapped, outward, personalise, place, tcfAt, widthThrough, zone,
 } from './handicap.js';
 import { RaceClient } from './raceclient.js';
 import { overview } from './markscreen.js';
@@ -115,7 +115,7 @@ export function run(check) {
 
   // ------------------------------------------------------------ a right-angle turn
   // North up the first leg to a corner at (0, 1000), then east. The track runs out along the
-  // bisector, north-west, and the line lies square to it.
+  // bisector, north-west, and the line lies square to it — square to the TRACK, always.
   const CORNER = {
     closed: false,
     lengthNm: 2000 / 1852,
@@ -172,4 +172,31 @@ export function run(check) {
   check('each stripe is one of the possible lines, joining the two long sides',
     drawn.includes('M0.0,0.0L0.0,30.0') && drawn.includes('M60.0,0.0L60.0,30.0'));
   check('...and there is nothing to stripe without four corners', stripes(null) === '');
+
+  // ------------------------------------------------------------ square to the track
+  // The same corner with the track drawn due north from it rather than out along the bisector: a
+  // boat's line is square to the track as drawn, not to the turn, so it runs east–west and is
+  // crossed northbound, and the zone is a rectangle on the track.
+  const SKEWED = {
+    ...CORNER,
+    steps: [CORNER.steps[0], { ...CORNER.steps[1], handicapNear: undefined,
+      crossings: [crossing('corner', 0, 1100, 0, 900)] }, CORNER.steps[2]],
+  };
+  const sg = geometry(SKEWED);
+  const north = outward(sg, 1);
+  check('a boat\'s line is square to the track, whatever the turn: here crossed due north',
+    near(north.x, 0, 1e-9) && near(north.y, 1, 1e-9));
+  check('...the near end found the server\'s way when the snapshot does not say: the south one',
+    near(sg.ends[1].near.y, 900));
+  const box = envelope(SKEWED, 1).map(local);
+  check('...and the zone is a rectangle along the track',
+    near(box[0].x, box[1].x) && near(box[2].x, box[3].x) && near(Math.abs(box[0].x - box[3].x), 40));
+
+  // ------------------------------------------------------------ a line on its own
+  const alone = zone(at(0, 0), at(0, 200), 60).map(local);
+  check('a handicap line\'s zone needs no course: its two ends, widened square to it',
+    alone.length === 4 && near(Math.abs(alone[0].x - alone[3].x), 60) && near(alone[0].y, 0) && near(alone[1].y, 200));
+  check('...and the width grip measures square to the line',
+    near(widthThrough(at(0, 0), at(0, 200), at(45, 120)), 90));
+  check('...and there is no zone without a width', zone(at(0, 0), at(0, 200), null) === null);
 }

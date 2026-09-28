@@ -599,27 +599,26 @@ public class ProgrammeWriterTest
     @Test
     public void aHandicapWidthIsWrittenAndReadBack() throws Exception
     {
-        // A new field in the programme file has to reach the disk and come back, inline and
-        // in block form both; a field the writer drops works on screen and nowhere else.
-        Map<String, Course> courses = new LinkedHashMap<>();
-        courses.put("handicap", flat("handicap", "Handicap", false, null,
-            new CourseStep("start", Direction.FORWARD, null, null, false, null),
-            new CourseStep("top", Direction.FORWARD, null, null, false, null, 60.0),
-            new CourseStep("bottom", Direction.FORWARD, null, null, false, "Noted.", 42.5),
-            new CourseStep("start", Direction.FORWARD, null, null, false, null)));
-        String yaml = ProgrammeWriter.emitCourses(courses);
-        assertThat(yaml, containsString("      - {line: top, cross: forward, handicapWidthM: 60}\n"));
-        assertThat(yaml, containsString("        handicapWidthM: 42.5\n"));
-        assertThat(yaml, containsString("      - {line: start, cross: forward}\n"));
+        // A new field in the programme file has to reach the disk and come back; a field the
+        // writer drops works on screen and nowhere else.
+        Map<String, Line> lines = new LinkedHashMap<>();
+        lines.put("track", new Line("track", "Windward track",
+            new LineEnd(null, -33.81, 151.27, false, null), new LineEnd(null, -33.82, 151.27, false, null),
+            null, 42.5));
+        lines.put("plain", new Line("plain", null,
+            new LineEnd(null, -33.83, 151.27, false, null), new LineEnd(null, -33.83, 151.28, false, null),
+            null));
+        String yaml = ProgrammeWriter.emitLines(lines);
+        assertThat(yaml, containsString("    handicapWidthM: 42.5\n"));
+        assertThat("only on the track", yaml.indexOf("handicapWidthM"), is(yaml.lastIndexOf("handicapWidthM")));
 
-        CourseVariant back = new com.fasterxml.jackson.databind.json.JsonMapper.Builder(
+        Map<String, Line> back = new com.fasterxml.jackson.databind.json.JsonMapper.Builder(
             new com.fasterxml.jackson.databind.json.JsonMapper(
                 new com.fasterxml.jackson.dataformat.yaml.YAMLFactory()))
             .build()
-            .readValue(yaml, Programme.class).courses().get("handicap").variant(CourseVariant.MAIN);
-        assertThat(back.sequence().get(1).handicapWidthM(), is(60.0));
-        assertThat(back.sequence().get(2).handicapWidthM(), is(42.5));
-        assertThat(back.sequence().get(0).handicapped(), is(false));
+            .readValue(yaml, Programme.class).lines();
+        assertThat(back.get("track").handicapWidthM(), is(42.5));
+        assertThat(back.get("plain").handicapped(), is(false));
     }
 
     @Test

@@ -386,7 +386,7 @@ export function arrowHead(at, angle, size = 5) {
 }
 
 /**
- * How a handicap's parallelogram is drawn: the stripes every so many pixels, and how faint.
+ * How a handicap's zone is drawn: the stripes every so many pixels, and how faint.
  *
  * Faint on purpose. It is not a line anybody crosses — it is everywhere somebody else's line
  * might be — and it has to read as a region under the course rather than as more course.
@@ -394,7 +394,7 @@ export function arrowHead(at, angle, size = 5) {
 export const STRIPES = { spacingPx: 6, opacity: 0.32, outline: 0.5, widthPx: 1 };
 
 /**
- * EVERYWHERE A BOAT'S LINE CAN LIE at a handicapped step, as a striped parallelogram.
+ * EVERYWHERE A BOAT'S LINE CAN LIE at a handicapped step, as a striped rectangle.
  *
  * `corners` are the four screen points `handicap.js`'s `envelope` gives, in order: near end to
  * port, far end to port, far end to starboard, near end to starboard. Each stripe joins the
@@ -413,7 +413,7 @@ export function stripes(corners, options = {}) {
     Math.hypot(farPort.x - nearPort.x, farPort.y - nearPort.y),
     Math.hypot(farStarboard.x - nearStarboard.x, farStarboard.y - nearStarboard.y),
   );
-  // Capped, so a parallelogram zoomed to fill a big screen is a few hundred strokes and not
+  // Capped, so a zone zoomed to fill a big screen is a few hundred strokes and not
   // thousands.
   const count = Math.min(400, Math.max(2, Math.round(lengthPx / spacing)));
   const lerp = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });

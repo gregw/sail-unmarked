@@ -29,18 +29,39 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  *
  * <p>Putting a finite end on shore is the ordinary way to take a near-end dispute off the
  * table without making the line infinite. No boat sails there, so the end costs nothing.
+ *
+ * <h2>A handicap line</h2>
+ * {@code handicapWidthM} makes this line a TRACK for a handicap by distance: it is never crossed
+ * itself, and each boat is given its own line, {@code handicapWidthM} wide and square to it,
+ * placed along it by its TCF. Every step naming it is handicapped, so the zone the boats' lines
+ * sweep is a rectangle that belongs to the line and can be drawn without a course. A line is
+ * one thing or the other, never both — see {@link Handicap}.
  */
 public record Line(
     @JsonProperty("id") String id,
     @JsonProperty("name") String name,
     @JsonProperty("port") LineEnd port,
     @JsonProperty("starboard") LineEnd starboard,
-    @JsonProperty("notes") String notes)
+    @JsonProperty("notes") String notes,
+    @JsonProperty("handicapWidthM") Double handicapWidthM)
 {
     public Line
     {
         if (name == null || name.isBlank())
             name = id;
+    }
+
+    /** A line that is crossed as itself, which is every line but a handicap track. */
+    public Line(String id, String name, LineEnd port, LineEnd starboard, String notes)
+    {
+        this(id, name, port, starboard, notes, null);
+    }
+
+    /** True when this line is a handicap track rather than a line to cross. */
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    public boolean handicapped()
+    {
+        return handicapWidthM != null;
     }
 
     /** True when neither end stops, so the line divides the world in two. */

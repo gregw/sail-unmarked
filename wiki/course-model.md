@@ -297,20 +297,21 @@ together, sails a course whose length is its TCF times the nominal one, and the 
 wins on handicap. Implemented in `model/Handicap.java` (what makes a course correctable, and the
 TCFs it can take) and `client/www/handicap.js` (where one boat's lines go).
 
-**It is a property of a step, not of a line.** A step with `handicapWidthM` does not ask a boat to
-cross the line it names. That line is the **track** each boat's own line is centred on: its midpoint
-is where a 1.000 boat's line sits, the **near** end — the one that makes the legs either side
-shortest — is the lowest TCF the course can take, and the far end is the highest. Each boat's line
-is `handicapWidthM` wide and square to the average of the directions to the steps either side, and
-every boat's line at one step has that same orientation, so together they sweep a parallelogram the
-editor stripes. Whether a line *can* be a track depends on the legs either side of it, which only a
-course has; hence the step.
+**It is a property of the line.** A line with `handicapWidthM` is a **track**, and a step naming it
+does not ask a boat to cross it: each boat's own line is centred on it. The midpoint is where a 1.000
+boat's line sits, the **near** end — the one that makes the legs either side shortest — is the lowest
+TCF the course can take, and the far end is the highest. Each boat's line is `handicapWidthM` wide and
+**square to the track**, crossed forward going out along it from the near end, so together they sweep
+a rectangle that belongs to the line and is drawn on it in the editor. A line is never suitable as
+both a track and a line to cross, so the width is the line's and every step naming it is handicapped;
+whether a course can use it — the legs either side — is checked per course.
 
 ```yaml
-sequence:
-  - {line: leeward, cross: forward}
-  - {line: windward-track, cross: forward, handicapWidthM: 80}
-  - {line: leeward, cross: reverse}
+lines:
+  windward-track:
+    port:      {latitude: -33.816300, longitude: 151.273680}
+    starboard: {latitude: -33.818000, longitude: 151.273680}
+    handicapWidthM: 80
 ```
 
 **A TCF becomes a distance linearly.** A boat of TCF *t* sails *t* × *D*, where *D* is the nominal
@@ -328,16 +329,15 @@ straight lines, so the length is convex in *u* and one bisection finds it. The c
 
 | Problem | Why |
 |---|---|
-| a track that is a start, finish or cycle entry anywhere in the course | one line has one width, and a start is crossed as itself |
-| a handicapped gate, or a side of one | a boat's line is one line |
+| a track named as a start, finish or cycle entry | a start and a finish are crossed as themselves, and a track never is |
+| a track as a side of a gate | a boat's line is one line |
 | a track with an infinite end | a finite track is what lets the designer see every line a boat could be given — nobody has to check to infinity that none of them is on an island |
-| two passings of one line with different widths | one line is one piece of water; the editor sets every passing at once |
 | a `lengthNm` on a leg into or out of a handicapped step | a fixed length cannot stretch |
-| legs more than 90° apart, at either end of the track or its middle | the line lies square to their average, and past a right angle that is a passage, not a turn |
+| legs more than 90° apart, at either end of the track or its middle | past a right angle the step is a passage, not a turn, and pushing a track out from a passage lengthens it by next to nothing |
 | a leg that gets shorter as the tracks slide out | the track has to run away from both of its neighbours |
 
 **Who works out what.** The server says which TCFs a course takes — `tcfMin`, `tcfMax` on the
-snapshot, `handicapNear` on each handicapped step — and refuses a join without a TCF or outside
+snapshot, the line's width and `handicapNear` on each handicapped step — and refuses a join without a TCF or outside
 the range. **The boat places its own lines**, from the snapshot, with no network: which line it
 must cross is part of deciding its race. The record carries the lines it was given
 (`CourseRecord.handicap`), which is also what tells the results pages its elapsed time is already
