@@ -269,9 +269,11 @@ in blues and greens and from the cyan COG.
 - **The display SWINGS rather than snapping** (`Turner`, `TURN_DEG_S`). Snapping through ninety degrees
   destroys the one thing an oriented display is for. Eased against real time, not per render. **The displayed
   bearing is not part of the frame's identity**, or a frame rebuilt on every degree of a swing would never
-  hold still. Fifty degrees a second, and **about the BOAT** (`pivotCentre`): the Mark screen's held frame
-  is turned about it, and the overview is fitted for the bearing it is turning to and turned there about
-  it, so the boat stays put on the screen and the world goes round it.
+  hold still. Fifty degrees a second, **every turn eased** — switching into North up included — and **the
+  boat glides with it** (`Glide`): a new orientation puts the boat somewhere else on the screen and at
+  another scale, and both are eased toward that in step with the turn, arriving exactly as it does. So
+  the boat neither jumps at the switch nor mid-turn when the bearing aimed at drifts or the frame refits;
+  a target that moves on the way is taken up over the rest of the turn.
 - **Leg up is the leg the boat is ON** — `legInto`, mark behind to mark ahead — which is not the leg the arrow
   points at. Mark to mark, never boat to mark, or the display would swing on every tack. **One definition,
   shared by both screens.** The exception is the dwell after a cross, where the brief is explicit and the two

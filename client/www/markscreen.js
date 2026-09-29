@@ -50,10 +50,10 @@ import { TRAIL_IN_VIEW, bearingLocal, clock } from './raceclient.js';
  * a shake.
  */
 export const ORIENTATIONS = {
-  north: { label: 'North up', turns: false },
-  cog: { label: 'COG up', turns: true },
-  leg: { label: 'Leg up', turns: true },
-  perp: { label: 'Line perp', turns: true },
+  north: { label: 'North up' },
+  cog: { label: 'COG up' },
+  leg: { label: 'Leg up' },
+  perp: { label: 'Line perp' },
 };
 
 /**
@@ -598,6 +598,63 @@ export function pivotCentre(centre, pivot, from, to) {
 }
 
 /**
+ * THE CENTRE THAT PUTS `pivot` AT `at` ON THE SCREEN, at bearing `up` and `scale` — the inverse of
+ * `projector` for one point. What a glide needs: it decides where the boat is drawn, and the
+ * picture is placed round that.
+ */
+export function centreFor(pivot, at, up, scale, width, height) {
+  const radians = (up * Math.PI) / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  const a = (at.x - width / 2) / scale;
+  const b = -(at.y - height / 2) / scale;
+  return { x: pivot.x - (a * cos + b * sin), y: pivot.y - (-a * sin + b * cos) };
+}
+
+/**
+ * THE BOAT GLIDES TO WHERE THE NEW ORIENTATION PUTS IT, while the picture turns.
+ *
+ * A change of orientation changes two things: which way is up, and — because the picture is
+ * fitted to what is on it — where the boat sits and how close in the view is. The turn was already
+ * eased; the other two were not, so the boat jumped to its new place and the world then swung
+ * round it, and in COG up and Leg up, where the bearing aimed at drifts with every fix, it jumped
+ * again mid-turn.
+ *
+ * So the boat's place on the screen and the scale are eased too, and in step with the turn: each
+ * frame they close on the target by the same fraction of what is left that the turn closed of
+ * what was left of it. They arrive exactly when the turn does, and a target that moves on the way
+ * — a refit, a new COG — is taken up smoothly over the rest of the turn instead of shown as a
+ * jump. Not turning, there is nothing to ease and the target is drawn as it is.
+ */
+export class Glide {
+  constructor() {
+    this.drawn = null;        // { at: {x, y} on the screen, scale } as last drawn
+    this.remaining = 0;       // degrees of turn left when it was
+  }
+
+  step(target, remaining) {
+    const left = Math.abs(remaining);
+    if (!this.drawn || left < 0.5) {
+      this.drawn = target;
+    } else {
+      // The part of what was left that this frame's turn closed. A turn that grew — the bearing
+      // aimed at moved away — closes nothing this frame and the rest is spread over what is left.
+      const was = Math.max(this.remaining, left);
+      const k = was > 0 ? Math.min(1, Math.max(0, (was - left) / was)) : 1;
+      this.drawn = {
+        at: {
+          x: this.drawn.at.x + (target.at.x - this.drawn.at.x) * k,
+          y: this.drawn.at.y + (target.at.y - this.drawn.at.y) * k,
+        },
+        scale: this.drawn.scale * (target.scale / this.drawn.scale) ** k,
+      };
+    }
+    this.remaining = left;
+    return this.drawn;
+  }
+}
+
+/**
  * The frame the Mark screen is holding: where it is centred, how close in, and which way up.
  *
  * State, deliberately, and owned by the page rather than by the drawing — the plot is handed
@@ -606,6 +663,7 @@ export function pivotCentre(centre, pivot, from, to) {
  */
 export class PlotView {
   constructor() {
+    this.glide = new Glide();
     this.centre = null;
     this.scale = null;
     this.subject = null;
@@ -799,9 +857,9 @@ export function plot(state, options = {}) {
   const view = options.view ?? new PlotView();
   // The bearing WANTED is derived from the course; the bearing SHOWN chases it, so a boat
   // crossing onto a new leg watches the world swing round rather than finding it already
-  // swung. North up never turns and snaps by construction.
-  const up = view.turn(upBearing(state, orientation), !!ORIENTATIONS[orientation]?.turns,
-    options.now ?? Date.now());
+  // swung. ALWAYS EASED, North up included: North up never turns while it is up, but switching INTO it
+  // is a turn like any other, and snapping it was the jump the sailor saw.
+  const up = view.turn(upBearing(state, orientation), true, options.now ?? Date.now());
   const radians = (up * Math.PI) / 180;
   const cos = Math.cos(radians);
   const sin = Math.sin(radians);
@@ -908,7 +966,7 @@ export function plot(state, options = {}) {
   // ...and then held still, so the boat is seen to move across it. Without a view passed in
   // this is a fresh fit every frame, which is what the specs that draw one picture want and
   // what nothing on screen should use.
-  const { centre, scale } = view.frame({
+  const framed = view.frame({
     up,
     subject: `${state.step.index}:${state.watched.line}:${state.lap ?? 1}:${orientation}`,
     centre: wantCentre,
@@ -923,6 +981,13 @@ export function plot(state, options = {}) {
     width,
     height,
   });
+  // The boat glides to where the frame puts it while the display turns (`Glide`), so a change of
+  // orientation — or a reframe that lands mid-turn — is eased rather than jumped.
+  const glide = view.glide.step({
+    at: projector(framed.centre, up, framed.scale, width, height)(boat), scale: framed.scale,
+  }, turnBetween(view.up ?? up, view.wantedUp ?? up));
+  const scale = glide.scale;
+  const centre = centreFor(boat, glide.at, up, scale, width, height);
   const to = projector(centre, up, scale, width, height);
 
   // EVERYWHERE ANYBODY'S LINE MAY BE, on a step handicapped by distance, faintly and first:
@@ -1742,6 +1807,7 @@ export const OVERVIEW_INK = {
  */
 export class OverviewView {
   constructor() {
+    this.glide = new Glide();
     this.zoom = 1;
     this.pan = { x: 0, y: 0 };
     this.anchor = null;
@@ -1865,8 +1931,7 @@ export function overview(client, options = {}) {
   // frame still would let a boat sail off the edge of its own course. It is the Mark screen,
   // where the question is "am I closing this line", that has to hold still.
   const turner = options.turner ?? new Turner();
-  const up = turner.turn(overviewUp(client, orientation), !!ORIENTATIONS[orientation]?.turns,
-    options.now ?? Date.now());
+  const up = turner.turn(overviewUp(client, orientation), true, options.now ?? Date.now());
   // FITTED FOR WHERE IT IS TURNING TO, and turned there about the boat. Fitted at every
   // intermediate bearing instead, the picture would re-fit through the whole swing and carry
   // the boat round the screen with it; this way the boat holds still, the course goes round it,
@@ -1903,8 +1968,18 @@ export function overview(client, options = {}) {
     const v = (held.centre.y * cos + held.centre.x * sin) + view.pan.y / scale;
     return { x: u * cos + v * sin, y: v * cos - u * sin };
   })();
-  const centre = client.point ? pivotCentre(aimed, client.point, aim, up) : aimed;
-  const to = projector(centre, up, scale, width, height);
+  // Where the boat will be at the bearing turned to, and how close in — eased there with the
+  // turn (`Glide`), and the picture placed round wherever the boat is drawn.
+  let centre = aimed;
+  let drawnScale = scale;
+  if (client.point) {
+    const glide = view.glide.step({
+      at: projector(aimed, aim, scale, width, height)(client.point), scale,
+    }, turnBetween(up, aim));
+    drawnScale = glide.scale;
+    centre = centreFor(client.point, glide.at, up, drawnScale, width, height);
+  }
+  const to = projector(centre, up, drawnScale, width, height);
 
   // THE BACKGROUND FIRST, so every line, triangle and letter of the course draws over it.
   // With no chart the same slider says how light the background is instead: a white wash over
@@ -1914,7 +1989,7 @@ export function overview(client, options = {}) {
     // faded mark, and the rule that nothing on the overview is drawn faint is about the marks.
     ? `<rect class="basemap" data-ink="fill-opacity" x="0" y="0" width="${width}" height="${height}"`
       + ` fill="#fff" fill-opacity="${Math.min(1, options.backgroundLight ?? 0)}"/>`
-    : basemapArt(options.basemap, centre, client.origin, scale, width, height, up,
+    : basemapArt(options.basemap, centre, client.origin, drawnScale, width, height, up,
       options.basemapInk ?? BASEMAP_INK);
 
   // How many crossings each line carries, so the ones that repeat can be seated along it

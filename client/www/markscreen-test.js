@@ -61,6 +61,8 @@ import {
   plot,
   pivotCentre,
   projector,
+  Glide,
+  centreFor,
   statusLine,
   upBearing,
   waypointRow,
@@ -617,6 +619,52 @@ export function run(check) {
     return flown;
   })();
   const imagesIn = (svg) => (svg.match(/<image/g) || []).length;
+
+  /*
+   * A CHANGE OF ORIENTATION GLIDES. A boat sailing east, drawn North up and then switched to COG
+   * up: a quarter turn. The boat must not jump when the switch is made, must be on its way
+   * part-way through, and must land exactly where COG up puts it when the turn ends.
+   */
+  const gEastward = (() => {
+    const flown = new RaceClient(snapshot);
+    let when = 0;
+    for (let e = -200; e <= 0; e += 20) {
+      const p = at(e, -200);
+      flown.accept({ latitude: p.latitude, longitude: p.longitude, time: new Date((when += 1000)),
+        accuracyM: 3, satellites: 12, sogKn: 9, cogDeg: 90 });
+    }
+    return flown;
+  })();
+  const boatOnG = (svg) => (/translate\(([-\d.]+),([-\d.]+)\) rotate/.exec(svg) ?? []).slice(1, 3).map(Number);
+  const sameSpotG = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.5;
+  const gTurning = new Turner();
+  const gGliding = new OverviewView();
+  const gDrawAt = (orientation, now) => overview(gEastward,
+    { orientation, width: 400, height: 330, turner: gTurning, view: gGliding, now });
+  const gNorthUp = boatOnG(gDrawAt('north', 0));
+  const gAtSwitch = boatOnG(gDrawAt('cog', 0));
+  const gPartWay = boatOnG(gDrawAt('cog', 900));
+  const gLanded = boatOnG(gDrawAt('cog', 10000));
+  const gAimedFor = boatOnG(overview(gEastward, { orientation: 'cog', width: 400, height: 330 }));
+  check('switching orientation does not jump the boat: it is where it was when the switch is made',
+    sameSpotG(gNorthUp, gAtSwitch));
+  check('...it is on its way part-way through the turn',
+    !sameSpotG(gPartWay, gNorthUp) && !sameSpotG(gPartWay, gAimedFor));
+  check('...and lands exactly where the new orientation puts it as the turn ends', sameSpotG(gLanded, gAimedFor));
+
+  const glider = new Glide();
+  glider.step({ at: { x: 0, y: 0 }, scale: 1 }, 0);
+  const halfway = glider.step({ at: { x: 100, y: 0 }, scale: 4 }, 90);
+  const moved = glider.step({ at: { x: 100, y: 0 }, scale: 4 }, 45);
+  check('a glide closes on its target by the share of the turn done', halfway.at.x === 0
+    && Math.abs(moved.at.x - 50) < 1e-9 && Math.abs(moved.scale - 2) < 1e-9);
+  const jumped = glider.step({ at: { x: 300, y: 0 }, scale: 4 }, 45);
+  check('...and a target that jumps while the turn stands still does not jump the boat',
+    Math.abs(jumped.at.x - 50) < 1e-9);
+  check('...arriving when the turn does', glider.step({ at: { x: 300, y: 0 }, scale: 4 }, 0).at.x === 300);
+  const cf = centreFor({ x: 30, y: -40 }, { x: 120, y: 80 }, 37, 2.5, 400, 330);
+  const placed = projector(cf, 37, 2.5, 400, 330)({ x: 30, y: -40 });
+  check('centreFor puts the point where it was asked for', Math.abs(placed.x - 120) < 1e-9 && Math.abs(placed.y - 80) < 1e-9);
 
   // THE LINE THE BOAT IS HEADING FOR is drawn in the same colour as the triangle on it, and
   // thicker. It was the same blue as every other line, so the one thing worth finding on the
