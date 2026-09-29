@@ -1594,7 +1594,7 @@ export function markScreen(state, options = {}) {
       <span class="mono">${esc(hhmmss(state.time))}</span>
       <span class="mono muted">GPS ${state.satellites ?? '—'} SV</span>
       <span class="sp"></span>
-      <strong class="disp">MARK ${esc(state.letter ?? state.step.letter)}</strong>
+      <strong class="disp" data-list="open" title="the course, as a list">MARK ${esc(state.letter ?? state.step.letter)} &#9662;</strong>
       <!--
         A cycle's start is a CHOICE of lines rather than a position in the sequence, so there
         is no "3 of 12" to print for it — the boat is at none of them yet. It says "start"
@@ -1647,8 +1647,10 @@ export function distanceTo(metres) {
  * choice is made both are the target and DTW is measured to the point between them.
  */
 export function waypointRow(waypoint) {
-  if (!waypoint) return '<div class="wpt"><span class="muted">Nothing to steer for.</span></div>';
-  return `<div class="wpt">
+  if (!waypoint) return '<div class="wpt" data-list="open"><span class="muted">Nothing to steer for.</span></div>';
+  // THE NEXT LINE OPENS THE COURSE, as a list — the way to see what comes after it, and, from
+  // the list, to choose a different line to sail to next. See `courseListPanel`.
+  return `<div class="wpt" data-list="open" title="the course, as a list">
     <span class="letter">${esc(waypoint.letter)}</span>
     <span class="name mono">${esc(waypoint.lines.join('  /  '))}</span>
     ${waypoint.gate ? '<span class="mono muted gate">gate</span>' : ''}
@@ -1659,7 +1661,49 @@ export function waypointRow(waypoint) {
       choice, or a boat heading for one line would think it was the only one.
     -->
     ${waypoint.starts > 1 ? `<span class="mono muted gate">1 of ${waypoint.starts} starts</span>` : ''}
+    <span class="more">&#9662;</span>
   </div>`;
+}
+
+/**
+ * THE COURSE AS A LIST: every line, in the order this boat sails them, and — where the boat may —
+ * a way to make a different one the next.
+ *
+ * <b>Two presses to go anywhere, and they are not the same button.</b> Tapping a line only
+ * PROPOSES it: the row is marked and a separate "Go to" button appears below the list, with
+ * Cancel beside it. A tap on the wrong row in a moving boat therefore changes nothing, and the
+ * change is made only by a press somebody meant, on a button that names where it goes.
+ *
+ * Lines that cannot be gone to are listed all the same, without the offer: the list is the
+ * course first, and a way to change the next line only where that is allowed (`gotoTarget`).
+ */
+export function courseListPanel(client, pending = null) {
+  const rows = client.courseList();
+  const target = rows.find((row) => row.index === pending && row.goto) ?? null;
+  const offers = rows.some((row) => row.goto);
+  return `
+    <div class="bar">
+      <strong class="disp">COURSE</strong>
+      <span class="mono muted">${esc(client.snapshot.name ?? client.snapshot.course)}</span>
+      <span class="sp"></span>
+      <button class="plain" id="list_close">Close</button>
+    </div>
+    <ol class="clist">${rows.map((row) => `
+      <li class="${[row.next ? 'next' : '', row.done ? 'done' : '', row.start ? 'start' : '',
+        target && row.index === target.index ? 'pending' : ''].filter(Boolean).join(' ')}"${row.goto
+        ? ` data-goto="${row.index}"` : ''}>
+        <span class="letter">${esc(row.letter)}</span>
+        <span class="name mono">${esc(row.lines.join('  /  '))}</span>
+        <span class="leg mono">${row.legNm == null ? '' : `${row.legNm.toFixed(2)} nm`}</span>
+        <span class="state mono">${row.next ? 'next' : row.done ? '&check;' : row.start ? 'start?' : ''}</span>
+      </li>`).join('')}
+    </ol>
+    ${target
+    ? `<div class="confirm">
+        <button class="go" id="goto_confirm">Go to ${esc(target.letter)} &middot; ${esc(target.lines.join(' / '))}</button>
+        <button class="plain" id="goto_cancel">Cancel</button>
+      </div>`
+    : offers ? `<p class="muted clist-hint">Tap a line to make it the next one.</p>` : ''}`;
 }
 
 /**

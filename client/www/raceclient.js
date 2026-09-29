@@ -345,15 +345,18 @@ export class RaceClient {
     this.entries = this.snapshot.closed ? this.steps.filter((step) => step.entry) : [];
     this.entryIndex = null;
     this.starting = this.entries.length > 0;
+    /*
+     * ONE START LINE AT A TIME. Before a cycle's start the live "step" is the entry line the boat
+     * is going to begin at — the nearest, followed as the boat sails, until the sailor picks one
+     * from the course list (`goto`). Offering every entry line at once put all of them on the
+     * approach screen together, which is a picture of a choice rather than of a line to cross;
+     * the others are shown as possible starts in the list instead, until the boat has started.
+     */
+    this.chosenStart = null;
     this.startChoice = this.starting
-      ? {
-        index: -1,
-        letter: 'S',
-        entry: true,
-        legNm: null,
-        crossings: this.entries.flatMap((step) => step.crossings),
-      }
+      ? { index: -1, letter: 'S', entry: true, legNm: null, crossings: [], stepIndex: null }
       : null;
+    if (this.starting) this.setStart(this.entries[0].index);
 
     this.at = 0;
     this.lap = 1;
@@ -427,8 +430,35 @@ export class RaceClient {
    */
   isLive(index) {
     if (this.finished) return false;
-    if (this.starting) return this.entries.some((step) => step.index === index);
+    if (this.starting) return index === this.startChoice.stepIndex;
     return index === this.at;
+  }
+
+  /** Make the entry line at step `index` the one a lap will begin at. */
+  setStart(index) {
+    this.startChoice.stepIndex = index;
+    this.startChoice.crossings = this.steps[index]?.crossings ?? [];
+  }
+
+  /**
+   * FOLLOW THE NEAREST ENTRY LINE until the sailor has picked one. Measured to each line's
+   * midpoint, which is where a boat heading for it is heading; changed only when another line
+   * is nearer, and then judged from scratch, since a new line is a new approach.
+   */
+  followNearestStart() {
+    if (!this.starting || this.chosenStart != null || !this.point) return;
+    let nearest = null;
+    let best = Infinity;
+    for (const step of this.entries) {
+      const mid = step.crossings[0]?.midpoint;
+      if (!mid) continue;
+      const at = toLocal(this.origin, mid);
+      const distance = Math.hypot(at.x - this.point.x, at.y - this.point.y);
+      if (distance < best) { best = distance; nearest = step.index; }
+    }
+    if (nearest == null || nearest === this.startChoice.stepIndex) return;
+    this.setStart(nearest);
+    this.freshApproach();
   }
 
   /**
@@ -497,6 +527,7 @@ export class RaceClient {
     if (this.fixes.length > TRAIL) this.fixes.shift();
     this.trackLeg(this.point);
     if (!this.startedAt) this.startedAt = fix.time;
+    this.followNearestStart();
     this.updateApproach(fix);
 
     const step = this.live();
@@ -741,19 +772,86 @@ export class RaceClient {
       this.finished = false;
       this.finishAt = null;
     }
-    // A new mark is a new approach, judged from scratch — the same reason `advance` says it.
-    // The dwell and the held crossing go too: they are a picture of a crossing that is no
-    // longer the one on the screen.
+    this.freshApproach();
+    return target;
+  }
+
+  /**
+   * A new mark is a new approach, judged from scratch — the same reason `advance` says it. The
+   * dwell and the held crossing go too: they are a picture of a crossing that is no longer the
+   * one on the screen. And a different mark is a different leg, and the track behind the boat
+   * belongs to the leg it was sailed on rather than to the boat.
+   */
+  freshApproach() {
     this.crossed = null;
     this.dwellUntil = 0;
     this.showingMark = false;
     this.markSince = null;
     this.watchedLine = null;
-    // A different mark is a different leg, and the track behind the boat belongs to the leg it
-    // was sailed on rather than to the boat.
     this.legTrack = this.point ? [{ x: this.point.x, y: this.point.y }] : [];
     this.arm();
+  }
+
+  /**
+   * What `goto(index)` would do, or null where it may not: the course list's rule.
+   *
+   * <b>Choosing the line a cycle's lap begins at is open to every boat, before it has started</b>:
+   * it is which line to begin at, not a mark stepped past. <b>Going to any other line is practice
+   * only</b>, for the reason `resolveSkip` gives: a race whose marks could be stepped past from
+   * the screen would be a race whose record says a boat sailed a course it did not.
+   */
+  gotoTarget(index) {
+    const step = this.steps[index];
+    if (!step) return null;
+    if (this.starting && step.entry) return { index, letter: step.letter, start: true };
+    if (this.joinMode !== 'ANONYMOUS') return null;
+    return { index, letter: step.letter, start: false };
+  }
+
+  /** Make the line at step `index` the next one. See `gotoTarget` for when it may. */
+  goto(index) {
+    const target = this.gotoTarget(index);
+    if (!target) return null;
+    if (target.start) {
+      this.chosenStart = index;
+      this.setStart(index);
+    } else {
+      // Practice: the same as a skip to that mark — the pointer moves and nothing else does.
+      this.starting = false;
+      this.at = index;
+      if (this.finished) {
+        this.finished = false;
+        this.finishAt = null;
+      }
+    }
+    this.freshApproach();
     return target;
+  }
+
+  /**
+   * THE COURSE AS A LIST, in the order it is sailed from where this boat is: each line, its leg,
+   * whether it has been crossed this lap, which one is next, and — before a cycle's start — which
+   * others the lap could begin at. A cycle's list is turned so the line the lap begins at (or will)
+   * is at the top, since that is where a lap starts and ends.
+   */
+  courseList() {
+    const n = this.steps.length;
+    const anchor = !this.snapshot.closed ? 0
+      : this.starting ? this.startChoice.stepIndex : (this.entryIndex ?? 0);
+    const order = Array.from({ length: n }, (_, k) => (anchor + k) % n);
+    return order.map((index) => {
+      const step = this.steps[index];
+      return {
+        index,
+        letter: this.starting && index === this.startChoice.stepIndex ? 'S' : step.letter,
+        lines: step.crossings.map((crossing) => crossing.line),
+        legNm: step.legNm,
+        done: this.crossings.some((c) => c.step === index && c.lap === this.lap),
+        next: this.isLive(index),
+        start: this.starting && step.entry && index !== this.startChoice.stepIndex,
+        goto: this.gotoTarget(index) != null && !this.isLive(index),
+      };
+    });
   }
 
   /**
@@ -797,7 +895,7 @@ export class RaceClient {
         // How many lines this lap may be begun at, so the row can say the choice is there.
         // Named rather than counted in the drawing: which lines those are is this object's
         // question, and a screen counting them would be a second place that could be wrong.
-        starts: step.crossings.length,
+        starts: this.entries.length,
         gate: false,
         bearingDeg: this.point ? bearingLocal(this.point, to) : null,
         distanceM: this.point

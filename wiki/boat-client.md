@@ -153,12 +153,13 @@ its own detector — so a boat crossing it on the way to the first windward mark
 twenty minutes early. Both sides of a **gate** get a detector and both see every fix; the first to latch
 is the side the boat took, and which it was is recorded because the next leg's bearing depends on it.
 
-**A cycle's start is a CHOICE, and `live()` answers with it.** Before the start the live "step" is not a
-step at all but every entry line at once (`startChoice`), which is what puts them all on the plot as
-alternatives, all of them lit on the overview (`isLive`), and each with its own next-leg arrow — the
-candidates lead down different legs, so `next()` is asked per crossing exactly as it is for a gate. The
-first to latch is where the lap begins: that step becomes the boat's `entryIndex`, the clock runs from
-that interpolated instant, and the sequence is walked from there as a ring. Coming back to it is the
+**A cycle's start is a CHOICE, made one line at a time.** Before the start the live "step" is ONE entry
+line (`startChoice`): the nearest, followed as the boat sails (`followNearestStart`), until the sailor
+picks another from the course list (`goto`), after which it stays picked. Only that line is on the
+approach screen and lit on the overview (`isLive`); the others are marked in the list as possible starts
+until the boat has started. Crossing it is where the lap begins: that step becomes the boat's
+`entryIndex`, the clock runs from that interpolated instant, and the sequence is walked from there as a
+ring. Coming back to it is the
 **finish** (`atFinish`) — lettered F, with nothing beyond it — and crossing it completes the run. One
 lap, bounded by one line crossed twice; a second lap is a second join.
 
@@ -494,15 +495,21 @@ fixes** — on a phone in a bracket for four hours, reporting to nobody is batte
 REST `/api/join`. The message stays on the screen, because a boat sailing without a committee should know that
 is what it is doing.
 
-**PRACTICE MAY STEP THROUGH THE COURSE; A RACE MAY NOT** (`RaceClient.resolveSkip`). Practising
-is sailing one mark over and over and then the next one, and without a skip the only way to put
-mark 4 live is to round three marks first. Two buttons on the deck name the mark they land on,
-because the reason for pressing one is to arrive at a particular mark, and they are absent
-rather than disabled at the ends of the sequence. The refusal lives in the client, not in a
-button the screen happens not to draw: this is the object that decides a race, and a race whose
-marks could be stepped past would produce a record saying a boat rounded what it did not.
+**THE NEXT LINE OPENS THE COURSE, AS A LIST** (`courseListPanel`) — the waypoint row, or MARK on the
+Line screen. Every line in sailing order, with its leg; crossed ones ticked, the next one marked, and
+before a cycle's start the other lines a lap could begin at; a cycle's list is turned so the line the lap
+begins at is on top. **A line is gone to in two presses on two different buttons**: tapping a row only
+proposes it, and a separate "Go to …" under the list commits, with Cancel beside it — so a stray tap in a
+moving boat changes nothing.
 
-A skip moves the pointer and touches nothing else — not the clock, not the crossings, not which
+**PRACTICE MAY GO TO ANY LINE; A RACE MAY ONLY CHOOSE ITS START** (`RaceClient.gotoTarget`). Practising is
+sailing one mark over and over and then the next one. Choosing which entry line a cycle's lap begins at,
+before starting, is open to every boat — it is where to begin, not a mark stepped past. Anything else is
+refused in a race, and the refusal lives in the client, not in a list that happens not to offer it: this
+is the object that decides a race, and a race whose marks could be stepped past would produce a record
+saying a boat sailed a course it did not.
+
+A go-to (and the client's `skip`, which it is built beside) moves the pointer and touches nothing else — not the clock, not the crossings, not which
 entry line a lap is measured from — so a practice record says exactly what was crossed. Two ends
 are worth naming: **a cycle's start choice is position −1**, so skipping back to it brings the
 offer of every entry line back, and skipping forward off it leaves no `entryIndex`, which is

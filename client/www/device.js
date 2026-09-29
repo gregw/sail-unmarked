@@ -23,7 +23,8 @@
  */
 
 import {
-  BASEMAP_INK, OVERVIEW_ZOOM, OverviewView, PlotView, Turner, esc, markScreen, overviewPanel, viewBar,
+  BASEMAP_INK, OVERVIEW_ZOOM, OverviewView, PlotView, Turner, courseListPanel, esc, markScreen,
+  overviewPanel, viewBar,
 } from './markscreen.js';
 import { RaceClient } from './raceclient.js';
 import { personalise } from './handicap.js';
@@ -400,7 +401,10 @@ export class Device {
     let screen;
     // Which screen's orientation the selector on it sets.
     this.shownScreen = mark ? 'mark' : 'overview';
-    if (mark) screen = markScreen(mark, { ...shared, orientation: this.orientations.mark, view: this.plotView })
+    // THE COURSE LIST, when the sailor has opened it, over whichever screen was up: opened on
+    // purpose, it is what is being read until it is closed or a line is gone to.
+    if (this.listOpen) screen = courseListPanel(this.client, this.pendingGoto);
+    else if (mark) screen = markScreen(mark, { ...shared, orientation: this.orientations.mark, view: this.plotView })
       + (alert ? alertBanner(alert) : '');
     else if (wanted === 'chat') screen = chatPanel(this.dialog, { ...shared, bars });
     else if (wanted === 'place') screen = placePanel(this.dialog,
@@ -419,6 +423,7 @@ export class Device {
     this.wireViews();
     this.wireChart();
     this.wireChannel();
+    this.wireList();
     this.wireBottom();
     // Being on the channel screen IS reading it — and NOT notified, because this is a render
     // and `changed()` is a request for one.
@@ -488,28 +493,50 @@ export class Device {
     this.renderJoin();
   }
 
+  /**
+   * THE COURSE LIST'S CONTROLS. Opened from the next line (the waypoint row, or MARK on the Line
+   * screen); a tap on a line proposes it and "Go to" commits — two presses on two different
+   * buttons, so a tap on the wrong row in a moving boat changes nothing (`courseListPanel`).
+   * Which lines may be gone to is the client's rule, not the screen's (`RaceClient.gotoTarget`).
+   */
+  wireList() {
+    for (const node of this.host.querySelectorAll('[data-list]')) {
+      node.addEventListener('click', () => {
+        this.listOpen = true;
+        this.pendingGoto = null;
+        this.render();
+      });
+    }
+    for (const row of this.host.querySelectorAll('[data-goto]')) {
+      row.addEventListener('click', () => {
+        const index = Number(row.dataset.goto);
+        this.pendingGoto = this.pendingGoto === index ? null : index;
+        this.render();
+      });
+    }
+    this.el('goto_cancel')?.addEventListener('click', () => {
+      this.pendingGoto = null;
+      this.render();
+    });
+    this.el('goto_confirm')?.addEventListener('click', () => {
+      if (this.pendingGoto != null) this.client.goto(this.pendingGoto);
+      this.pendingGoto = null;
+      this.listOpen = false;
+      // A different line is a different picture: the held frame is a fit around the one the boat
+      // was approaching, and carrying it over would open the new one at the old scale.
+      this.plotView = new PlotView();
+      this.render();
+    });
+    this.el('list_close')?.addEventListener('click', () => {
+      this.listOpen = false;
+      this.pendingGoto = null;
+      this.render();
+    });
+  }
+
   bottomRow() {
-    /*
-     * PRACTICE GETS TO STEP THROUGH THE COURSE, AND A RACE DOES NOT.
-     *
-     * Practising is sailing one mark over and over, then the next one — and without these the
-     * only way to put mark 4 live is to round three marks first. The client refuses the skip
-     * outright unless the boat joined as practice (`RaceClient.resolveSkip`), so this is the
-     * screen agreeing with a rule rather than the rule being a screen that happens not to draw
-     * a button.
-     *
-     * They NAME THE MARK THEY GO TO rather than saying "prev" and "next", because the whole
-     * point of pressing one is to arrive at a particular mark, and a boat that can see where a
-     * button lands does not have to press it to find out. Absent rather than disabled at the
-     * ends of the sequence: a dead control on a five-button row is ink that says nothing, and
-     * the sequence's ends are obvious from the letters themselves.
-     */
-    const back = this.client?.skipTarget(-1) ?? null;
-    const on = this.client?.skipTarget(1) ?? null;
     return `
       <div class="deck">
-        ${back ? `<button class="plain skip" id="skip_back">&lsaquo; ${esc(back.letter)}</button>` : ''}
-        ${on ? `<button class="plain skip" id="skip_on">${esc(on.letter)} &rsaquo;</button>` : ''}
         ${this.hooks.extras?.() ?? ''}
         ${this.dialog.live && !this.dialog.outcome
           // RETIRING IS NEVER INFERRED (§8.6): a boat retires because a sailor pressed retire,
@@ -520,15 +547,6 @@ export class Device {
   }
 
   wireBottom() {
-    for (const [id, delta] of [['skip_back', -1], ['skip_on', 1]]) {
-      this.el(id)?.addEventListener('click', () => {
-        this.client.skip(delta);
-        // A different mark is a different picture: the held frame is a fit around the one the
-        // boat was approaching, and carrying it over would open the new one at the old scale.
-        this.plotView = new PlotView();
-        this.render();
-      });
-    }
     this.el('leave')?.addEventListener('click', () => this.leave());
     this.el('retire')?.addEventListener('click', () => {
       this.dialog.retire('retired');

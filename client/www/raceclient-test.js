@@ -275,13 +275,13 @@ export function run(check) {
   ], { closed: true });
 
   const either = fresh(TWO_WAY);
-  check('with two entry points, both lines are live before the start',
-    either.live().crossings.length === 2
-    && either.isLive(0) && either.isLive(1));
+  check('with two entry points, ONE line is live before the start, not both',
+    either.live().crossings.length === 1 && either.isLive(0) && !either.isLive(1));
   // Starting at the SECOND one: a client that began every cycle at step 0, whatever the author
-  // had marked, could not sail this at all.
+  // had marked, could not sail this at all. Sailing north, the north line becomes the nearest,
+  // and the nearest is the one a lap begins at until the sailor picks another.
   sail(either, { e: 0, n: 120 }, { e: 0, n: 420 });
-  check('...and the boat begins at whichever it crosses first',
+  check('...the nearest, followed as the boat sails, so it begins at the one it is heading for',
     either.entryIndex === 1 && either.at === 0);
   check('...leaving the other simply abandoned, like the far side of a gate',
     either.crossings.length === 1 && either.crossings[0].line === 'north');
@@ -292,6 +292,37 @@ export function run(check) {
   sail(either, { e: 0, n: 120 }, { e: 0, n: 420 });
   check('...finishing on the line it started on', either.finished
     && either.crossings[either.crossings.length - 1].line === 'north');
+
+  /* ------------------------------------------------- picking the start, and going to a line */
+
+  // A RACE boat picks where its lap begins from the list, before it starts: that is which line to
+  // begin at, not a mark stepped past, so it is open to every boat.
+  const picky = fresh(TWO_WAY, { joinMode: 'RACE' });
+  sail(picky, { e: 0, n: 100 }, { e: 0, n: 110 });
+  check('before the start the nearest entry line is the one on offer', picky.isLive(0));
+  const listed = picky.courseList();
+  check('the course list puts the line the lap will begin at on top, lettered S',
+    listed[0].index === 0 && listed[0].letter === 'S' && listed[0].next);
+  check('...and marks the other line a lap could begin at, before the start',
+    listed[1].start && !listed[0].start);
+  check('...which may be chosen instead, by a racing boat too', picky.goto(1)?.start === true);
+  check('...and then it is the one live, and the list is turned to put it on top',
+    picky.isLive(1) && !picky.isLive(0) && picky.courseList()[0].index === 1);
+  sail(picky, { e: 0, n: 110 }, { e: 0, n: 120 });
+  check('...and it stays chosen however near the other line is', picky.isLive(1));
+  sail(picky, { e: 0, n: 120 }, { e: 0, n: 420 });
+  check('once started, no line is marked as a possible start any more',
+    !picky.starting && picky.courseList().every((row) => !row.start));
+  check('...and a racing boat may not go to another line: that would be a mark stepped past',
+    picky.goto(0) === null && picky.courseList().every((row) => !row.goto));
+
+  // PRACTICE may go to any line, which is what practising one mark over and over needs.
+  const practising = fresh(WINDWARD_LEEWARD);
+  check('a practising boat may go to any line in the list', practising.goto(2)?.index === 2
+    && practising.at === 2 && practising.live() === practising.steps[2]);
+  check('...and the list says which line is next, and offers the rest',
+    practising.courseList().find((row) => row.index === 2).next
+    && practising.courseList().filter((row) => row.goto).length === practising.steps.length - 1);
 
   /* ------------------------------------------------- the track since the last line */
 

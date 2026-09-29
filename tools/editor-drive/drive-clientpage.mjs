@@ -189,32 +189,43 @@ ok('joining puts the course on the screen', device().includes('<svg class="plot"
 
 /* ----------------------------------------------------- stepping through, in practice */
 
-// PRACTISING IS SAILING ONE MARK, then the next one. The buttons NAME the mark they land on,
-// because the reason for pressing one is to arrive at a particular mark.
+// THE NEXT LINE OPENS THE COURSE, as a list, and from it a practising boat may make any line
+// the next — in two presses on two different buttons, so a stray tap changes nothing.
 const liveLetter = () => mod.__state.client.live()?.letter ?? null;
 const first = liveLetter();
-const onward = mod.__state.client.skipTarget(1)?.letter ?? null;
-ok('a practice boat is offered the next mark without having to sail to it',
-  onward != null && device().includes(`id="skip_on">${onward}`));
-ok('...and nothing back from the first, which is where the sequence starts',
-  mod.__state.client.skipTarget(-1) === null && !device().includes('id="skip_back"'));
-
-H('skip_on:click')();
+const target = mod.__state.client.steps.find((step) => step.letter !== first);
+const rowFor = (index) => $('device').querySelectorAll('[data-goto]').find((n) => n.dataset.goto === String(index));
+ok('the ‹ › skip buttons are gone', !device().includes('id="skip_on"') && !device().includes('id="skip_back"'));
+$('device').querySelectorAll('[data-list]')[0].fire('click', {});
+await settle(200);
+ok('tapping the next line opens the course as a list', device().includes('class="clist"'));
+ok('...with the next line marked', /<li class="next[^"]*"/.test(device()));
+rowFor(target.index).fire('click', {});
+await settle(200);
+ok('tapping a line only PROPOSES it: nothing has changed yet', liveLetter() === first);
+ok('...and a separate button says where it would go', device().includes(`id="goto_confirm">Go to ${target.letter}`));
+H('goto_cancel:click')();
+await settle(200);
+ok('...which Cancel takes back', !device().includes('id="goto_confirm"') && liveLetter() === first);
+rowFor(target.index).fire('click', {});
+await settle(200);
+H('goto_confirm:click')();
 await settle(400);
-ok('...pressing it puts that mark live', liveLetter() === onward && liveLetter() !== first);
-ok('...and offers the way back, named for where it goes',
-  device().includes(`id="skip_back">&lsaquo; ${first}`));
-H('skip_back:click')();
-await settle(400);
-ok('...which returns to the mark it came from', liveLetter() === first);
+ok('confirming makes it the next line', liveLetter() === target.letter);
+ok('...and closes the list', !device().includes('class="clist"'));
 
 // A RACE CANNOT BE STEPPED THROUGH. The client refuses it (`raceclient-test.js` pins that), and
-// the screen agrees rather than being the only thing stopping it.
+// the list agrees: it is the course, with no line offered to go to.
 mod.__state.client.joinMode = 'RACE';
 mod.__device.render();
-ok('...and a boat sailing as RACE is offered no such thing',
-  !device().includes('id="skip_on"') && !device().includes('id="skip_back"'));
+$('device').querySelectorAll('[data-list]')[0].fire('click', {});
+await settle(200);
+ok('...and a boat sailing as RACE gets the list, but no line in it to go to',
+  device().includes('class="clist"') && !device().includes('data-goto='));
+H('list_close:click')();
+await settle(200);
 mod.__state.client.joinMode = 'ANONYMOUS';
+mod.__state.client.goto(mod.__state.client.steps.findIndex((step) => step.letter === first));
 mod.__device.render();
 ok('...always showing where the next mark is and how far', device().includes('BTW')
   && device().includes('DTW') && device().includes('Elapsed'));
