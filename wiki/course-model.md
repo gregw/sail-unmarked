@@ -339,7 +339,9 @@ straight lines, so the length is convex in *u* and one bisection finds it. The c
 **Who works out what.** The server says which TCFs a course takes — `tcfMin`, `tcfMax` on the
 snapshot, the line's width and `handicapNear` on each handicapped step — and refuses a join without a TCF or outside
 the range. **The boat places its own lines**, from the snapshot, with no network: which line it
-must cross is part of deciding its race. The record carries the lines it was given
+must cross is part of deciding its race. Each has an id, `track@step`, unique because a track passed
+twice gives a boat two lines; what the sailor is shown is the track and how far out along it their line
+sits from the 1.000 boat's — `reef @ +86 m`, or `−` further in (`placedName`). The record carries the lines it was given
 (`CourseRecord.handicap`), which is also what tells the results pages its elapsed time is already
 corrected, so nobody multiplies by the TCF a second time.
 

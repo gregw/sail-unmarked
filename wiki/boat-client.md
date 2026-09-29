@@ -498,7 +498,7 @@ is what it is doing.
 **THE NEXT LINE OPENS THE COURSE, AS A LIST** (`courseListPanel`) — the waypoint row, or MARK on the
 Line screen. Every line in sailing order, with its leg; crossed ones ticked, the next one marked, and
 before a cycle's start the other lines a lap could begin at; a cycle's list is turned so the line the lap
-begins at is on top. **A line is gone to in two presses on two different buttons**: tapping a row only
+begins at is on top, and ends with that same line again as the finish (F), with the closing leg into it. **A line is gone to in two presses on two different buttons**: tapping a row only
 proposes it, and a pop-up naming the line asks Go to or Cancel — so a stray tap in a moving boat changes
 nothing.
 

@@ -305,6 +305,9 @@ export function run(check) {
     listed[0].index === 0 && listed[0].letter === 'S' && listed[0].next);
   check('...and marks the other line a lap could begin at, before the start',
     listed[1].start && !listed[0].start);
+  check('...and lists the start again at the bottom, as the finish: a cycle ends where it began',
+    listed.length === 3 && listed[2].index === 0 && listed[2].letter === 'F' && listed[2].finish
+    && !listed[2].goto && !listed[2].next);
   check('...which may be chosen instead, by a racing boat too', picky.goto(1)?.start === true);
   check('...and then it is the one live, and the list is turned to put it on top',
     picky.isLive(1) && !picky.isLive(0) && picky.courseList()[0].index === 1);
@@ -313,6 +316,9 @@ export function run(check) {
   sail(picky, { e: 0, n: 120 }, { e: 0, n: 420 });
   check('once started, no line is marked as a possible start any more',
     !picky.starting && picky.courseList().every((row) => !row.start));
+  check('...the start is behind the boat, not next, and the finish below is the same line',
+    !picky.courseList()[0].next && picky.courseList()[0].done
+    && picky.courseList().at(-1).index === picky.entryIndex && picky.courseList().at(-1).letter === 'F');
   check('...and a racing boat may not go to another line: that would be a mark stepped past',
     picky.goto(0) === null && picky.courseList().every((row) => !row.goto));
 

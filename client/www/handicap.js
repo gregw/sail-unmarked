@@ -184,8 +184,21 @@ export function envelope(snapshot, i, g = geometry(snapshot)) {
   return [near.port, far.port, far.starboard, near.starboard].map((p) => fromLocal(g.origin, p));
 }
 
-/** The id a boat's own line at a step goes by: the track's, and which step it is on. */
+/**
+ * The id a boat's own line at a step goes by: the track's, and which step it is on. An ID, unique
+ * because a track passed twice gives a boat two lines — the detector, the drawing and the record
+ * key crossings by it. It is not what a sailor is shown: see `placedName`.
+ */
 export const placedId = (track, index) => `${track}@${index}`;
+
+/**
+ * WHAT A SAILOR IS SHOWN for their own line: the track's name, and how far out along it their line
+ * sits from the 1.000 boat's — `reef @ +86 m`. The `@` says the line is placed for this boat; the
+ * number is the one thing about it only this boat needs to know. The step is already in the
+ * letter beside it, so it is not repeated.
+ */
+export const placedName = (track, offsetM) =>
+  `${track} @ ${offsetM < 0 ? '\u2212' : '+'}${Math.abs(offsetM)} m`;
 
 /**
  * The lines placed for this TCF: the fraction along the tracks, and each line — which is what
@@ -200,8 +213,11 @@ export function place(snapshot, tcf) {
     if (!g.ends[i]) return;
     const track = step.crossings[0].line;
     const { port, starboard } = lineAt(g, i, u, step.handicapWidthM);
+    // How far out along the track this boat's line is from where a 1.000 boat's sits, in metres:
+    // positive further out, negative further in. What the screens show beside the track's name.
+    const offsetM = Math.round(u * norm(g.slide[i]));
     lines.push({
-      step: i, line: placedId(track, i), track,
+      step: i, line: placedId(track, i), track, offsetM,
       port: fromLocal(g.origin, port), starboard: fromLocal(g.origin, starboard),
     });
   });
@@ -232,6 +248,7 @@ export function personalise(snapshot, tcf) {
         ...step,
         crossings: [{
           line: line.line,
+          name: placedName(line.track, line.offsetM),
           cross: track.cross,
           port: { ...line.port, infinite: false },
           starboard: { ...line.starboard, infinite: false },

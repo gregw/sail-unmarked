@@ -88,6 +88,10 @@ export function run(check) {
     mine.revision === HAIRPIN.revision);
   check('the handicapped step\'s one crossing is the boat\'s own line',
     mine.steps[1].crossings.length === 1 && mine.steps[1].crossings[0].line === 'top@1');
+  // 1.05 on a 2200 m course is 110 m more, 55 m on each leg: the line sits 55 m out along the track.
+  check('...shown to the sailor as the track and how far out along it their line sits, not the step',
+    mine.steps[1].crossings[0].name === 'top @ +55 m');
+  check('...and a lower handicap as how far in', personalise(HAIRPIN, 0.95).steps[1].crossings[0].name === 'top @ \u221255 m');
   check('...finite at both ends', !mine.steps[1].crossings[0].port.infinite && !mine.steps[1].crossings[0].starboard.infinite);
   check('...crossed in the sense the step gives', mine.steps[1].crossings[0].cross === 'FORWARD');
   check('the track is kept beside it, for drawing', mine.steps[1].track.line === 'top');
@@ -159,6 +163,8 @@ export function run(check) {
   const client = new RaceClient(personalise(HAIRPIN, 1.02), { boat: { tcf: '1.02' } });
   const own = client.steps[1].crossings[0];
   check('the boat sails its own line at the handicapped step', own.line === 'top@1');
+  check('...and the waypoint names it by the track and its offset, never by the id',
+    client.courseList().find((row) => row.index === 1).lines[0].startsWith('top @ '));
   check('...and holds the parallelogram beside it, in its local plane', own.envelope?.length === 4
     && Number.isFinite(own.envelope[0].x));
   const record = client.record();

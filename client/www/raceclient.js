@@ -303,6 +303,9 @@ export class RaceClient {
       legNm: step.legNm ?? null,
       crossings: (step.crossings ?? []).map((crossing) => ({
         line: crossing.line,
+        // What the screens call it. The id for an ordinary line; for a boat's own line on a
+        // handicap track, the track and where along it this boat's line sits (`placedName`).
+        name: crossing.name ?? crossing.line,
         required: sense(crossing.cross),
         midpoint: midpointOf(crossing),
         // On a step handicapped by distance, everywhere ANY boat's line may lie. Drawn faintly
@@ -840,19 +843,42 @@ export class RaceClient {
     const anchor = !this.snapshot.closed ? 0
       : this.starting ? this.startChoice.stepIndex : (this.entryIndex ?? 0);
     const order = Array.from({ length: n }, (_, k) => (anchor + k) % n);
-    return order.map((index) => {
+    const rows = order.map((index, k) => {
       const step = this.steps[index];
+      // On a cycle the top row is where the lap begins: next only until the boat has begun, and
+      // no leg into it — its leg is the closing one, which belongs to the finish below.
+      const top = this.snapshot.closed && k === 0;
       return {
         index,
         letter: this.starting && index === this.startChoice.stepIndex ? 'S' : step.letter,
-        lines: step.crossings.map((crossing) => crossing.line),
-        legNm: step.legNm,
+        lines: step.crossings.map((crossing) => crossing.name),
+        legNm: top ? null : step.legNm,
         done: this.crossings.some((c) => c.step === index && c.lap === this.lap),
-        next: this.isLive(index),
+        next: top ? this.starting && this.isLive(index) : this.isLive(index),
         start: this.starting && step.entry && index !== this.startChoice.stepIndex,
         goto: this.gotoTarget(index) != null && !this.isLive(index),
       };
     });
+    /*
+     * A CYCLE ENDS WHERE IT BEGAN, so the line on top is listed again at the bottom, as the
+     * FINISH: the same line crossed a second time, with the closing leg into it. Not offered to go
+     * to — going there would be choosing where to start, which is the row at the top.
+     */
+    if (this.snapshot.closed && n > 0) {
+      const step = this.steps[anchor];
+      rows.push({
+        index: anchor,
+        letter: 'F',
+        lines: step.crossings.map((crossing) => crossing.name),
+        legNm: step.legNm,
+        done: this.finished,
+        next: this.atFinish(),
+        start: false,
+        goto: false,
+        finish: true,
+      });
+    }
+    return rows;
   }
 
   /**
@@ -891,7 +917,7 @@ export class RaceClient {
       const to = toLocal(this.origin, watched.midpoint);
       return {
         to,
-        lines: [watched.line],
+        lines: [watched.name],
         letter: step.letter,
         // How many lines this lap may be begun at, so the row can say the choice is there.
         // Named rather than counted in the drawing: which lines those are is this object's
@@ -913,7 +939,7 @@ export class RaceClient {
       x: mids.reduce((sum, p) => sum + p.x, 0) / mids.length,
       y: mids.reduce((sum, p) => sum + p.y, 0) / mids.length,
     };
-    const lines = step.crossings.map((crossing) => crossing.line);
+    const lines = step.crossings.map((crossing) => crossing.name);
     if (!this.point) return { to, lines, letter: step.letter, bearingDeg: null, distanceM: null };
     return {
       to,
