@@ -1,90 +1,128 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Unmarked Racing</title>
-<link rel="stylesheet" href="style.css">
-<style>
-  /* The links as a short list: a name to press and a line saying what it is. */
-  .links { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; align-items: baseline; }
-  .links a { font-weight: 600; white-space: nowrap; }
-  .links span { color: var(--muted); }
-  .series { margin-bottom: 14px; }
-  .series:last-child { margin-bottom: 0; }
-  .series ul { margin: 2px 0 0; }
-  .series .label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em;
-    text-transform: uppercase; color: var(--muted); margin-top: 6px; }
-</style>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Unmarked Racing</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* The links as a short list: a name to press and a line saying what it is. */
+        .links {
+            display: grid;
+            grid-template-columns: max-content 1fr;
+            gap: 6px 14px;
+            align-items: baseline;
+        }
+
+        .links a {
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .links span {
+            color: var(--muted);
+        }
+
+        .series {
+            margin-bottom: 14px;
+        }
+
+        .series:last-child {
+            margin-bottom: 0;
+        }
+
+        .series ul {
+            margin: 2px 0 0;
+        }
+
+        .series .label {
+            font-family: var(--mono);
+            font-size: 10px;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-top: 6px;
+        }
+    </style>
 </head>
 <body>
 
 <p class="kicker" style="display:flex; gap:12px">Unmarked Racing
-  <!-- Signing in, or out, or as somebody else. Empty on a server with no login. -->
-  <span id="whoami" class="mono" style="margin-left:auto; text-transform:none; letter-spacing:0"></span></p>
+    <!-- Signing in, or out, or as somebody else. Empty on a server with no login. -->
+    <span id="whoami" class="mono" style="margin-left:auto; text-transform:none; letter-spacing:0"></span></p>
 <h1>Sail racing around virtual marks</h1>
 
 <!--
-  WHAT IT IS, in a paragraph, then the way in for a sailor, then the way in for the club, then
-  what there is to race. The publish log is a page of its own (log.html), and the server's own state
-  is in the API, for the few people who ask for it.
+  WHAT IT IS, and the race formats it makes possible, then the way in for a sailor, then the way in
+  for the club, then what there is to race. The event log is a page of its own (log.html), and the
+  server's own state is in the API, for the few people who ask for it.
 -->
 <div class="panel">
-  <p style="margin:0">
-    Every mark is a line crossed by GPS rather than a buoy rounded, so a club can race with no
-    marks laid and no committee boat on the water. A boat's phone detects and times its own
-    crossings, with no network needed while it sails; this server hands out the courses before a
-    race and collects the results after it.
-  </p>
+    <p style="margin:0">
+        Sail racing with virtual marks that are <strong>lines created and checked by an app</strong> rather
+        than buoys laid by hand and checked by eyeball. This avoids the need for complex mark rounding rules
+        and enables alternative race formats:
+    </p>
+    <!-- Bulleted here, though the site's lists are not: these are points, the lists below are data. -->
+    <ul style="list-style: disc; padding-left: 1.4em; margin: 6px 0 0">
+        <li>Virtual courses with no race committee on the water or marks to lay</li>
+        <li>Courses are always available for practice or record attempts</li>
+        <li>Circuit courses that can be started/finished at one of many lines. Boats from different clubs can race the same
+            circuit at the same time but join/leave from their own local waters.
+        </li>
+        <li>Distance corrected handicapping, where each boat is allocated a specific course length: all boats
+            start together, and the first home wins on handicap.
+        </li>
+    </ul>
 </div>
 
-<h2>Sailing</h2>
+<h2>Competitors</h2>
 <div class="panel links">
-  <a href="boat.html">Boat client</a><span>open on the boat's phone to join a course and sail it</span>
-  <a href="client.html">Test client</a><span>the same client, sailed by a simulated boat on a desk</span>
-  <a href="results.html">Results</a><span>each race's finishing order, and record attempts</span>
-  <a href="log.html">Publish log</a><span>when each course was published or withdrawn</span>
+    <a href="boat.html">Boat client</a><span>open on the boat's phone to join a course and sail it</span>
+    <a href="client.html">Test client</a><span>the same client, sailed by a simulated boat on a desk</span>
+    <a href="results.html">Results</a><span>each race's finishing order, and record attempts</span>
+    <a href="log.html">Event log</a><span>when each course was published or withdrawn</span>
 </div>
-
-<h2>Club officers</h2>
+<h2>Administrators</h2>
 <div class="panel">
-  <p class="muted" style="margin:0 0 8px">For whoever runs the club's racing &mdash; these need a sign-in.</p>
-  <div class="links">
-    <a href="editor.html">Course editor</a><span>marks, lines, courses and races, and publishing them</span>
-    <a href="race.html">Race screen</a><span>running a race: starts, the fleet, the channel</span>
-  </div>
+    <p class="muted" style="margin:0 0 8px">For whoever runs the club's racing &mdash; these need a sign-in.</p>
+    <div class="links">
+        <a href="editor.html">Course editor</a><span>marks, lines, courses and races, and publishing them</span>
+        <a href="race.html">Race screen</a><span>running a race: starts, the fleet, the channel</span>
+    </div>
 </div>
 
 <h2>Series</h2>
 <div id="series" class="panel"><span class="muted">Loading&hellip;</span></div>
 
 <script type="module">
-import { showWhoami } from './whoami.js';
+    import {showWhoami} from './whoami.js';
 
-showWhoami();
-const el = (id) => document.getElementById(id);
-const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;' };
-const esc = (v) => String(v ?? '').replace(/[&<>]/g, (c) => ESC[c]);
+    showWhoami();
+    const el = (id) => document.getElementById(id);
+    const ESC = {'&': '&amp;', '<': '&lt;', '>': '&gt;'};
+    const esc = (v) => String(v ?? '').replace(/[&<>]/g, (c) => ESC[c]);
 
-async function json(path) {
-  const response = await fetch(path);
-  if (!response.ok) throw new Error(`${path}: ${response.status}`);
-  return response.json();
-}
+    async function json(path) {
+        const response = await fetch(path);
+        if (!response.ok) throw new Error(`${path}: ${response.status}`);
+        return response.json();
+    }
 
-/* EACH SERIES, ITS COURSES AND ITS RACES — a list, and nothing more. The races come from the
-   series' own open read; a series whose races cannot be read still lists its courses. A file with
-   problems says how many, because the club that owns it reads this page, and the editor says which. */
-try {
-  const programmes = await json('/api/programmes');
-  const rows = await Promise.all(programmes.map(async (p) => {
-    let races = [];
+    /* EACH SERIES, ITS COURSES AND ITS RACES — a list, and nothing more. The races come from the
+       series' own open read; a series whose races cannot be read still lists its courses. A file with
+       problems says how many, because the club that owns it reads this page, and the editor says which. */
     try {
-      races = Object.entries(await json(`/api/races/${p.club}/${p.series}`) ?? {})
-        .map(([id, race]) => ({ id, ...race }))
-        .sort((a, b) => String(a.date ?? '').localeCompare(String(b.date ?? '')));
-    } catch { /* no races to list */ }
-    return `<div class="series">
+        const programmes = await json('/api/programmes');
+        const rows = await Promise.all(programmes.map(async (p) => {
+            let races = [];
+            try {
+                races = Object.entries(await json(`/api/races/${p.club}/${p.series}`) ?? {})
+                    .map(([id, race]) => ({id, ...race}))
+                    .sort((a, b) => String(a.date ?? '').localeCompare(String(b.date ?? '')));
+            } catch { /* no races to list */
+            }
+            return `<div class="series">
       <div><strong>${esc(p.name || p.series)}</strong>
         <span class="mono muted" style="font-size:11px">${esc(p.club)} / ${esc(p.series)}</span>
         ${p.problems.length ? `<span class="warn mono" style="font-size:11px"> &middot; ${p.problems.length}
@@ -95,11 +133,11 @@ try {
         <ul>${races.map((r) => `<li><span class="mono muted">${esc(r.date ?? '')}</span>
           ${esc(r.name || r.id)}</li>`).join('')}</ul>` : ''}
     </div>`;
-  }));
-  el('series').innerHTML = rows.join('') || '<span class="muted">No series configured.</span>';
-} catch (e) {
-  el('series').innerHTML = `<span class="warn">${esc(e.message)}</span>`;
-}
+        }));
+        el('series').innerHTML = rows.join('') || '<span class="muted">No series configured.</span>';
+    } catch (e) {
+        el('series').innerHTML = `<span class="warn">${esc(e.message)}</span>`;
+    }
 </script>
 
 </body>

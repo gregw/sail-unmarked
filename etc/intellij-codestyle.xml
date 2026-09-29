@@ -1,0 +1,135 @@
+<!--
+  The code style this repository is written in, as an IntelliJ IDEA scheme.
+
+  Import: Settings → Editor → Code Style → ⚙ (next to Scheme) → Import Scheme → IntelliJ IDEA code
+  style XML → this file. Then choose "unmarked" as the scheme for the project.
+
+  What it encodes, read off the code rather than invented:
+    Java        4 spaces, continuation 4; Allman braces everywhere — class, method, block and lambda
+                on their own line, and else / catch / finally / while on a new line; no forced braces
+                on a one-line if; no space after a cast; right margin 100. Imports: java.* first,
+                then everything else alphabetically, then static — each group separated by one blank
+                line, and never collapsed to a wildcard.
+    JavaScript  2 spaces, continuation 2; "} else {" on one line; single quotes, semicolons, trailing
+                commas when multiline, spaces inside object braces, parentheses round every arrow
+                function's parameters; right margin 100.
+    HTML        2 spaces; the children of html, head and body not indented.
+    CSS, JSON, YAML   2 spaces.
+    Shell       4 spaces, as etc/install.sh is.
+-->
+<code_scheme name="unmarked" version="173">
+  <option name="RIGHT_MARGIN" value="100" />
+
+  <JavaCodeStyleSettings>
+    <option name="CLASS_COUNT_TO_USE_IMPORT_ON_DEMAND" value="999" />
+    <option name="NAMES_COUNT_TO_USE_IMPORT_ON_DEMAND" value="999" />
+    <option name="PACKAGES_TO_USE_IMPORT_ON_DEMAND">
+      <value />
+    </option>
+    <option name="IMPORT_LAYOUT_TABLE">
+      <value>
+        <package name="java" withSubpackages="true" static="false" />
+        <emptyLine />
+        <package name="" withSubpackages="true" static="false" />
+        <emptyLine />
+        <package name="" withSubpackages="true" static="true" />
+      </value>
+    </option>
+  </JavaCodeStyleSettings>
+
+  <JSCodeStyleSettings version="0">
+    <option name="USE_SEMICOLON_AFTER_STATEMENT" value="true" />
+    <option name="FORCE_SEMICOLON_STYLE" value="true" />
+    <option name="USE_DOUBLE_QUOTES" value="false" />
+    <option name="FORCE_QUOTE_STYlE" value="true" />
+    <option name="ENFORCE_TRAILING_COMMA" value="WhenMultiline" />
+    <option name="SPACES_WITHIN_OBJECT_LITERAL_BRACES" value="true" />
+    <option name="SPACES_WITHIN_IMPORTS" value="true" />
+    <option name="SPACE_BEFORE_FUNCTION_LEFT_PARENTH" value="false" />
+  </JSCodeStyleSettings>
+
+  <HTMLCodeStyleSettings>
+    <option name="HTML_DO_NOT_INDENT_CHILDREN_OF" value="html,head,body,thead,tbody,tfoot" />
+    <option name="HTML_KEEP_BLANK_LINES" value="1" />
+  </HTMLCodeStyleSettings>
+
+  <codeStyleSettings language="JAVA">
+    <option name="RIGHT_MARGIN" value="100" />
+    <option name="KEEP_LINE_BREAKS" value="true" />
+    <option name="KEEP_BLANK_LINES_IN_CODE" value="1" />
+    <option name="KEEP_BLANK_LINES_IN_DECLARATIONS" value="1" />
+    <option name="BRACE_STYLE" value="2" />
+    <option name="CLASS_BRACE_STYLE" value="2" />
+    <option name="METHOD_BRACE_STYLE" value="2" />
+    <option name="LAMBDA_BRACE_STYLE" value="2" />
+    <option name="ELSE_ON_NEW_LINE" value="true" />
+    <option name="WHILE_ON_NEW_LINE" value="true" />
+    <option name="CATCH_ON_NEW_LINE" value="true" />
+    <option name="FINALLY_ON_NEW_LINE" value="true" />
+    <option name="SPACE_AFTER_TYPE_CAST" value="false" />
+    <option name="ALIGN_MULTILINE_PARAMETERS" value="false" />
+    <option name="IF_BRACE_FORCE" value="0" />
+    <option name="FOR_BRACE_FORCE" value="0" />
+    <option name="WHILE_BRACE_FORCE" value="0" />
+    <option name="WRAP_COMMENTS" value="false" />
+    <indentOptions>
+      <option name="INDENT_SIZE" value="4" />
+      <option name="CONTINUATION_INDENT_SIZE" value="4" />
+      <option name="TAB_SIZE" value="4" />
+    </indentOptions>
+  </codeStyleSettings>
+
+  <codeStyleSettings language="JavaScript">
+    <option name="RIGHT_MARGIN" value="100" />
+    <option name="KEEP_LINE_BREAKS" value="true" />
+    <option name="KEEP_BLANK_LINES_IN_CODE" value="1" />
+    <option name="ELSE_ON_NEW_LINE" value="false" />
+    <option name="IF_BRACE_FORCE" value="0" />
+    <indentOptions>
+      <option name="INDENT_SIZE" value="2" />
+      <option name="CONTINUATION_INDENT_SIZE" value="2" />
+      <option name="TAB_SIZE" value="2" />
+    </indentOptions>
+  </codeStyleSettings>
+
+  <codeStyleSettings language="HTML">
+    <option name="RIGHT_MARGIN" value="100" />
+    <indentOptions>
+      <option name="INDENT_SIZE" value="2" />
+      <option name="CONTINUATION_INDENT_SIZE" value="2" />
+      <option name="TAB_SIZE" value="2" />
+    </indentOptions>
+  </codeStyleSettings>
+
+  <codeStyleSettings language="CSS">
+    <indentOptions>
+      <option name="INDENT_SIZE" value="2" />
+      <option name="CONTINUATION_INDENT_SIZE" value="2" />
+      <option name="TAB_SIZE" value="2" />
+    </indentOptions>
+  </codeStyleSettings>
+
+  <codeStyleSettings language="JSON">
+    <indentOptions>
+      <option name="INDENT_SIZE" value="2" />
+      <option name="CONTINUATION_INDENT_SIZE" value="2" />
+      <option name="TAB_SIZE" value="2" />
+    </indentOptions>
+  </codeStyleSettings>
+
+  <codeStyleSettings language="yaml">
+    <indentOptions>
+      <option name="INDENT_SIZE" value="2" />
+      <option name="CONTINUATION_INDENT_SIZE" value="2" />
+      <option name="TAB_SIZE" value="2" />
+    </indentOptions>
+  </codeStyleSettings>
+
+  <codeStyleSettings language="Shell Script">
+    <indentOptions>
+      <option name="INDENT_SIZE" value="4" />
+      <option name="CONTINUATION_INDENT_SIZE" value="4" />
+      <option name="TAB_SIZE" value="4" />
+    </indentOptions>
+  </codeStyleSettings>
+</code_scheme>
