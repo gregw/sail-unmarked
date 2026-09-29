@@ -318,11 +318,11 @@ button.plain.on { border-color: var(--ok); color: var(--ok); }
 .clist { margin: 8px 12px 0; padding: 0; }
 .clist li {
   display: flex; align-items: baseline; gap: 10px;
-  padding: 8px 10px; margin-bottom: 4px;
+  padding: 3px 10px; margin-bottom: 2px;
   border: 1px solid var(--panel2); border-radius: 4px;
 }
 .clist li[data-goto] { cursor: pointer; }
-.clist .letter { font-family: var(--disp); font-size: 20px; font-weight: 700; min-width: 22px; text-align: center; color: var(--line); }
+.clist .letter { font-family: var(--disp); font-size: 17px; font-weight: 700; min-width: 22px; text-align: center; color: var(--line); }
 .clist .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .clist .leg { font-size: 11px; color: var(--muted); }
 .clist .state { font-size: 11px; min-width: 38px; text-align: right; color: var(--muted); }
@@ -333,6 +333,16 @@ button.plain.on { border-color: var(--ok); color: var(--ok); }
 .clist li.start { background: color-mix(in srgb, var(--toside) 18%, transparent); }
 .clist li.start .state { color: var(--toside); }
 .clist li.pending { background: var(--panel2); border-color: var(--line); }
-.confirm { display: flex; gap: 8px; margin: 10px 12px; align-items: center; }
-.confirm .go { flex: 1; margin-top: 0; }
+/* The pop-up a proposed line opens: where it goes, Go to, and Cancel. Drawn as the alert is. */
+.goto {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(14, 26, 38, 0.82); padding: 8cqi; z-index: 5;
+}
+.goto .box {
+  background: var(--panel); border: 2px solid var(--line); border-radius: 8px; padding: 14px; width: 100%;
+}
+.goto .kind { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--line); }
+.goto .text { font-size: 17px; margin: 6px 0 12px; }
+.goto .row { display: flex; gap: 8px; align-items: center; }
+.goto .row .go { flex: 1; margin-top: 0; }
 .clist-hint { margin: 8px 12px; font-size: 11px; }

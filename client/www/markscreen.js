@@ -1670,9 +1670,9 @@ export function waypointRow(waypoint) {
  * a way to make a different one the next.
  *
  * <b>Two presses to go anywhere, and they are not the same button.</b> Tapping a line only
- * PROPOSES it: the row is marked and a separate "Go to" button appears below the list, with
- * Cancel beside it. A tap on the wrong row in a moving boat therefore changes nothing, and the
- * change is made only by a press somebody meant, on a button that names where it goes.
+ * PROPOSES it: the row is marked and a pop-up asks, naming the line, with Go to and Cancel. A tap
+ * on the wrong row in a moving boat therefore changes nothing, and the change is made only by a
+ * press somebody meant, on a button that says where it goes.
  *
  * Lines that cannot be gone to are listed all the same, without the offer: the list is the
  * course first, and a way to change the next line only where that is allowed (`gotoTarget`).
@@ -1698,12 +1698,18 @@ export function courseListPanel(client, pending = null) {
         <span class="state mono">${row.next ? 'next' : row.done ? '&check;' : row.start ? 'start?' : ''}</span>
       </li>`).join('')}
     </ol>
-    ${target
-    ? `<div class="confirm">
-        <button class="go" id="goto_confirm">Go to ${esc(target.letter)} &middot; ${esc(target.lines.join(' / '))}</button>
-        <button class="plain" id="goto_cancel">Cancel</button>
-      </div>`
-    : offers ? `<p class="muted clist-hint">Tap a line to make it the next one.</p>` : ''}`;
+    ${offers && !target ? `<p class="muted clist-hint">${client.starting
+    ? 'Tap a start line to begin the lap there.' : 'Tap a line to make it the next one.'}</p>` : ''}
+    ${target ? `<div class="goto" id="gotoBox">
+      <div class="box">
+        <div class="kind mono">${target.start ? 'START AT' : 'GO TO'}</div>
+        <div class="text">${esc(target.letter)} &middot; ${esc(target.lines.join(' / '))}</div>
+        <div class="row">
+          <button class="go" id="goto_confirm">${target.start ? 'Start here' : 'Go to'} ${esc(target.letter)}</button>
+          <button class="plain" id="goto_cancel">Cancel</button>
+        </div>
+      </div>
+    </div>` : ''}`;
 }
 
 /**

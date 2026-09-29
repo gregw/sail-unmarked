@@ -499,13 +499,13 @@ is what it is doing.
 Line screen. Every line in sailing order, with its leg; crossed ones ticked, the next one marked, and
 before a cycle's start the other lines a lap could begin at; a cycle's list is turned so the line the lap
 begins at is on top. **A line is gone to in two presses on two different buttons**: tapping a row only
-proposes it, and a separate "Go to …" under the list commits, with Cancel beside it — so a stray tap in a
-moving boat changes nothing.
+proposes it, and a pop-up naming the line asks Go to or Cancel — so a stray tap in a moving boat changes
+nothing.
 
-**PRACTICE MAY GO TO ANY LINE; A RACE MAY ONLY CHOOSE ITS START** (`RaceClient.gotoTarget`). Practising is
-sailing one mark over and over and then the next one. Choosing which entry line a cycle's lap begins at,
-before starting, is open to every boat — it is where to begin, not a mark stepped past. Anything else is
-refused in a race, and the refusal lives in the client, not in a list that happens not to offer it: this
+**BEFORE A CYCLE'S START, ONLY A START LINE; AFTER IT, PRACTICE MAY GO TO ANY LINE AND A RACE TO NONE**
+(`RaceClient.gotoTarget`). Choosing which entry line a cycle's lap begins at is open to every boat, and
+until the lap has begun it is the only thing that may be chosen. Practising is sailing one mark over and
+over and then the next one. Anything else is refused in a race, and the refusal lives in the client, not in a list that happens not to offer it: this
 is the object that decides a race, and a race whose marks could be stepped past would produce a record
 saying a boat sailed a course it did not.
 

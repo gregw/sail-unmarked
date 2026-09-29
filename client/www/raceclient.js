@@ -795,15 +795,16 @@ export class RaceClient {
   /**
    * What `goto(index)` would do, or null where it may not: the course list's rule.
    *
-   * <b>Choosing the line a cycle's lap begins at is open to every boat, before it has started</b>:
-   * it is which line to begin at, not a mark stepped past. <b>Going to any other line is practice
-   * only</b>, for the reason `resolveSkip` gives: a race whose marks could be stepped past from
-   * the screen would be a race whose record says a boat sailed a course it did not.
+   * <b>Before a cycle's start, only a start line</b> — for every boat: it is which line to begin
+   * at, not a mark stepped past, and until the lap has begun there is nothing else to go to.
+   * <b>After it, going to another line is practice only</b>, for the reason `resolveSkip` gives: a
+   * race whose marks could be stepped past from the screen would be a race whose record says a
+   * boat sailed a course it did not.
    */
   gotoTarget(index) {
     const step = this.steps[index];
     if (!step) return null;
-    if (this.starting && step.entry) return { index, letter: step.letter, start: true };
+    if (this.starting) return step.entry ? { index, letter: step.letter, start: true } : null;
     if (this.joinMode !== 'ANONYMOUS') return null;
     return { index, letter: step.letter, start: false };
   }

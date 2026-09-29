@@ -203,7 +203,8 @@ ok('...with the next line marked', /<li class="next[^"]*"/.test(device()));
 rowFor(target.index).fire('click', {});
 await settle(200);
 ok('tapping a line only PROPOSES it: nothing has changed yet', liveLetter() === first);
-ok('...and a separate button says where it would go', device().includes(`id="goto_confirm">Go to ${target.letter}`));
+ok('...and a pop-up asks, saying where it would go', device().includes('id="gotoBox"')
+  && device().includes(`id="goto_confirm">Go to ${target.letter}`));
 H('goto_cancel:click')();
 await settle(200);
 ok('...which Cancel takes back', !device().includes('id="goto_confirm"') && liveLetter() === first);

@@ -316,6 +316,18 @@ export function run(check) {
   check('...and a racing boat may not go to another line: that would be a mark stepped past',
     picky.goto(0) === null && picky.courseList().every((row) => !row.goto));
 
+  // BEFORE A CYCLE'S START ONLY A START LINE may be chosen — by a practising boat too: until the
+  // lap has begun, which line to begin at is the only question.
+  const THREE_WAY = snapshot([
+    { letter: '0', entry: true, crossings: [line('south', 0)] },
+    { letter: '1', crossings: [line('mid', 300)] },
+    { letter: '2', entry: true, crossings: [line('north', 600)] },
+  ], { closed: true });
+  const beforeStart = fresh(THREE_WAY);
+  check('before a cycle\'s start only a start line may be chosen, even in practice',
+    beforeStart.gotoTarget(1) === null && beforeStart.gotoTarget(2)?.start === true
+    && beforeStart.courseList().filter((row) => row.goto).map((row) => row.index).join() === '2');
+
   // PRACTICE may go to any line, which is what practising one mark over and over needs.
   const practising = fresh(WINDWARD_LEEWARD);
   check('a practising boat may go to any line in the list', practising.goto(2)?.index === 2
