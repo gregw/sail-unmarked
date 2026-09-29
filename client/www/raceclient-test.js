@@ -303,12 +303,17 @@ export function run(check) {
   const tracked = fresh(WINDWARD_LEEWARD);
   sail(tracked, { e: 0, n: -400 }, { e: 0, n: -120 });
   check('the boat leaves a track on the leg it is sailing', tracked.legTrack.length > 3);
-  // EVERY FIX, because the shape of the leg is what this is for and the shape lives between
-  // the dots. Decimating at twenty-five metres draws a dozen points down a whole leg. What
-  // bounds it is a cap in POINTS, not a spacing.
-  check('...at every fix, so the shape of the leg survives rather than a dozen dots of it',
+  // ONE POINT PER BOAT LENGTH: fixes ten metres apart, a ten-metre boat, every one kept...
+  check('...a point per boat length, so fixes a length apart are all kept',
     tracked.legTrack.length === tracked.fixes.length
-    && LEG_TRACK.everyM === 0 && LEG_TRACK.max > 1000);
+    && LEG_TRACK.everyM == null && LEG_TRACK.max > 1000);
+  // ...and fixes two metres apart are thinned to one in five, which is what keeps a long leg
+  // cheap to draw on a panel redrawn at every fix.
+  const thinned = fresh(WINDWARD_LEEWARD);
+  sail(thinned, { e: 0, n: -400 }, { e: 0, n: -200 }, { stepM: 2 });
+  check('...and closer fixes are thinned to about one a boat length',
+    thinned.legTrack.length > 15 && thinned.legTrack.length <= 22
+    && thinned.fixes.length > thinned.legTrack.length * 4);
 
   sail(tracked, { e: 0, n: -120 }, { e: 0, n: 120 });
   const latchedAt = tracked.crossings[tracked.crossings.length - 1];

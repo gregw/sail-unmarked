@@ -258,13 +258,20 @@ derivations; these are the rules that outlive any of them.
 
 ## Orientation
 
-Four: **Leg up**, **COG up**, **North up**, **Line perp** — a property of the display, not of one screen, so
-the selector is on the overview as well and sets one setting.
+Four, offered in this order: **North up**, **COG up**, **Leg up**, **Line perp**. **Each screen keeps its
+own** (`Device.orientations`): the Course screen opens North up and the Line screen Line perp, the selector
+on a screen sets that screen's, and changing one leaves the other as it was last left — so the Line screen
+that comes up by itself on an approach comes up the way it was last read.
+
+**The track since the last line is red dots** (`OVERVIEW_INK.trailColour`), standing out from a course drawn
+in blues and greens and from the cyan COG.
 
 - **The display SWINGS rather than snapping** (`Turner`, `TURN_DEG_S`). Snapping through ninety degrees
   destroys the one thing an oriented display is for. Eased against real time, not per render. **The displayed
   bearing is not part of the frame's identity**, or a frame rebuilt on every degree of a swing would never
-  hold still.
+  hold still. Fifty degrees a second, and **about the BOAT** (`pivotCentre`): the Mark screen's held frame
+  is turned about it, and the overview is fitted for the bearing it is turning to and turned there about
+  it, so the boat stays put on the screen and the world goes round it.
 - **Leg up is the leg the boat is ON** — `legInto`, mark behind to mark ahead — which is not the leg the arrow
   points at. Mark to mark, never boat to mark, or the display would swing on every tack. **One definition,
   shared by both screens.** The exception is the dwell after a cross, where the brief is explicit and the two
@@ -299,10 +306,10 @@ the selector is on the overview as well and sets one setting.
   faint, because that is the thing everything else is read against.
 - **It shows the boat's own track back to the last line** (`RaceClient.legTrack`), which is the one
   question the course drawing cannot answer: not where the leg goes but where the boat has actually
-  been on it. **Every fix, one pixel each, as dots rather than a line** — a line claims the boat went
-  straight from one fix to the next, which it did not. Decimating by distance draws a dozen points down a
-  whole leg with the shape missing from between them, so `LEG_TRACK.everyM` is 0 and stays the knob,
-  with `max` as the real bound (a cap in points, a quarter-hour of leg at 5 Hz).
+  been on it. **One point per boat length, as red dots rather than a line** — a line claims the boat
+  went straight from one fix to the next, which it did not. Closer fixes add nothing a picture a mile
+  across can show and cost a point on every redraw, which is every fix, so they are thinned
+  (`LEG_TRACK.everyM`, null for the boat's own length); `max` caps it in points behind that.
   Drawn as one path of zero-length round-capped segments, because thousands of circles is a document
   the browser lays out where this is a shape it fills. It starts at the *interpolated crossing*, so it
   touches the mark it came from, and is reset by a crossing, a skip or a relocation — the segment
@@ -310,6 +317,12 @@ the selector is on the overview as well and sets one setting.
   ink, because the course's colours mean leg role and the cyan dashes mean COG.
 - **The live line is marked in the live triangle's own colour**, and counts as live while *any* of its
   crossings is: it is the same piece of water either way.
+- **An infinite end runs on to the edge, thin and faint** (`OVERVIEW_INK.infinite`) — the editor's
+  notation: the line is real out there, but it is a bearing rather than more of the line.
+- **Nothing under the numbers but the chart.** No sentence saying which mark is next — the waypoint row
+  says it — and no log of crossings, which the chart shows. The room is the chart's: the overview's
+  picture (`OVERVIEW_PLOT`) is taller than the Mark screen's. The course name keeps to one line, smaller
+  as the panel narrows; Started and Elapsed are read now and then, and set at half the size of BTW/DTW.
 - **The COG runs out as far as the picture goes**, forward only. Here the question is what the boat is
   pointing at, and the answer is only legible if the line reaches it.
 - **It re-fits every frame until somebody takes hold of it**, then anchors; **Fit** gives it back. The pan is
@@ -418,8 +431,14 @@ and green everywhere else.
 **Picking the boat up does not cancel the helm order** (`BoatSim.placeAt`). Moving a boat says where it *is*,
 not where it was going; if it should be stopped there is a Pause button.
 
-**The device panel is not rebuilt while somebody is choosing a background** or dragging its slider. It is
-rebuilt on every fix, and rebuilding destroys a `<select>` whose popup is open and a slider under the finger.
+**The device panel is not rebuilt under a finger.** A click lands only if the press and the release meet the
+same element, so a fix redrawing the panel between them swallowed button presses at random. While a pointer is
+down anywhere in the panel but the chart the redraw waits, and happens once on release, after the click; the
+chart is left out because a pan and a pinch are drawn as they move. A press also lets go of the background
+chooser if it still has focus.
+
+**Nor while somebody is choosing a background.** It is
+rebuilt on every fix, and rebuilding destroys a `<select>` whose popup is open.
 Held on **focus** rather than on a flag of our own, so it cannot stick.
 
 **The RIG is always full height, and the device's constraint must never reach it**: `align-self` on the

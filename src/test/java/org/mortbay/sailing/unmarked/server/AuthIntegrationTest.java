@@ -25,6 +25,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.oneOf;
@@ -132,6 +133,63 @@ class AuthIntegrationTest
         assertThat("...and told how to get out of it, because the usual cause is two accounts "
             + "and a browser that picked the wrong one", body(browser, "/editor.html"),
             containsString("/auth/logout"));
+    }
+
+    @Test
+    void theFrontPageCanSignInAndTheProviderIsAskedToLetYouChoose(@TempDir Path root) throws Exception
+    {
+        start(root, false);
+        HttpClient browser = browser();
+        String base = "http://localhost:" + port(unmarked);
+
+        // A WAY IN from a page that needs none, and the config says where it is.
+        assertThat(body(browser, "/api/config"), containsString("\"login\" : \"/auth/login\""));
+        HttpResponse<String> challenge = browser.send(HttpRequest.newBuilder()
+            .uri(URI.create(base + "/auth/login?to=/results.html")).GET().build(),
+            HttpResponse.BodyHandlers.ofString());
+        assertThat("signing in from the front page goes to the provider", challenge.statusCode(), is(303));
+        // THE ACCOUNT CHOOSER, asked for on every sign-in: a browser with two accounts is asked
+        // which rather than handed the provider's guess — which is what made a wrong account a
+        // loop that signing out could not break.
+        assertThat(challenge.headers().firstValue("location").orElseThrow(),
+            containsString("prompt=select_account"));
+
+        signIn(browser, "officer@myc.org.au");
+        HttpResponse<String> back = browser.send(HttpRequest.newBuilder()
+            .uri(URI.create(base + "/auth/login?to=/results.html")).GET().build(),
+            HttpResponse.BodyHandlers.ofString());
+        assertThat("signed in, it goes back where it was asked to", back.headers().firstValue("location")
+            .orElseThrow(), endsWith("/results.html"));
+        HttpResponse<String> away = browser.send(HttpRequest.newBuilder()
+            .uri(URI.create(base + "/auth/login?to=https://elsewhere.example/")).GET().build(),
+            HttpResponse.BodyHandlers.ofString());
+        assertThat("...and never to another site, or this would be anybody's open redirect",
+            away.headers().firstValue("location").orElseThrow(), not(containsString("elsewhere")));
+    }
+
+    @Test
+    void aRefusedAccountIsSentBackToTheChooser(@TempDir Path root) throws Exception
+    {
+        start(root, false, "myc.org.au");
+        HttpClient browser = browser();
+        signIn(browser, "somebody@example.com");
+        // The way out of a wrong account signs out AND starts a sign-in again, which asks the
+        // provider for its chooser; signing out alone would guess the same account again.
+        assertThat(body(browser, "/editor.html"), containsString("/auth/logout?to=/auth/login"));
+        HttpResponse<String> out = browser.send(HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:" + port(unmarked) + "/auth/logout?to=/auth/login"))
+            .GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(out.headers().firstValue("location").orElseThrow(), endsWith("/auth/login"));
+    }
+
+    @Test
+    void onwardIsOnlyEverAPathOnThisServer()
+    {
+        assertThat(AuthFilter.onward("/editor.html"), is("/editor.html"));
+        assertThat(AuthFilter.onward("/race.html?race=r1"), is("/race.html?race=r1"));
+        for (String bad : new String[]{null, "", "editor.html", "//evil.example/", "https://evil.example/",
+            "/\\evil.example", "/x\ny"})
+            assertThat(String.valueOf(bad), AuthFilter.onward(bad), is("/"));
     }
 
     /* ------------------------------------------------------------- the loopback bypass */

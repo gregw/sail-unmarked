@@ -133,21 +133,20 @@ export const TRAIL = 120;
  * whole leg, on a picture that may be a mile across, where a fix every five seconds says as
  * much as a fix every fifth of one and there is no room to draw the difference.
  *
- * <b>EVERY FIX, drawn as one pixel each.</b> Decimating by distance looks free — a point
- * closer than a pixel draws nothing — but at overview scale a leg is a few hundred metres, so a
- * point every twenty-five metres is a dozen dots with the shape of the leg missing from between
- * them, and the shape is the whole of what this is for. The picture of what a boat did is the
- * fixes.
+ * <b>ONE POINT PER BOAT LENGTH.</b> A fix closer than a boat length to the last point kept adds
+ * nothing to the shape of a leg that a picture a mile across can show, and costs a point to
+ * draw on every render — and the panel is redrawn on every fix, so a track of every fix made
+ * the screen slower to answer the longer a leg went on. A boat length is the scale the rest of
+ * the screens measure room in, and fine enough that the tacks are all there. `everyM` overrides
+ * it when set; null means the boat's own length.
  *
- * `everyM` therefore admits everything at zero and stays as the knob for decimating if a long
- * passage leg ever asks for it. `max` is the real bound: a cap in POINTS, which at
- * five a second is a quarter of an hour of leg, with the oldest dropped because the recent
+ * `max` is the bound behind that: a cap in POINTS, with the oldest dropped because the recent
  * shape of the leg is what somebody is reading.
  *
  * It starts AT the line: the first point of each leg is the interpolated crossing itself, so
  * the trail touches the mark it came from rather than starting a fix later, somewhere past it.
  */
-export const LEG_TRACK = { everyM: 0, max: 4000 };
+export const LEG_TRACK = { everyM: null, max: 4000 };
 
 /**
  * How many of those the approach view is required to keep on screen.
@@ -676,8 +675,8 @@ export class RaceClient {
    */
   trackLeg(point) {
     const last = this.legTrack[this.legTrack.length - 1];
-    if (last && LEG_TRACK.everyM > 0
-      && Math.hypot(point.x - last.x, point.y - last.y) < LEG_TRACK.everyM) return;
+    const spacing = LEG_TRACK.everyM ?? this.boatLengthM;
+    if (last && spacing > 0 && Math.hypot(point.x - last.x, point.y - last.y) < spacing - 1e-6) return;
     this.legTrack.push({ x: point.x, y: point.y });
     if (this.legTrack.length > LEG_TRACK.max) this.legTrack.shift();
   }

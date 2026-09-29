@@ -1,5 +1,6 @@
 /**
- * WHO IS SIGNED IN, on the two screens that require it.
+ * WHO IS SIGNED IN — on the two screens that require it, and on the front page, which is where
+ * somebody goes to sign in or to change account.
  *
  * <b>It renders nothing at all where there is no login</b>, which is the whole of its
  * judgement: a server with no `auth.yaml` is a machine on a desk, and showing it an empty
@@ -18,6 +19,13 @@ export async function showWhoami(id = 'whoami') {
     const config = await (await fetch('/api/config')).json();
     const auth = config.auth ?? {};
     if (!auth.required) return null;
+    // SIGNED OUT, a way in, which comes back to this page. The provider is asked to show its
+    // account chooser, so a browser holding two accounts is asked which rather than guessed for.
+    if (!auth.signedIn) {
+      const back = encodeURIComponent(location.pathname + location.search);
+      into.innerHTML = `<a href="${esc(auth.login ?? '/auth/login')}?to=${back}">sign in</a>`;
+      return auth;
+    }
     const who = auth.name || auth.email || 'signed in';
     into.innerHTML = `${esc(who)} &middot; <a href="${esc(auth.logout ?? '/auth/logout')}">sign out</a>`;
     return auth;

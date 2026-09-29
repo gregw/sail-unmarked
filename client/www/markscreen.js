@@ -50,9 +50,9 @@ import { TRAIL_IN_VIEW, bearingLocal, clock } from './raceclient.js';
  * a shake.
  */
 export const ORIENTATIONS = {
-  leg: { label: 'Leg up', turns: true },
-  cog: { label: 'COG up', turns: true },
   north: { label: 'North up', turns: false },
+  cog: { label: 'COG up', turns: true },
+  leg: { label: 'Leg up', turns: true },
   perp: { label: 'Line perp', turns: true },
 };
 
@@ -520,11 +520,13 @@ export const HOLD = {
  * Slowly, and the slowness is the point. In Leg up and Line perp the whole world turns when a
  * boat crosses onto the next leg, and snapping it through ninety degrees between one frame and
  * the next destroys the one thing an oriented display is for — knowing, without thinking,
- * which way things are. A turn that is watched happening is a turn that is followed. Twenty-
- * five degrees a second puts the longest realistic swing comfortably inside the dwell, so the
- * display has settled by the time the crossed screen gives way to the next approach.
+ * which way things are. A turn that is watched happening is a turn that is followed. Fifty
+ * degrees a second is still watched — a right-angle turn takes two seconds — and settles well
+ * inside the dwell, so the display has stopped by the time the crossed screen gives way to the
+ * next approach. The turn is about the BOAT (`pivotCentre`), so the one thing on the screen the
+ * sailor is looking at stays where it was while the world turns round it.
  */
-export const TURN_DEG_S = 25;
+export const TURN_DEG_S = 50;
 
 /** The shortest way round from one bearing to another, in degrees, signed. */
 export const turnBetween = (from, to) => ((((to - from) % 360) + 540) % 360) - 180;
@@ -574,6 +576,25 @@ export class Turner {
     return this.up != null && this.wanted != null
       && Math.abs(turnBetween(this.up, this.wanted)) > 0.5;
   }
+}
+
+/**
+ * THE CENTRE THAT KEEPS THE BOAT STILL WHILE THE PICTURE TURNS.
+ *
+ * `projector` turns the world about `centre`, so a turn about anything else swings the boat
+ * across the screen. Given the centre a picture has at bearing `from`, this is the centre that
+ * puts `pivot` in the same place on the screen at bearing `to`. The projector turns the world by
+ * `up` about the centre, so the boat's offset from the centre, turned by `from`, has to equal the
+ * new offset turned by `to` — which makes the new offset the old one turned by `from − to`.
+ */
+export function pivotCentre(centre, pivot, from, to) {
+  if (!centre || !pivot || from == null || to == null || from === to) return centre;
+  const radians = ((from - to) * Math.PI) / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  const dx = pivot.x - centre.x;
+  const dy = pivot.y - centre.y;
+  return { x: pivot.x - (dx * cos - dy * sin), y: pivot.y - (dy * cos + dx * sin) };
 }
 
 /**
@@ -637,8 +658,15 @@ export class PlotView {
    * that has to be seen is about to leave it, or the view could usefully be a sixth closer in.
    */
   frame(wanted) {
-    const { up, subject, centre, scale, points, width, height } = wanted;
+    const { up, subject, centre, scale, points, width, height, pivot } = wanted;
     let why = 'held';
+    // A HELD FRAME TURNS ABOUT THE BOAT. While the display swings the frame is kept, and turning
+    // it about its own centre would carry the boat across the screen; turned about the boat, the
+    // boat stays put and the world goes round it.
+    if (this.centre !== null && this.subject === subject && pivot && this.drawnUp != null) {
+      this.centre = pivotCentre(this.centre, pivot, this.drawnUp, up);
+    }
+    this.drawnUp = up;
     // The displayed bearing is NOT part of the identity, because it changes continuously
     // while the display is swinging onto a new leg and a frame rebuilt on every degree of
     // that would be a frame that never held still. A deliberate change of orientation is a
@@ -885,6 +913,7 @@ export function plot(state, options = {}) {
     subject: `${state.step.index}:${state.watched.line}:${state.lap ?? 1}:${orientation}`,
     centre: wantCentre,
     scale: wantScale,
+    pivot: boat,
     // Every one of them, not just the boat: the frame is worth holding only while all of
     // them are still in it, and the crossing point leaves first when a boat bears away. The
     // midpoint and the nearer end are in here too, or a frame held while the boat closed
@@ -1668,6 +1697,8 @@ export const BASEMAP_INK = 0.32;
  * and is the thing everything else has to be read against.
  */
 export const OVERVIEW_INK = {
+  /** An infinite end's run-on: a bearing, not more of the line, so thin and faint. */
+  infinite: 0.45,
   /** The legs, which are a construction line under the marks rather than the marks. */
   track: 0.85,
   trackWidth: 1.8,
@@ -1691,6 +1722,8 @@ export const OVERVIEW_INK = {
    */
   trail: 0.9,
   trailWidth: 1,
+  /** Red, the palette's own (`--warn`), so the dots stand out from a course in blues and greens. */
+  trailColour: 'var(--warn)',
 };
 
 /**
@@ -1831,13 +1864,18 @@ export function overview(client, options = {}) {
   // The whole course is ALWAYS fitted here — that is what an overview is for, and holding a
   // frame still would let a boat sail off the edge of its own course. It is the Mark screen,
   // where the question is "am I closing this line", that has to hold still.
-  const up = (options.turner ?? new Turner())
-    .turn(overviewUp(client, orientation), !!ORIENTATIONS[orientation]?.turns,
-      options.now ?? Date.now());
+  const turner = options.turner ?? new Turner();
+  const up = turner.turn(overviewUp(client, orientation), !!ORIENTATIONS[orientation]?.turns,
+    options.now ?? Date.now());
+  // FITTED FOR WHERE IT IS TURNING TO, and turned there about the boat. Fitted at every
+  // intermediate bearing instead, the picture would re-fit through the whole swing and carry
+  // the boat round the screen with it; this way the boat holds still, the course goes round it,
+  // and it lands exactly on the fit it was heading for.
+  const aim = turner.wanted ?? up;
 
   // Fitted in ROTATED space: a course that is long east-west needs a different scale once it
   // is stood on end, and fitting on the unrotated extent would crop it.
-  const radians = (up * Math.PI) / 180;
+  const radians = (aim * Math.PI) / 180;
   const cos = Math.cos(radians);
   const sin = Math.sin(radians);
   const turned = points.map((p) => ({ x: p.x * cos - p.y * sin, y: p.y * cos + p.x * sin }));
@@ -1860,11 +1898,12 @@ export function overview(client, options = {}) {
   // The pan is in screen pixels, so it is applied in ROTATED space and taken back out again —
   // the same there-and-back the extent's centre does just above. Moving the picture right by P
   // pixels is moving the centre LEFT by P/scale, which is where the signs come from.
-  const centre = (!view.pan.x && !view.pan.y) ? held.centre : (() => {
+  const aimed = (!view.pan.x && !view.pan.y) ? held.centre : (() => {
     const u = (held.centre.x * cos - held.centre.y * sin) - view.pan.x / scale;
     const v = (held.centre.y * cos + held.centre.x * sin) + view.pan.y / scale;
     return { x: u * cos + v * sin, y: v * cos - u * sin };
   })();
+  const centre = client.point ? pivotCentre(aimed, client.point, aim, up) : aimed;
   const to = projector(centre, up, scale, width, height);
 
   // THE BACKGROUND FIRST, so every line, triangle and letter of the course draws over it.
@@ -1923,6 +1962,19 @@ export function overview(client, options = {}) {
     // A line may carry several crossings (the leeward line is start, mark 2 and finish), and it
     // counts as live while ANY of them is: it is the same piece of water either way.
     const live = uses.some(({ step }) => client.isLive(step.index));
+    // AN INFINITE END RUNS ON, thin and faint, to the edge of the picture: the line is real out
+    // there — a boat crossing it a mile off has crossed it — but nobody chose where it goes, so
+    // it is drawn as the bearing it is rather than as more of the line. The editor's notation.
+    const { prepared } = uses[0].crossing;
+    const span = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    const run = Math.hypot(width, height);
+    const ux = (b.x - a.x) / span;
+    const uy = (b.y - a.y) / span;
+    const faint = (x0, y0, x1, y1) => `<line x1="${x0.toFixed(1)}" y1="${y0.toFixed(1)}"`
+      + ` x2="${x1.toFixed(1)}" y2="${y1.toFixed(1)}" stroke="var(--line)" stroke-width="1"`
+      + ` stroke-opacity="${OVERVIEW_INK.infinite}"/>`;
+    if (prepared.portInfinite) out += faint(a.x, a.y, a.x - ux * run, a.y - uy * run);
+    if (prepared.starboardInfinite) out += faint(b.x, b.y, b.x + ux * run, b.y + uy * run);
     out += `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}"`
       + ` stroke="${live ? ROLE_COLOUR.start : 'var(--line)'}" stroke-width="${live ? 3.5 : 2}"`
       + ` opacity="${live ? 1 : OVERVIEW_INK.ahead}"/>`;
@@ -1963,9 +2015,9 @@ export function overview(client, options = {}) {
    * track that ran back through the whole race would draw the course a second time in a colour
    * that means something else.
    *
-   * In the boat's OWN ink rather than in any of the course's colours: those mean leg role
-   * (green, blue, red) and this is not a leg, and the cyan dashes are the COG, which is where
-   * the boat is going rather than where it has been. Solid, thin, and under the hull.
+   * RED DOTS (`OVERVIEW_INK.trailColour`), so where the boat has been stands out from the course
+   * drawn in blues and greens and from the cyan dashes of the COG, which is where it is going
+   * rather than where it has been. Thin, and under the hull.
    */
   if ((client.legTrack ?? []).length > 1) {
     // ONE PATH, NOT ONE ELEMENT PER FIX: a leg at five fixes a second is thousands of them, and
@@ -1975,7 +2027,7 @@ export function overview(client, options = {}) {
     const d = client.legTrack
       .map((p) => { const q = to(p); return `M${q.x.toFixed(1)},${q.y.toFixed(1)}L${q.x.toFixed(1)},${q.y.toFixed(1)}`; })
       .join('');
-    out += `<path d="${d}" fill="none" stroke="var(--ink)" stroke-width="${OVERVIEW_INK.trailWidth}"`
+    out += `<path d="${d}" fill="none" stroke="${OVERVIEW_INK.trailColour}" stroke-width="${OVERVIEW_INK.trailWidth}"`
       + ` stroke-linecap="round" opacity="${OVERVIEW_INK.trail}"/>`;
   }
 
@@ -2067,7 +2119,6 @@ export function signalLine(client, now = Date.now()) {
 /** The overview's header and the list of what has been crossed so far. */
 export function overviewPanel(client, options = {}) {
   const now = options.now ?? Date.now();
-  const step = client.live();
   const waypoint = client.waypoint();
   const range = distanceTo(waypoint?.distanceM);
   const stale = client.stale(now);
@@ -2104,22 +2155,10 @@ export function overviewPanel(client, options = {}) {
     </div>
     ${timingRow(client, now)}
     ${signalLine(client, now)}
-    <p class="status${client.complete() ? ' crossed' : ''}">${client.finished
-      ? `Finished ${esc(hhmmss(client.finishAt))} in ${clock(client.elapsed(now))}, `
-        + `${client.crossings.length} crossings latched.`
-      : client.starting
-        // A CYCLE IS STARTED AT WHICHEVER ENTRY LINE THE BOAT CROSSES FIRST, so the sentence
-        // says what the boat is being offered rather than naming a mark it is "sailing to".
-        // The lines themselves are marked on the picture above it, all of them.
-        ? `Start at any of the ${client.entries.length} marked lines. The clock runs from the`
-          + ' one you cross, and that same line finishes the lap.'
-        : step
-          ? `Sailing to mark ${esc(client.atFinish() ? 'F' : step.letter)}${client.atFinish()
-            ? ' — the line you started on, which finishes the lap'
-            : client.snapshot.closed ? `, lap ${client.lap}` : ''}. The Mark screen comes up on its own.`
-          : 'Waiting for a fix.'}</p>
-    ${client.crossings.length === 0 ? '' : `<ul class="crossings mono">${client.crossings.slice().reverse().map((c) =>
-      `<li><span class="ok">&check;</span> ${esc(c.letter)} &middot; ${esc(c.line)} &middot; ${esc(hhmmss(c.time))}${c.lap > 1 ? ` &middot; lap ${c.lap}` : ''}</li>`).join('')}</ul>`}`;
+    <!--
+      NO SENTENCE AND NO LOG UNDER IT. What the boat is sailing to is the waypoint row above, and
+      what it has crossed is on the chart; the room they took is the chart's.
+    -->`;
 }
 
 export { esc, fmt, deg };

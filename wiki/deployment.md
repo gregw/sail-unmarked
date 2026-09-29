@@ -65,8 +65,14 @@ Three things, each in `AuthFilter`:
   dance can fail looks identical from the browser — a stale client secret, an expired code, a session
   lost to a restart, a tab left open over lunch. The reason is in the query; this renders it and logs
   it, because whoever can fix it is reading the journal on the Pi.
-- **A way out.** Signing out has to work for an account that is **not** allowed in: the ordinary cause
-  of a refusal is a browser with two accounts that picked the wrong one.
+- **A way in.** `/auth/login?to=…` sits behind the login, so reaching it is the sign-in, and then goes
+  back to `to` — a path on this server only, never another site. The front page's **sign in** link is
+  it; signed in, the same place reads *name · sign out* (`whoami.js`).
+- **A way out, and a choice.** Signing out has to work for an account that is **not** allowed in: the
+  ordinary cause of a refusal is a browser with two accounts that picked the wrong one. Signing out of
+  this server alone would not fix that — the provider would guess the same account again — so every
+  sign-in asks it for its account chooser (`prompt=select_account`, `ChooseAccountAuthenticator`), and
+  the refusal page's link signs out and straight into a fresh sign-in.
 - **The domain check.** Jetty's authenticator establishes that the provider knows who you are — *any*
   account of theirs. `allowedDomain` narrows that to a club, checked against the `hd` claim that came
   back rather than the hint on the request, which is only a hint to an account chooser.

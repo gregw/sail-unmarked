@@ -8,7 +8,9 @@
 </head>
 <body>
 
-<p class="kicker">Unmarked Racing</p>
+<p class="kicker" style="display:flex; gap:12px">Unmarked Racing
+  <!-- Signing in, or out, or as somebody else. Empty on a server with no login. -->
+  <span id="whoami" class="mono" style="margin-left:auto; text-transform:none; letter-spacing:0"></span></p>
 <h1>Sail racing around virtual marks</h1>
 
 <div class="panel">
@@ -81,6 +83,9 @@
 <div id="server" class="panel"><span class="muted">Loading&hellip;</span></div>
 
 <script type="module">
+import { showWhoami } from './whoami.js';
+
+showWhoami();
 const el = (id) => document.getElementById(id);
 
 async function json(path) {

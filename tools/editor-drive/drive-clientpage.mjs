@@ -443,6 +443,20 @@ ok('...and it is a different bearing from the leg the boat is sailing',
   Math.abs(mod.__state.client.legInto(mod.__state.client.live())
     - (mod.__state.client.fix.cogDeg ?? 0)) > 0.5);
 press('orient', 'north');
+
+// ONE ORIENTATION PER SCREEN: the Line screen was just set North up, and turning the Course
+// screen does not turn it back, nor the other way round.
+press('view', 'overview');
+ok('the Course screen opens North up', on('orient', 'north'));
+press('orient', 'cog');
+press('view', 'mark');
+ok('...and turning it leaves the Line screen as it was left', on('orient', 'north'));
+press('orient', 'perp');
+press('view', 'overview');
+ok('...which in turn leaves the Course screen as IT was left', on('orient', 'cog'));
+press('orient', 'north');
+ok('the orientations are offered North, COG, Leg, then Line perp',
+  /data-orient="north"[\s\S]*data-orient="cog"[\s\S]*data-orient="leg"[\s\S]*data-orient="perp"/.test(device()));
 press('view', 'auto');
 
 /* -------------------------------------- the overview's own chart controls */
@@ -462,10 +476,10 @@ ok('...and runs the COG out as far as the picture goes',
   new RegExp(`stroke="var\\(--cog\\)" stroke-width="${OVERVIEW_INK.cogWidth}"`)
     .test(overviewSvg()));
 
-// THE TRACK SINCE THE LAST LINE, in the boat's own ink: where it has BEEN on this leg, which
-// no part of the course drawing can say.
-ok('...and draws the boat\'s own track back down the leg it is sailing',
-  new RegExp(`<path d="M[^"]+" fill="none" stroke="var\\(--ink\\)" stroke-width="${OVERVIEW_INK.trailWidth}"`)
+// THE TRACK SINCE THE LAST LINE, in red dots: where it has BEEN on this leg, which no part of
+// the course drawing can say.
+ok('...and draws the boat\'s own track back down the leg it is sailing, in red',
+  new RegExp(`<path d="M[^"]+" fill="none" stroke="var\\(--warn\\)" stroke-width="${OVERVIEW_INK.trailWidth}"`)
     .test(overviewSvg()) && mod.__state.client.legTrack.length > 1);
 
 ok('the overview carries a bar of chart controls under the chart',
@@ -510,6 +524,25 @@ document.activeElement = null;
 await settle(1500);
 ok('...and starts again the moment focus goes elsewhere, with nothing to remember to release',
   device() !== beforeChoosing);
+/*
+ * NOTHING IS REBUILT UNDER A FINGER. A click lands only if the press and the release meet the
+ * same element, so a fix redrawing the panel between them swallowed the view and orientation
+ * buttons some of the time. Pressed anywhere but the chart, the panel waits for the release.
+ */
+H('device:pointerdown')({ target: { closest: () => null } });
+const underFinger = device();
+await settle(1500);
+ok('the panel holds still while a button is pressed, so the click lands on the button it began on',
+  device() === underFinger);
+H('window:pointerup')({});
+await settle(1500);
+ok('...and is drawn again once it is let go', device() !== underFinger);
+H('device:pointerdown')({ target: { closest: (sel) => (sel === '.plot' ? {} : null) } });
+const onChart = device();
+await settle(1500);
+ok('...but a press on the chart does not hold it, because a pan is drawn as it moves', device() !== onChart);
+H('window:pointerup')({});
+
 H('run:click')();
 await settle(400);
 

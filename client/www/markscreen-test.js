@@ -59,6 +59,7 @@ import {
   markScreen,
   overviewPanel,
   plot,
+  pivotCentre,
   projector,
   statusLine,
   upBearing,
@@ -176,6 +177,16 @@ export function run(check) {
     ],
     defaults: { confirmFixes: 3, accuracyBandM: null, qc: { minSatellites: 4, maxAccuracyM: 25, maxSpeedKn: 40 } },
   };
+  // AN INFINITE END RUNS ON in the overview, thin: the same course with mark 1's port end infinite.
+  const runOn = new RaceClient({ ...snapshot, steps: snapshot.steps.map((step, i) => (i !== 1 ? step
+    : { ...step, crossings: [{ ...step.crossings[0], port: { ...step.crossings[0].port, infinite: true } }] })) });
+  check('an infinite end runs on in the overview as a thin, faint line',
+    overview(runOn).includes(`stroke-width="1" stroke-opacity="${OVERVIEW_INK.infinite}"`));
+  check('...and a course with none has no run-on', !overview(new RaceClient(snapshot))
+    .includes(`stroke-opacity="${OVERVIEW_INK.infinite}"`));
+  check('the overview carries no sentence and no log of crossings: that room is the chart\'s',
+    !/Sailing to|class="crossings/.test(overviewPanel(new RaceClient(snapshot))));
+
   const client = new RaceClient(snapshot);
   let t = 0;
   for (let n = -80; n <= -20; n += 10) {
@@ -291,8 +302,27 @@ export function run(check) {
     && new PlotView().turn(270, false, 0) === 270);
   const shortWay = new PlotView();
   shortWay.turn(350, true, 0);
+  // A tenth of the gap's time at the turn rate, so the step is short of 0 whatever the rate is.
   check('a swing takes the short way round, not the long way',
-    shortWay.turn(10, true, 200) > 350);
+    shortWay.turn(10, true, (1000 * 10) / TURN_DEG_S / 2) > 350);
+  // TURNED ABOUT THE BOAT: a held frame swinging keeps the boat where it was on the screen.
+  const pivoted = new PlotView();
+  const boatAt = { x: 30, y: -40 };
+  const frameAt = (bearing) => pivoted.frame({ up: bearing, subject: 's', centre: { x: 0, y: 0 }, scale: 2,
+    pivot: boatAt, points: [boatAt], width: 340, height: 300 });
+  const before = frameAt(0);
+  const onScreen0 = projector(before.centre, 0, before.scale, 340, 300)(boatAt);
+  const turned = frameAt(20);
+  const onScreen20 = projector(turned.centre, 20, turned.scale, 340, 300)(boatAt);
+  check('a held frame turns about the boat, so the boat stays where it was on the screen',
+    turned.why === 'held' && Math.abs(onScreen0.x - onScreen20.x) < 1e-6 && Math.abs(onScreen0.y - onScreen20.y) < 1e-6);
+  check('...and pivotCentre is that rule on its own',
+    (() => {
+      const c = pivotCentre({ x: 5, y: 7 }, boatAt, 10, 55);
+      const a = projector({ x: 5, y: 7 }, 10, 3, 340, 300)(boatAt);
+      const b = projector(c, 55, 3, 340, 300)(boatAt);
+      return Math.abs(a.x - b.x) < 1e-6 && Math.abs(a.y - b.y) < 1e-6;
+    })());
   check('the very first draw has nothing to hold', new PlotView().frame({ up: 0, subject: 'a', centre: { x: 1, y: 2 }, scale: 3, boat: { x: 0, y: 0 }, width: 340, height: 300 }).why === 'first');
 
   /* ------------------------------------------- a wrong-way crossing is not a mistake */
@@ -393,8 +423,8 @@ export function run(check) {
   check('the orientation selector offers all three', ['Leg up', 'North up', 'Line perp']
     .every((label) => orientationBar('north').includes(label)));
   check('...marking the one in force', orientationBar('perp').includes('data-orient="perp" class="on"'));
-  check('...COG up among them, beside Leg up, since the two are the course-referenced pair',
-    Object.keys(ORIENTATIONS).slice(0, 2).join() === 'leg,cog');
+  check('...offered North up, COG up, Leg up, then Line perp',
+    Object.keys(ORIENTATIONS).join() === 'north,cog,leg,perp');
 
   /* -------------------------------------------------- what to look at, and who decides */
 

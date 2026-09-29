@@ -15,8 +15,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * The three things a login needs that the login itself cannot provide: a way out, a way back,
- * and a reason when it fails.
+ * The four things a login needs that the login itself cannot provide: a way in, a way out, a
+ * way back, and a reason when it fails.
  *
  * <p>It runs after the security handler, so by the time it sees a request the sign-in has
  * happened and the claims are on the session.
@@ -39,6 +39,13 @@ public class AuthFilter implements Filter
 
     /** Signing out has to work for an account that is NOT allowed in — see below. */
     public static final String LOGOUT_PATH = "/auth/logout";
+
+    /**
+     * Signing in without opening a protected screen first, for the front page's link. Behind
+     * the login itself (`UnmarkedSecurityHandler`), so reaching it IS the sign-in; it then sends
+     * the browser on to {@code ?to=}, or to the front page.
+     */
+    public static final String LOGIN_PATH = "/auth/login";
 
     private final AuthConfig auth;
 
@@ -75,7 +82,7 @@ public class AuthFilter implements Filter
         {
             if (req.getSession(false) != null)
                 req.getSession(false).invalidate();
-            resp.sendRedirect(req.getContextPath() + "/");
+            resp.sendRedirect(req.getContextPath() + onward(req.getParameter("to")));
             return;
         }
 
@@ -86,7 +93,26 @@ public class AuthFilter implements Filter
             deny(req, resp, who.email());
             return;
         }
+        // Only reached signed in and allowed: the constraint in front of it was the sign-in.
+        if (path.endsWith(LOGIN_PATH))
+        {
+            resp.sendRedirect(req.getContextPath() + onward(req.getParameter("to")));
+            return;
+        }
         chain.doFilter(request, response);
+    }
+
+    /**
+     * Where to send the browser next: a path on THIS server, or the front page. Never a URL a
+     * link could point anywhere else — a {@code to=} that could name another host would make
+     * this server an open redirect for anybody's phishing page.
+     */
+    static String onward(String to)
+    {
+        if (to == null || !to.startsWith("/") || to.startsWith("//") || to.contains("\\")
+            || to.contains("://") || to.chars().anyMatch(Character::isISOControl))
+            return "/";
+        return to;
     }
 
     private void signInFailed(HttpServletRequest req, HttpServletResponse resp) throws IOException
@@ -127,10 +153,10 @@ public class AuthFilter implements Filter
             <p>You are signed in as <strong>%s</strong>, which is not a <strong>%s</strong>
             account.</p>
             <p>If you have more than one account, the browser may have picked the wrong one.
-            <a href="%s">Sign out and try again.</a></p>
+            <a href="%s">Sign out and choose another account.</a></p>
             </body></html>
             """.formatted(esc(email), esc(auth.allowedDomain()),
-            esc(req.getContextPath() + LOGOUT_PATH)));
+            esc(req.getContextPath() + LOGOUT_PATH + "?to=" + LOGIN_PATH)));
     }
 
     private static String firstOf(String... values)

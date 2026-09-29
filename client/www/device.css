@@ -32,7 +32,13 @@
   padding: 8px 12px; border-bottom: 1px solid var(--panel2); font-size: 12px;
 }
 .device .bar .sp { flex: 1; }
-.device .bar .disp { font-family: var(--disp); font-size: 16px; letter-spacing: 0.03em; }
+/* THE COURSE NAME ON ONE LINE: smaller as the panel narrows, and cut short with an ellipsis only
+   past that, rather than wrapping the bar onto a second line the chart would pay for. */
+.device .bar > * { white-space: nowrap; }
+.device .bar .disp {
+  font-family: var(--disp); font-size: clamp(11px, 4.2cqi, 16px); letter-spacing: 0.03em;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis;
+}
 
 /* The three orientations, and beside them the Course/Line/Auto override. */
 .orient { display: flex; gap: 0; padding: 6px 12px 0; }
@@ -81,8 +87,10 @@
   display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
   padding: 6px 3cqi; gap: 3cqi;
 }
-.device .readout .value { font-size: min(11cqi, 44px); line-height: 1.05; }
-.device .readout.done .value { font-size: min(7cqi, 28px); }
+/* Half the size they were: when a run started and how long it has taken are read once in a while,
+   and the room is the chart's. */
+.device .readout .value { font-size: min(5.5cqi, 22px); line-height: 1.05; }
+.device .readout.done .value { font-size: min(3.5cqi, 14px); }
 
 .steer {
   display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
@@ -143,8 +151,6 @@
 .status.crossed { color: var(--ok); }
 .status.missed { color: var(--warn); }
 
-.crossings { padding: 0 12px 12px; font-size: 11px; }
-.crossings li { padding: 1px 0; color: var(--muted); }
 
 /* What is under the screens: leaving the course, and whatever the page adds beside it. */
 .deck { display: flex; gap: 8px; padding: 0 12px 16px; }

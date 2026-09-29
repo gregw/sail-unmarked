@@ -43,6 +43,13 @@ import { alertBanner, alertModal, chatPanel, placePanel, startRow } from './scre
 export const PLOT = { width: 400, height: 330 };
 
 /**
+ * The course overview's picture, taller than the Mark screen's: the overview has nothing under
+ * its numbers but the chart, and the room a sentence and a log of crossings once took is the
+ * chart's.
+ */
+export const OVERVIEW_PLOT = { width: 400, height: 420 };
+
+/**
  * "No race — just sail a course", which is an ANSWER rather than the absence of one.
  *
  * The empty option on every other level means *not yet chosen*; this one means *there is nobody
@@ -115,6 +122,32 @@ export class Device {
     this.host = host;
     this.hooks = hooks;
     this.client = null;
+    /*
+     * NOTHING IS REBUILT UNDER A FINGER. The panel is redrawn on every fix, and a click only
+     * lands if the press and the release meet the SAME element — so a fix arriving between the
+     * two replaced the button and swallowed the click, and the view and orientation buttons
+     * worked only sometimes. While a pointer is down anywhere in the panel but the chart, the
+     * redraw waits, and it happens once on release, after the click has landed. The chart is left
+     * out because a pan and a pinch are redrawn as they move.
+     *
+     * The same press lets go of a chooser still holding focus (see `render`): a click on a
+     * button does not move focus on every browser, and a focused chooser would otherwise hold
+     * the panel still until somebody happened to click on something that takes it.
+     */
+    this.pressing = false;
+    host?.addEventListener?.('pointerdown', (ev) => {
+      if (ev.target?.closest?.('.plot')) return;
+      this.pressing = true;
+      const active = document.activeElement;
+      if (active && active !== ev.target && active.id === 'o_basemap') active.blur?.();
+    }, true);
+    const release = () => {
+      if (!this.pressing) return;
+      this.pressing = false;
+      setTimeout(() => this.render(), 0);
+    };
+    globalThis.window?.addEventListener?.('pointerup', release, true);
+    globalThis.window?.addEventListener?.('pointercancel', release, true);
     this.snapshot = null;
     this.courses = [];
     // A fresh read of the join screen's lists that arrived while one of its levels was open,
@@ -132,7 +165,11 @@ export class Device {
     // How the sailor reads a chart, and what is drawn behind it. `none` to start, which
     // fetches nothing: a screen whose whole claim is that it works with the server switched
     // off does not open by asking a tile server for anything.
-    this.orientation = 'north';
+    //
+    // ONE ORIENTATION PER SCREEN, remembered apart: the course is read against the chart and
+    // opens North up, a line is read against its own crossing and opens Line perp, and turning
+    // one does not turn the other. The selector changes the one for the screen it is on.
+    this.orientations = { overview: 'north', mark: 'perp' };
     this.basemap = 'none';
     // How strongly it is drawn, 0 to 1. Starts dim, for the reason `BASEMAP_INK` gives.
     this.basemapInk = BASEMAP_INK;
@@ -284,6 +321,8 @@ export class Device {
   /** Draw whichever screen the client says the sailor should be looking at. */
   render() {
     if (!this.client) return this.renderJoin();
+    // Not under a finger: see the constructor. Drawn on release instead.
+    if (this.pressing) return undefined;
 
     /*
      * NOT WHILE SOMEBODY IS CHOOSING A BACKGROUND.
@@ -300,9 +339,6 @@ export class Device {
      */
     const chooser = this.el('o_basemap');
     if (chooser && document.activeElement === chooser) return undefined;
-    // The same for the brightness slider: a render mid-drag would replace it under the finger.
-    const slider = this.el('o_ink');
-    if (slider && document.activeElement === slider) return undefined;
 
     const now = Date.now();
     /*
@@ -319,7 +355,7 @@ export class Device {
     // for and the screen follows what came back rather than what was requested.
     const mark = wanted === 'mark' ? this.client.markState(now) : null;
     const shared = {
-      orientation: this.orientation, viewMode: this.client.viewMode, ...PLOT, now,
+      viewMode: this.client.viewMode, ...PLOT, now,
       // The club's closest zoom, in this boat's lengths. Passed on every render rather than
       // held by the plot, so a setting read after a join still reaches the next frame.
       boatLengthsAcross: this.display?.boatLengthsAcross,
@@ -349,13 +385,16 @@ export class Device {
     const bars = viewBar(this.client.viewMode, shared);
 
     let screen;
-    if (mark) screen = markScreen(mark, { ...shared, view: this.plotView })
+    // Which screen's orientation the selector on it sets.
+    this.shownScreen = mark ? 'mark' : 'overview';
+    if (mark) screen = markScreen(mark, { ...shared, orientation: this.orientations.mark, view: this.plotView })
       + (alert ? alertBanner(alert) : '');
     else if (wanted === 'chat') screen = chatPanel(this.dialog, { ...shared, bars });
     else if (wanted === 'place') screen = placePanel(this.dialog,
       { ...shared, bars, division: this.division });
     else screen = overviewPanel(this.client, {
-      ...shared, turner: this.courseTurn, view: this.overview, basemap: this.basemap,
+      ...shared, ...OVERVIEW_PLOT, orientation: this.orientations.overview,
+      turner: this.courseTurn, view: this.overview, basemap: this.basemap,
       basemapInk: this.basemapInk, backgroundLight: this.backgroundLight,
     });
 
@@ -641,16 +680,16 @@ export class Device {
   }
 
   /**
-   * The orientation selector is on BOTH screens and sets one setting.
+   * The orientation selector is on BOTH screens, and sets THAT screen's orientation.
    *
-   * The choice is about how somebody reads a chart, not about which screen happens to be up,
-   * and a selector that only existed on the approach would mean the setting could not be
-   * changed from the screen a boat spends most of its time looking at.
+   * A course and a line are read differently — the course against the chart, a line against its
+   * own crossing — so each keeps its own, and the Line screen coming up by itself on an approach
+   * comes up the way it was last read rather than the way the course happened to be.
    */
   wireOrientation() {
     for (const button of this.host.querySelectorAll('[data-orient]')) {
       button.addEventListener('click', () => {
-        this.orientation = button.dataset.orient;
+        this.orientations[this.shownScreen ?? 'overview'] = button.dataset.orient;
         this.render();
       });
     }

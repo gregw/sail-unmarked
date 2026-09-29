@@ -41,7 +41,7 @@ public class UnmarkedSecurityHandler extends SecurityHandler
      * <p>{@code race.html} is the sharper of the two — it can tell a fleet to stop — but the
      * editor is the one that decides what everybody sails, so neither is the lesser.
      */
-    private static final String[] SCREENS = {"/editor.html", "/race.html"};
+    private static final String[] SCREENS = {"/editor.html", "/race.html", AuthFilter.LOGIN_PATH};
 
     /**
      * The writes behind those screens, which are constrained by METHOD as well as by path.

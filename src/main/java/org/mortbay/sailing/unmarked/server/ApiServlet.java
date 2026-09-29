@@ -159,6 +159,7 @@ public class ApiServlet extends HttpServlet
                     "signedIn", who.isSignedIn(),
                     "email", who.email() == null ? "" : who.email(),
                     "name", who.name() == null ? "" : who.name(),
+                    "login", AuthFilter.LOGIN_PATH,
                     "logout", AuthFilter.LOGOUT_PATH));
                 send(resp, body);
                 return;

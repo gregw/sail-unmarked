@@ -198,8 +198,10 @@ public class UnmarkedServer
         // way round and the error page is null, which is Jetty's signal to answer a failed
         // callback with a bare 403 and no explanation — the one response in this flow that
         // somebody setting a club up has to be able to read.
+        // And it asks for the account chooser, so a browser holding two accounts is asked which
+        // rather than handed the provider's guess — see ChooseAccountAuthenticator.
         OpenIdAuthenticator authenticator =
-            new OpenIdAuthenticator(oidc, auth.redirectPath(), AuthFilter.ERROR_PATH, null);
+            new ChooseAccountAuthenticator(oidc, auth.redirectPath(), AuthFilter.ERROR_PATH);
         SecurityHandler security = new UnmarkedSecurityHandler(auth);
         security.setAuthenticator(authenticator);
         security.setLoginService(new OpenIdLoginService(oidc));
