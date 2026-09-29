@@ -141,6 +141,8 @@ public class UnmarkedServer
         Dialog dialog = new Dialog(programmes, ledger, store);
 
         AuthConfig auth = AuthConfig.load(configDir);
+        if (auth.enabled())
+            LOG.info("Sign-in callback path: {}", auth.redirectPath());
 
         ServletContextHandler context = new ServletContextHandler("/");
         if (auth.enabled())

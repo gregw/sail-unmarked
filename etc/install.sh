@@ -148,8 +148,9 @@ if [ ! -f "$DATA_DIR/config/auth.yaml" ]; then
     echo "Two things to get right there:"
     echo "  - the server needs a route at START-UP with a login configured: it discovers the"
     echo "    provider's endpoints before it binds."
-    echo "  - allowLoopback must stay FALSE behind a reverse proxy. Every request in the world"
-    echo "    arrives from 127.0.0.1 there, so leaving it on hands the editor to the internet."
+    echo "  - allowIP and allowLoopback must never name the address a proxy or router forwards"
+    echo "    from. Every request through it arrives from that address, so listing it hands the"
+    echo "    editor to everybody who comes through it."
     echo ""
 else
     echo "A login is configured ($DATA_DIR/config/auth.yaml)."

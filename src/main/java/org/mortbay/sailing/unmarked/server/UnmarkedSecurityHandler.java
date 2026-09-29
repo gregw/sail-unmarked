@@ -1,7 +1,9 @@
 package org.mortbay.sailing.unmarked.server;
 
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.Set;
 
 import org.eclipse.jetty.security.Constraint;
 import org.eclipse.jetty.security.SecurityHandler;
@@ -58,22 +60,26 @@ public class UnmarkedSecurityHandler extends SecurityHandler
     public UnmarkedSecurityHandler(AuthConfig auth)
     {
         this.auth = auth;
+        this.bypass = auth.bypass();
     }
+
+    /** The addresses let past the login as administrators — `AuthConfig.bypass`. */
+    private final Set<InetAddress> bypass;
 
     @Override
     protected Constraint getConstraint(String pathInContext, Request request)
     {
         /*
-         * THE LOOPBACK BYPASS, and it lives here because it is an exemption from a constraint
-         * rather than an identity: a request from this machine is treated as being from
-         * somebody with their hands on the server.
+         * THE ADDRESS BYPASS, and it lives here because it is an exemption from a constraint
+         * rather than an identity: a request from a listed address — `allowIP`, and this machine's
+         * own with `allowLoopback` — is treated as being from an administrator.
          *
-         * OPT-IN, and that is not caution for its own sake. BEHIND A REVERSE PROXY EVERY
-         * REQUEST IN THE WORLD ARRIVES FROM 127.0.0.1 — so a bypass that were on by default
-         * would hand the editor to the internet on the first club that put nginx in front of
-         * this, and would do it silently.
+         * OPT-IN, and empty by default, because an address is only as good as what stands in front
+         * of it: behind anything that terminates the connection — a reverse proxy on this machine,
+         * a router doing the TLS — every request arrives from that one address, and listing it
+         * would hand the editor to everybody who comes through it, silently.
          */
-        if (auth.allowLoopback() && isLoopback(request))
+        if (!bypass.isEmpty() && bypass.contains(remote(request)))
             return Constraint.ALLOWED;
 
         for (String screen : SCREENS)
@@ -94,18 +100,16 @@ public class UnmarkedSecurityHandler extends SecurityHandler
     }
 
     /**
-     * Is this request from this machine?
+     * The address this request's connection came from, or null.
      *
      * <p>Read off the connection rather than off a header, deliberately: {@code X-Forwarded-For}
      * is whatever the client said it was, and a bypass that believed it would be no bypass at
-     * all. When the forwarded customizer is on, a proxied request still arrives on a loopback
-     * socket — which is exactly why the bypass is opt-in.
+     * all. With the forwarded customizer on, a request through a proxy or a router still arrives
+     * on a connection from THAT — which is exactly why no address is let past unless listed.
      */
-    private static boolean isLoopback(Request request)
+    private static InetAddress remote(Request request)
     {
         SocketAddress remote = request.getConnectionMetaData().getRemoteSocketAddress();
-        if (remote instanceof InetSocketAddress inet && inet.getAddress() != null)
-            return inet.getAddress().isLoopbackAddress();
-        return false;
+        return remote instanceof InetSocketAddress inet ? inet.getAddress() : null;
     }
 }

@@ -47,15 +47,20 @@ had to find, and an API call that got one would have nowhere to send them.
 The same choice is why the constraint is by **method as well as path**. The same prefix serves reads
 and writes, so a URL pattern alone cannot say *unless it is a GET*.
 
-## The loopback bypass, and why it is off by default
+## The address bypass, and why it is empty by default
 
-`allowLoopback: true` treats a request from this machine as an officer's, which is what a laptop you
-are sitting at wants. **It is opt-in, and that is the important half: behind a reverse proxy every
-request in the world arrives from 127.0.0.1.** A bypass left on would hand the editor to the internet
-on the first club that put nginx in front of this, silently.
+`allowIP` is a comma-separated list of IP addresses whose requests are treated as an administrator's
+without signing in; `allowLoopback: true` adds this machine's own, `127.0.0.1` and `::1`, which is
+what a laptop you are sitting at wants (`AuthConfig.bypass`). Addresses only — a host name would be
+looked up, and a bypass that followed DNS would be whoever controlled the name; an entry that is not
+an address is left out and logged.
 
 It is read off the **connection**, never off `X-Forwarded-For`, which is whatever the client said it
-was — a bypass that believed a header would be no bypass at all.
+was — a bypass that believed a header would be no bypass at all. **So whatever terminates connections
+in front of the server is the address every request through it arrives from**: a reverse proxy on the
+same machine makes that loopback, a router doing the TLS makes it the router's. Listing that address
+hands the editor to everybody who comes through it, silently; list only machines that reach the
+server directly on its own port. That is why the list is opt-in and empty by default.
 
 ## What a login needs that the login cannot provide
 
@@ -125,7 +130,7 @@ machine. The Java package and the `unmarked-data` property keep the plain name.
 - **The last thing printed is the thing not done.** With no `auth.yaml` the script ends by saying the
   editor and the race screen are open to anything that can reach the Pi, and gives the four commands to
   fix it — including the two that are easy to get wrong: the server needs a route at *start-up* once a
-  login is configured, and `allowLoopback` must stay false behind a reverse proxy. An install that ends
+  login is configured, and neither `allowIP` nor `allowLoopback` may name the address a proxy or router forwards from. An install that ends
   with "complete" and says nothing else invites somebody to believe it is ready for a club night.
 
 The unit starts `After=network-online.target` for the same discovery reason, and confines the process to

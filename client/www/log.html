@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Publish log &middot; Unmarked Racing</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<p class="kicker"><a href="index.html">Unmarked Racing</a></p>
+<h1>Publish log</h1>
+
+<!--
+  EVERY MOMENT A COURSE BECAME JOINABLE OR STOPPED BEING JOINABLE. Open to everybody on purpose:
+  what a fleet was handed and when is exactly what a competitor may need to check afterwards, and
+  a record only the club can read is not an audit trail.
+-->
+<div class="panel">
+  <p class="muted" style="font-size:12px; margin:0 0 8px">
+    Every time a course was published, withdrawn, made public or made private, newest first.
+  </p>
+  <div id="log"><span class="muted">Loading&hellip;</span></div>
+</div>
+
+<script type="module">
+const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;' };
+const esc = (v) => String(v ?? '').replace(/[&<>]/g, (c) => ESC[c]);
+const when = (iso) => String(iso ?? '').replace('T', ' ').slice(0, 16);
+
+const SAID = {
+  published: ['ok', 'published'],
+  opened: ['ok', 'made public'],
+  withdrawn: ['warn', 'withdrawn'],
+  closed: ['warn', 'made private'],
+};
+const into = document.getElementById('log');
+try {
+  const response = await fetch('/api/log');
+  if (!response.ok) throw new Error(`/api/log: ${response.status}`);
+  const events = await response.json();
+  into.innerHTML = events.length === 0
+    ? '<span class="muted">Nothing has been published to a public course yet.</span>'
+    : `<table class="mono" style="font-size:12px; border-collapse:collapse">${events.map((e) => {
+        const [cls, said] = SAID[e.what] ?? ['muted', e.what];
+        return `<tr>
+          <td class="muted" style="padding:2px 10px 2px 0; white-space:nowrap">${esc(when(e.at))}</td>
+          <td class="${cls}" style="padding:2px 10px 2px 0; white-space:nowrap">${esc(said)}</td>
+          <td style="padding:2px 10px 2px 0">${esc(e.club)} / ${esc(e.series)} / ${esc(e.course)} / ${esc(e.variant)}</td>
+          <td class="muted" style="padding:2px 0">${esc(e.revision ?? '')}</td>
+        </tr>`;
+      }).join('')}</table>`;
+} catch (e) {
+  into.innerHTML = `<span class="warn">${esc(e.message)}</span>`;
+}
+</script>
+
+</body>
+</html>

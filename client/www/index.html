@@ -5,6 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Unmarked Racing</title>
 <link rel="stylesheet" href="style.css">
+<style>
+  /* The links as a short list: a name to press and a line saying what it is. */
+  .links { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; align-items: baseline; }
+  .links a { font-weight: 600; white-space: nowrap; }
+  .links span { color: var(--muted); }
+  .series { margin-bottom: 14px; }
+  .series:last-child { margin-bottom: 0; }
+  .series ul { margin: 2px 0 0; }
+  .series .label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--muted); margin-top: 6px; }
+</style>
 </head>
 <body>
 
@@ -13,80 +24,47 @@
   <span id="whoami" class="mono" style="margin-left:auto; text-transform:none; letter-spacing:0"></span></p>
 <h1>Sail racing around virtual marks</h1>
 
+<!--
+  WHAT IT IS, in a paragraph, then the way in for a sailor, then the way in for the club, then
+  what there is to race. The publish log is a page of its own (log.html), and the server's own state
+  is in the API, for the few people who ask for it.
+-->
 <div class="panel">
-  <p style="margin-top:2px">
-    <a href="editor.html"><strong>Course editor</strong></a> &mdash; author points, lines
-    and courses against a chart, snapshot them, and publish what a fleet is handed.
-  </p>
-  <p style="margin-top:8px">
-    <a href="boat.html"><strong>The client</strong></a> &mdash; what a boat opens. It asks
-    this device for its position and detects and times your crossings on it, from raw GNSS,
-    with no network. Open it on a phone; it renders on a tablet or a laptop too, at the width
-    it would be in a bracket.
-  </p>
-  <p style="margin-top:8px">
-    <a href="race.html"><strong>Race screen</strong></a> &mdash; running a race: the fleet on a
-    chart in division colours, the start sequence per division, the channel, and whether every
-    boat has seen the latest course. A race is <em>defined</em> in the editor's Races tab; this
-    page conducts one, which is a separate page because there is no undo for telling a fleet to
-    stop.
-  </p>
-  <p style="margin-top:8px">
-    <a href="client.html"><strong>Test rig</strong></a> &mdash; the same client, with a
-    simulated boat and a receiver that lies instead of a real one. Steer it at a line by
-    clicking the chart and watch the Mark screen take over by itself as it closes. Nothing
-    passes from the rig to the phone but a GPS fix, which is the whole point of it.
-  </p>
-  <p style="margin-top:8px">
-    <a href="results.html"><strong>Results</strong></a> &mdash; what the boats sent in: each
-    race as a finishing order, and record attempts ranked against every other attempt at the
-    same geometry. Elapsed times are the boats' own, from their own clocks; nothing here
-    scores, because drops, penalties and protests belong to the club's own software.
-  </p>
-  <p class="muted" style="margin-top:10px">
-    <strong>A prototype.</strong> The crossing detector, which is the part that decides a race,
-    is built and specified, and so are the boat's screens, the channel and the race screen.
-    Not built: the brief's Live place picture (the boat's Place screen is a ranked table), the
-    native wrapper and offline tiles, and re-posting a record with its full track once there is
-    wifi &mdash; a boat's record goes in without it.
-  </p>
-  <p class="muted" style="margin-top:6px">
-    Run the specs in a browser:
-    <a href="crossing-test.html">crossing</a> &middot;
-    <a href="raceclient-test.html">race client</a> &middot;
-    <a href="markscreen-test.html">mark screen</a> &middot;
-    <a href="boatsim-test.html">boat simulator</a> &middot;
-    <a href="receiver-test.html">receiver</a> &middot;
-    <a href="dialog-test.html">client&ndash;server dialog</a> &middot;
-    <a href="coursedraw-test.html">course drawing</a> &middot;
-    <a href="geo-test.html">geo</a>
+  <p style="margin:0">
+    Every mark is a line crossed by GPS rather than a buoy rounded, so a club can race with no
+    marks laid and no committee boat on the water. A boat's phone detects and times its own
+    crossings, with no network needed while it sails; this server hands out the courses before a
+    race and collects the results after it.
   </p>
 </div>
 
-<h2>Courses</h2>
-<div id="public" class="panel"><span class="muted">Loading&hellip;</span></div>
-
-<h2>What changed, and when</h2>
-<div class="panel">
-  <p class="muted" style="font-size:12px; margin-bottom:8px">
-    Every moment a course became joinable or stopped being joinable. Open to everybody on
-    purpose: what a fleet was handed and when is exactly what a competitor may need to check
-    afterwards, and a record only the club can read is not an audit trail.
-  </p>
-  <div id="log"><span class="muted">Loading&hellip;</span></div>
+<h2>Sailing</h2>
+<div class="panel links">
+  <a href="boat.html">Boat client</a><span>open on the boat's phone to join a course and sail it</span>
+  <a href="client.html">Test client</a><span>the same client, sailed by a simulated boat on a desk</span>
+  <a href="results.html">Results</a><span>each race's finishing order, and record attempts</span>
+  <a href="log.html">Publish log</a><span>when each course was published or withdrawn</span>
 </div>
 
-<h2>Programmes</h2>
-<div id="programmes" class="panel"><span class="muted">Loading&hellip;</span></div>
+<h2>Club officers</h2>
+<div class="panel">
+  <p class="muted" style="margin:0 0 8px">For whoever runs the club's racing &mdash; these need a sign-in.</p>
+  <div class="links">
+    <a href="editor.html">Course editor</a><span>marks, lines, courses and races, and publishing them</span>
+    <a href="race.html">Race screen</a><span>running a race: starts, the fleet, the channel</span>
+  </div>
+</div>
 
-<h2>Server</h2>
-<div id="server" class="panel"><span class="muted">Loading&hellip;</span></div>
+<h2>Series</h2>
+<div id="series" class="panel"><span class="muted">Loading&hellip;</span></div>
 
 <script type="module">
 import { showWhoami } from './whoami.js';
 
 showWhoami();
 const el = (id) => document.getElementById(id);
+const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;' };
+const esc = (v) => String(v ?? '').replace(/[&<>]/g, (c) => ESC[c]);
 
 async function json(path) {
   const response = await fetch(path);
@@ -94,96 +72,33 @@ async function json(path) {
   return response.json();
 }
 
-try {
-  const config = await json('/api/config');
-  el('server').innerHTML = `
-    <div class="mono">${config.site.name} &middot; version ${config.version}</div>
-    ${config.programmeErrors.length
-      ? `<div class="warn" style="margin-top:6px">${config.programmeErrors.length} programme file(s) had problems</div>`
-      : '<div class="ok" style="margin-top:6px">All programme files loaded</div>'}`;
-} catch (e) {
-  el('server').innerHTML = `<span class="warn">${e.message}</span>`;
-}
-
-/* The server already says what is wrong with a file, one sentence per problem, and the
-   page prints them. A COUNT beside a guess at the cause ("positions not yet supplied")
-   would be wrong as soon as anything else went wrong — and read as an accusation against
-   whichever course happened to be last in the list above it. */
-const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;' };
-const esc = (v) => String(v ?? '').replace(/[&<>]/g, (c) => ESC[c]);
-const when = (iso) => String(iso ?? '').replace('T', ' ').slice(0, 16);
-
-/* WHAT THE PUBLIC SEES, and the only thing on this page that is an offer rather than a
-   status report. Two gates, both required and both meant: the course carries `public`, and
-   the variant has a live publication. A public course with nothing published shows with
-   nothing under it — it is a course nobody can join yet, and saying so is better than
-   hiding it, because the club that ticked the box is the one reading this page. */
-try {
-  const courses = await json('/api/public');
-  el('public').innerHTML = courses.length === 0
-    ? '<span class="muted">No public courses. Tick <strong>public</strong> on a course in '
-      + 'the <a href="editor.html">editor</a> to list it here.</span>'
-    : courses.map((c) => `
-        <div style="margin-bottom:14px">
-          <div><strong>${esc(c.name || c.course)}</strong>
-            <span class="mono muted" style="font-size:11px">${esc(c.club)} / ${esc(c.series)} / ${esc(c.course)}</span></div>
-          ${c.notes ? `<div class="muted" style="font-size:12px">${esc(c.notes)}</div>` : ''}
-          ${c.published.length === 0
-            ? '<div class="muted mono" style="font-size:11px">nothing published &mdash; not joinable yet</div>'
-            : `<ul class="mono" style="font-size:12px">${c.published.map((p) => `
-                <li>${esc(p.variant)}${p.name && p.name !== p.variant ? ` &middot; ${esc(p.name)}` : ''}
-                  &mdash; <span class="muted">${esc(p.revision)}</span>
-                  ${p.lengthNm == null ? '' : ` &middot; ${p.lengthNm.toFixed(2)} nm`}
-                  ${p.steps == null ? '' : ` &middot; ${p.steps} marks`}
-                  ${p.closed ? ' &middot; cycle' : ''}
-                  ${p.publishedFrom ? ` &middot; <span class="muted">since ${esc(when(p.publishedFrom))}</span>` : ''}
-                </li>`).join('')}</ul>`}
-        </div>`).join('');
-} catch (e) {
-  el('public').innerHTML = `<span class="warn">${esc(e.message)}</span>`;
-}
-
-/* The audit trail. Newest first, because the question is almost always "what changed?"
-   rather than "how did we get here?". */
-const SAID = {
-  published: ['ok', 'published'],
-  opened: ['ok', 'made public'],
-  withdrawn: ['warn', 'withdrawn'],
-  closed: ['warn', 'made private'],
-};
-try {
-  const events = await json('/api/log');
-  el('log').innerHTML = events.length === 0
-    ? '<span class="muted">Nothing has been published to a public course yet.</span>'
-    : `<table class="mono" style="font-size:12px; border-collapse:collapse">${events.map((e) => {
-        const [cls, said] = SAID[e.what] ?? ['muted', e.what];
-        return `<tr>
-          <td class="muted" style="padding:2px 10px 2px 0; white-space:nowrap">${esc(when(e.at))}</td>
-          <td class="${cls}" style="padding:2px 10px 2px 0; white-space:nowrap">${esc(said)}</td>
-          <td style="padding:2px 10px 2px 0">${esc(e.club)} / ${esc(e.series)} / ${esc(e.course)} / ${esc(e.variant)}</td>
-          <td class="muted" style="padding:2px 0">${esc(e.revision ?? '')}</td>
-        </tr>`;
-      }).join('')}</table>`;
-} catch (e) {
-  el('log').innerHTML = `<span class="warn">${esc(e.message)}</span>`;
-}
-
+/* EACH SERIES, ITS COURSES AND ITS RACES — a list, and nothing more. The races come from the
+   series' own open read; a series whose races cannot be read still lists its courses. A file with
+   problems says how many, because the club that owns it reads this page, and the editor says which. */
 try {
   const programmes = await json('/api/programmes');
-  el('programmes').innerHTML = programmes.length === 0
-    ? '<span class="muted">No programmes configured.</span>'
-    : programmes.map((p) => `
-        <div style="margin-bottom:10px">
-          <div class="mono">${p.club} / ${p.series}</div>
-          <div>${p.name}</div>
-          <ul class="muted">${[...p.courses].map((c) => `<li>&middot; ${c}</li>`).join('')}</ul>
-          ${p.problems.length
-            ? `<ul class="warn mono" style="font-size:11px">${p.problems
-                .map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`
-            : ''}
-        </div>`).join('');
+  const rows = await Promise.all(programmes.map(async (p) => {
+    let races = [];
+    try {
+      races = Object.entries(await json(`/api/races/${p.club}/${p.series}`) ?? {})
+        .map(([id, race]) => ({ id, ...race }))
+        .sort((a, b) => String(a.date ?? '').localeCompare(String(b.date ?? '')));
+    } catch { /* no races to list */ }
+    return `<div class="series">
+      <div><strong>${esc(p.name || p.series)}</strong>
+        <span class="mono muted" style="font-size:11px">${esc(p.club)} / ${esc(p.series)}</span>
+        ${p.problems.length ? `<span class="warn mono" style="font-size:11px"> &middot; ${p.problems.length}
+          problem${p.problems.length === 1 ? '' : 's'}</span>` : ''}</div>
+      <div class="label">Courses</div>
+      <ul>${[...p.courses].map((c) => `<li>${esc(c)}</li>`).join('') || '<li class="muted">none</li>'}</ul>
+      ${races.length ? `<div class="label">Races</div>
+        <ul>${races.map((r) => `<li><span class="mono muted">${esc(r.date ?? '')}</span>
+          ${esc(r.name || r.id)}</li>`).join('')}</ul>` : ''}
+    </div>`;
+  }));
+  el('series').innerHTML = rows.join('') || '<span class="muted">No series configured.</span>';
 } catch (e) {
-  el('programmes').innerHTML = `<span class="warn">${e.message}</span>`;
+  el('series').innerHTML = `<span class="warn">${esc(e.message)}</span>`;
 }
 </script>
 

@@ -1,9 +1,16 @@
 package org.mortbay.sailing.unmarked.config;
 
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -41,7 +48,8 @@ public record AuthConfig(
     @JsonProperty("clientSecret") String clientSecret,
     @JsonProperty("redirectPath") String redirectPath,
     @JsonProperty("allowedDomain") String allowedDomain,
-    @JsonProperty("allowLoopback") boolean allowLoopback)
+    @JsonProperty("allowLoopback") boolean allowLoopback,
+    @JsonProperty("allowIP") String allowIP)
 {
     private static final Logger LOG = LoggerFactory.getLogger(AuthConfig.class);
 
@@ -58,8 +66,79 @@ public record AuthConfig(
             issuer = GOOGLE;
         if (redirectPath == null || redirectPath.isBlank())
             redirectPath = "/auth/callback";
+        // A WHOLE URL IS TAKEN FOR ITS PATH. The provider's console asks for the whole redirect
+        // URI, so that is what gets pasted here too — and prefixed with a slash it became
+        // "/https://host/auth/callback", which Jetty put after the host again and the provider
+        // refused as a mismatch nothing on screen could explain. The scheme and host are
+        // Jetty's to supply, from the request (and the forwarded headers behind a proxy).
+        redirectPath = pathOf(redirectPath.trim());
         if (!redirectPath.startsWith("/"))
             redirectPath = "/" + redirectPath;
+    }
+
+    /** A login with no addresses let past it. */
+    public AuthConfig(boolean enabled, String issuer, String clientId, String clientSecret,
+        String redirectPath, String allowedDomain, boolean allowLoopback)
+    {
+        this(enabled, issuer, clientId, clientSecret, redirectPath, allowedDomain, allowLoopback, null);
+    }
+
+    /** An IP address literal, IPv4 dotted or IPv6 with colons — never a name to be looked up. */
+    private static final Pattern LITERAL =
+        Pattern.compile("\\d{1,3}(\\.\\d{1,3}){3}|[0-9A-Fa-f:.]*:[0-9A-Fa-f:.]*");
+
+    /**
+     * THE ADDRESSES LET PAST THE LOGIN, as administrators: every address in {@code allowIP}, and
+     * with {@code allowLoopback} the machine's own, {@code 127.0.0.1} and {@code ::1}.
+     *
+     * <p>Matched against the CONNECTION, never against a header — see
+     * {@code UnmarkedSecurityHandler}. So behind a router or proxy that terminates the
+     * connection, the address seen is the router's, and listing it would let past everybody who
+     * comes through it.
+     *
+     * <p>Literals only. A host name would be looked up, and a bypass that followed DNS would be
+     * whoever controlled the name. An entry that is not an address is left out and said so, which
+     * is the safe way to be wrong: one fewer way past the login, not one more.
+     */
+    public Set<InetAddress> bypass()
+    {
+        List<String> entries = new ArrayList<>();
+        if (allowLoopback)
+            entries.addAll(List.of("127.0.0.1", "::1"));
+        if (allowIP != null)
+        {
+            for (String entry : allowIP.split(","))
+            {
+                if (!entry.isBlank())
+                    entries.add(entry.trim());
+            }
+        }
+        Set<InetAddress> out = new LinkedHashSet<>();
+        for (String entry : entries)
+        {
+            try
+            {
+                if (!LITERAL.matcher(entry).matches())
+                    throw new UnknownHostException("not an IP address");
+                out.add(InetAddress.getByName(entry));
+            }
+            catch (UnknownHostException e)
+            {
+                LOG.error("auth.yaml allowIP: '{}' is not an IP address and is ignored — list "
+                    + "addresses, not names", entry);
+            }
+        }
+        return out;
+    }
+
+    /** The path of a URL, or the value itself when it is not one. */
+    static String pathOf(String value)
+    {
+        int scheme = value.indexOf("://");
+        if (scheme < 0)
+            return value;
+        int path = value.indexOf('/', scheme + 3);
+        return path < 0 ? "/" : value.substring(path);
     }
 
     /** The off switch, for when there is no file at all. */
@@ -91,9 +170,11 @@ public record AuthConfig(
             return auth;
         }
         auth.requireUsable(file);
+        Set<InetAddress> bypass = auth.bypass();
         LOG.info("Sign-in required for the editor and the race screen: {} accounts via {}{}",
             auth.allowedDomain() == null ? "any" : auth.allowedDomain(), auth.issuer(),
-            auth.allowLoopback() ? ", loopback exempt" : "");
+            bypass.isEmpty() ? "" : ", and these addresses treated as administrators without one: "
+                + bypass.stream().map(InetAddress::getHostAddress).toList());
         return auth;
     }
 

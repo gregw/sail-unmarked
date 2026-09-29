@@ -212,6 +212,20 @@ class AuthIntegrationTest
             status("PUT", "/api/programmes/myc.org.au/test-series", "{}"), not(303));
     }
 
+    @Test
+    void anAddressInAllowIPIsTreatedAsAnAdministrator(@TempDir Path root) throws Exception
+    {
+        // Every request here arrives from 127.0.0.1, so listing it — and not turning on
+        // allowLoopback — is what lets this test through, and listing something else is not.
+        start(root, false, null, "10.9.8.7, 127.0.0.1");
+        assertThat("a listed address reaches the editor without signing in", status("/editor.html"), is(200));
+        assertThat("...and the writes behind it",
+            status("PUT", "/api/programmes/myc.org.au/test-series", "{}"), not(303));
+        unmarked.stop();
+        start(root, false, null, "10.9.8.7");
+        assertThat("an address that is not listed still signs in", status("/editor.html"), is(303));
+    }
+
     /* ---------------------------------------------------------------- with it off */
 
     @Test
@@ -333,6 +347,11 @@ class AuthIntegrationTest
 
     private void start(Path root, boolean allowLoopback, String domain) throws Exception
     {
+        start(root, allowLoopback, domain, null);
+    }
+
+    private void start(Path root, boolean allowLoopback, String domain, String allowIP) throws Exception
+    {
         String issuerUrl = issuer == null ? startStubIssuer() : "http://localhost:" + port(issuer);
         Path data = fixture(root);
         // Rewritten each time: the loopback test starts twice against one fixture, and the
@@ -344,8 +363,10 @@ class AuthIntegrationTest
             clientSecret: "test-secret"
             allowLoopback: %s
             %s
+            %s
             """.formatted(issuerUrl, allowLoopback,
-            domain == null ? "" : "allowedDomain: \"" + domain + "\""));
+            domain == null ? "" : "allowedDomain: \"" + domain + "\"",
+            allowIP == null ? "" : "allowIP: \"" + allowIP + "\""));
         unmarked = UnmarkedServer.start(data, 0);
     }
 

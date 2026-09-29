@@ -51,7 +51,10 @@ issuer: "https://accounts.google.com"
 clientId: "000000000000-xxxxxxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com"
 clientSecret: "PUT-THE-REAL-ONE-HERE"
 
-# Must match the redirect URI registered with the provider, exactly.
+# The PATH of the redirect URI registered with the provider — just the path. The scheme and host
+# come from the request (behind a proxy, from its X-Forwarded-* headers, so config.yaml needs
+# forwardedHeaders: true), and together they must make exactly the URI registered in step 3.
+# A whole URL pasted here is taken for its path. The server logs the path it uses at start-up.
 redirectPath: "/auth/callback"
 
 # Optional. Blank or absent means ANY account the provider will vouch for (with an External
@@ -61,8 +64,18 @@ redirectPath: "/auth/callback"
 # asserts rather than against anything the browser said.
 # allowedDomain: "myc.org.au"
 
-# TREAT REQUESTS FROM THIS MACHINE AS SIGNED IN. Off by default, and the default is the
-# important half: BEHIND A REVERSE PROXY EVERY REQUEST IN THE WORLD ARRIVES FROM 127.0.0.1, so
-# a bypass left on is the editor handed to the internet, silently. Turn it on for a laptop you
-# are sitting at; leave it off for anything with nginx in front of it.
+# ADDRESSES TREATED AS ADMINISTRATORS, WITHOUT SIGNING IN. A comma-separated list of IP
+# addresses — addresses, not host names — whose requests reach the editor and the race screen as
+# if signed in. Empty by default.
+#
+# Matched against the address the CONNECTION comes from, never against X-Forwarded-For, which a
+# client can write. So whatever terminates connections in front of this server — a reverse proxy
+# on this machine, a router doing the TLS — is the address every request through it arrives
+# from: NEVER LIST IT, or everybody who comes through it is an administrator. List the machines
+# that reach this server directly, on its own port.
+# allowIP: "192.168.1.20, 192.168.1.21"
+
+# The same for this machine's own addresses: adds 127.0.0.1 and ::1 to allowIP. For a laptop you
+# are sitting at — and never where a proxy on this same machine forwards to it, which would make
+# every request through that proxy come from here.
 allowLoopback: false
