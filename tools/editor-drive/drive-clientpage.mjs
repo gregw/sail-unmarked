@@ -136,6 +136,16 @@ if (late) {
   ok('the fixture holds a third course to publish late', false);
 }
 
+// A TAP ON THE JOIN SCREEN LEAVES THE FORM ALONE. Redrawing it after a tap replaced the field
+// or the list the tap had just focused, so on a phone nothing could be typed into and no list
+// would open. The field is the same element after the tap as before it.
+const fieldBefore = $('j_sail');
+H('device:pointerdown')({ target: { closest: () => null } });
+H('window:pointerup')({});
+await settle(300);
+ok('a tap on the join screen does not redraw it, so the field tapped keeps its focus',
+  $('j_sail') === fieldBefore);
+
 $('j_sail').value = 'AUS 1';
 H('j_sail:input')({ target: { value: 'AUS 1' } });
 $('j_name').value = 'Bombora';

@@ -134,9 +134,14 @@ export class Device {
      * button does not move focus on every browser, and a focused chooser would otherwise hold
      * the panel still until somebody happened to click on something that takes it.
      */
+    //
+    // ONLY WHILE SAILING, and only a redraw that was actually held back. The join screen is not
+    // redrawn per fix, and redrawing it after every tap replaced the field or the list the tap
+    // had just focused — so on a phone nothing could be typed into and no list would open.
     this.pressing = false;
+    this.heldBack = false;
     host?.addEventListener?.('pointerdown', (ev) => {
-      if (ev.target?.closest?.('.plot')) return;
+      if (!this.client || ev.target?.closest?.('.plot')) return;
       this.pressing = true;
       const active = document.activeElement;
       if (active && active !== ev.target && active.id === 'o_basemap') active.blur?.();
@@ -144,6 +149,8 @@ export class Device {
     const release = () => {
       if (!this.pressing) return;
       this.pressing = false;
+      if (!this.heldBack) return;
+      this.heldBack = false;
       setTimeout(() => this.render(), 0);
     };
     globalThis.window?.addEventListener?.('pointerup', release, true);
@@ -322,7 +329,10 @@ export class Device {
   render() {
     if (!this.client) return this.renderJoin();
     // Not under a finger: see the constructor. Drawn on release instead.
-    if (this.pressing) return undefined;
+    if (this.pressing) {
+      this.heldBack = true;
+      return undefined;
+    }
 
     /*
      * NOT WHILE SOMEBODY IS CHOOSING A BACKGROUND.
