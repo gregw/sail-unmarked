@@ -111,8 +111,11 @@ export class Device {
    * @param hooks what the page adds. All optional:
    *   `kicker` the line at the head of the join screen;
    *   `note()` HTML above the boat's own fields, for anything the page has to say before a
-   *     join — the real client's location permission lives here — with `wireNote()` called
-   *     after every render of that screen, since the render replaces whatever it contained;
+   *     join, with `wireNote()` called after every render of that screen — which wires
+   *     `gate()` and `status()` too — since the render replaces whatever it contained;
+   *   `gate()` markup drawn IN PLACE OF the join button while the page needs something done
+   *     first — the real client's "use my location" — or null for the join button;
+   *   `status()` one line under it, saying how that is going;
    *   `blocked()` a sentence naming what the PAGE is still waiting for, which disables the
    *     join button and becomes its label;
    *   `extras()` / `wireExtras()` a row of buttons under the sailing screens;
@@ -950,12 +953,17 @@ export class Device {
             the last line of the form.
 
             WHAT THE PAGE ITSELF IS WAITING FOR IS NAMED FIRST, ahead of any unanswered level:
-            a location permission is asked for at the top of this form, it is the one thing
-            here that can take half a minute to come good, and it is a precondition for all of
-            it rather than another field. Naming a club that has not been chosen while the
-            phone cannot see the sky would send somebody to answer the wrong question.
+            a location fix is the one thing here that can take half a minute to come good, and
+            it is a precondition for all of it rather than another field. Naming a club that has
+            not been chosen while the phone cannot see the sky would send somebody to answer the
+            wrong question.
+
+            AND WHAT THE PAGE NEEDS DONE FIRST STANDS IN ITS PLACE (the gate hook): the real
+            client's location permission is a button of its own, where the join button will be,
+            and the join button appears only once it has been pressed. The one thing to press is
+            the one thing on offer. Its one line of status goes under it (the status hook).
           -->
-          <button class="go" id="j_go"${ready ? '' : ' disabled'}>${esc(ready ? 'Join and sail'
+          ${this.hooks.gate?.() ?? `<button class="go" id="j_go"${ready ? '' : ' disabled'}>${esc(ready ? 'Join and sail'
             : blocked ? blocked
               : !club ? 'Choose a club'
                 : !chosenSeries ? 'Choose a series'
@@ -963,6 +971,7 @@ export class Device {
                     : !chosenDivision ? 'Choose a division'
                       : 'That division has no published course')
                     : !chosenCourse ? 'Choose a course' : 'Choose a variant')}</button>`}
+          ${this.hooks.status?.() ?? ''}`}
         ${this.message ? `<p class="warn" style="font-size:12.5px; margin-top:10px">${esc(this.message)}</p>` : ''}
       </div>`;
 

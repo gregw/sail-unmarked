@@ -105,15 +105,11 @@ ok('the page comes up on the join screen', /<div class="join">/.test(device()));
 // somebody into browser settings to undo. So nothing is asked for until the screen has said
 // what it is for and somebody has pressed the button under it.
 ok('...and asks the browser for NOTHING until somebody says so', geo.watches === 0);
-ok('...having first said what a position is wanted for',
-  device().includes('class="gnss') && device().includes('detected and timed on this phone'));
-ok('...and offering the button that asks', device().includes('id="gnss_start"'));
-
-// The join button names the location as what is missing, which is the same rule the rest of
-// that form follows: a disabled control with no explanation invites somebody to press it
-// again harder.
-ok('...with the join button naming the permission rather than sitting grey and silent',
-  /id="j_go" disabled>Allow location first</.test(device()));
+// THE ONE THING TO PRESS FIRST, where the join button will be and coloured unlike it: until it
+// has been pressed there is no join button to press instead.
+ok('...offering the button that asks, coloured, where the join button will be',
+  device().includes('class="go locate" id="gnss_start"'));
+ok('...and no join button until it has been pressed', !device().includes('id="j_go"'));
 
 /* ------------------------------------------------------- and then it is asked for */
 
@@ -189,9 +185,7 @@ sim.placeAt(offsetBy(mid, 0, -250));
 geo.emit(position());
 await settle(250);
 
-ok('the first fix turns the panel live', device().includes('class="gnss live'));
-ok('...and says the crossings will come from this device and no other',
-  device().includes('device and no other'));
+ok('the first fix turns the status line live', device().includes('class="gnss live'));
 ok('...printing the position and the accuracy it was stated to, which is what decides trust',
   /±\d+ m/.test(device()));
 // A LEVEL WITH ONE ANSWER ANSWERS ITSELF. This fixture publishes one course, of one variant,

@@ -53,46 +53,48 @@ const state = {
 /* =========================================================== what the receiver says */
 
 /**
- * The receiver's own line on the join screen.
- *
- * Split in two on purpose: the panel's SHAPE changes only when the state does, and the live
- * reading changes on every fix. Re-rendering the join screen at a fix a second would take the
- * caret out of whatever somebody is typing into their sail number — the same hazard the
- * background selector had on the overview, met the same way.
+ * THE WAY OFF THIS PAGE, at the head of the join screen and nowhere else: once a course is taken
+ * the screens are read at a glance from a cockpit, and a link there is clutter and a way to lose
+ * a race by a mis-tap.
  */
-function gnssPanel() {
+function links() {
+  return `<p class="muted" style="font-size:11px; margin:0 0 4px">
+    <a href="index.html">Home</a> &middot; <a href="client.html">test client</a></p>`;
+}
+
+/**
+ * WHERE THE JOIN BUTTON WILL BE, THE ONE THING TO PRESS FIRST: "Use my location", coloured, until
+ * it has been pressed — nothing is asked of the browser before that, because a prompt nobody
+ * asked for is a prompt people refuse, and a refusal is sticky. Once pressed, the join button
+ * takes its place and names what it is waiting for. A browser with no position at all gets a
+ * sentence instead, since there is nothing to press.
+ */
+function gate() {
+  if (state.gnss === 'idle') return '<button class="go locate" id="gnss_start">Use my location</button>';
+  if (state.gnss === 'absent') {
+    return '<p class="warn" style="margin-top:14px">This browser gives no position, so there is '
+      + 'nothing to sail with. Open this page on a phone.</p>';
+  }
+  return null;
+}
+
+/**
+ * ONE LINE UNDER IT, saying how the position is going. Split from the button on purpose: the
+ * line changes on every fix, and re-rendering the join screen at a fix a second would take the
+ * caret out of whatever somebody is typing into their sail number, so the reading is updated in
+ * place (`refreshGnss`) and the form redrawn only when the state moves.
+ */
+function status() {
+  if (state.gnss === 'idle' || state.gnss === 'absent') return '';
   return `<div class="gnss ${state.gnss}" id="gnss">
-    <h3>This device's position</h3>
-    <div class="said">${esc(saying())}</div>
-    <div class="fix" id="gnss_fix">${reading()}</div>
-    ${state.gnss === 'idle'
-      ? '<button class="plain" id="gnss_start">Use my location</button>' : ''}
-  </div>
-  <!--
-    The one link off this page, and it is on the join screen only: once a course is taken the
-    screens are being read at a glance from a cockpit, and a navigation link there is both
-    clutter and a way to lose a race by a mis-tap.
-  -->
-  <p class="muted" style="font-size:11px; margin-top:8px">
-    <a href="index.html">Courses and publication log</a> &middot;
-    <a href="client.html">test rig</a>
-  </p>`;
+    <span class="said">${esc(saying())}</span> <span class="fix" id="gnss_fix">${reading()}</span>
+  </div>`;
 }
 
 function saying() {
-  if (state.gnss === 'absent') {
-    return 'This browser will not give a position, so there is nothing to sail with. '
-      + 'A phone is what this page is for.';
-  }
   if (state.gnss === 'trouble') return state.said ?? 'The receiver stopped reporting.';
-  if (state.gnss === 'waiting') return 'Looking for satellites. A cold start under a rig can take '
-    + 'half a minute; the rest of the form can be filled in meanwhile.';
-  if (state.gnss === 'live') {
-    return 'Reporting. Every crossing and every instant on this course will come from this '
-      + 'device and no other.';
-  }
-  return 'Your crossings are detected and timed on this phone, from its own GNSS, with no '
-    + 'network. Nothing else can do it: a course is sailed to the metre.';
+  if (state.gnss === 'waiting') return 'Looking for satellites…';
+  return 'Position:';
 }
 
 /** The live half — the last fix, in the terms that decide whether to trust it. */
@@ -232,7 +234,9 @@ const leaving = new LeaveGuard(el('leaving'));
 
 const device = new Device(el('device'), {
   kicker: 'Unmarked Racing',
-  note: gnssPanel,
+  note: links,
+  gate,
+  status,
   wireNote: () => el('gnss_start')?.addEventListener('click', startReceiver),
   /*
    * A COURSE IS NOT TAKEN UNTIL THE PHONE HAS PROVED IT CAN SEE THE SKY.

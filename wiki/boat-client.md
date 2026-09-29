@@ -74,7 +74,10 @@ while that holds, and it is the kind of thing that decays one convenient field a
 - **The permission is asked for by a gesture, never on load.** A prompt that appears before anything on
   screen has said why is a prompt people refuse — and a refusal is sticky in a way that takes somebody
   into browser settings to undo. `drive-boat.mjs` asserts that the page asks the browser for nothing
-  until it is pressed.
+  until it is pressed. **The button is where the join button will be, and coloured** (the device's
+  `gate()` hook): it is the one thing to press first, so the join button appears only once it has
+  been, and then names what it is waiting for. One line under it (`status()`) says how the position
+  is going; the reading in it is updated in place, so a fix does not redraw the form.
 - **A course is not taken until the phone has proved it can see the sky.** The join screen is the one
   moment somebody is standing still with both hands free. A refusal is reported and the watch is **not**
   torn down: a position lost under a bridge comes back on the other side.

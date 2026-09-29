@@ -60,29 +60,15 @@ body {
 /* ------------------------------------------------- what the page adds to the device */
 
 /*
- * THE RECEIVER'S OWN PANEL, on the join screen only.
- *
- * Before a course is taken this is the one thing worth saying, and it has to be said before
- * the permission prompt rather than after: a prompt that appears with nothing on screen
- * explaining why is a prompt people refuse, and a refusal is sticky. Once sailing, the device's
- * own header, signal line and dashed readouts say everything about the receiver that matters,
- * so this panel is not drawn there — two places saying the same thing differently is worse than
- * one.
+ * THE LOCATION BUTTON, where the join button will be, and coloured unlike it: until it is pressed
+ * it is the one thing on the form to do. Under it — and under the join button once that takes its
+ * place — one line on how the position is going. Once sailing the device's own header and signal
+ * line say all of this, so none of it is drawn there.
  */
-.gnss {
-  margin: 10px 0 4px; padding: 8px 10px;
-  border: 1px solid var(--panel2); border-left: 3px solid var(--muted); border-radius: 4px;
-  font-size: 13px;
-}
-.gnss.live { border-left-color: var(--ok); }
-.gnss.trouble { border-left-color: var(--warn); }
-.gnss h3 {
-  font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
-  color: var(--muted); font-weight: 400;
-}
-.gnss .said { margin-top: 3px; }
-.gnss .fix { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 3px; }
-.gnss button { margin-top: 8px; }
+button.go.locate { background: var(--toside); color: var(--sea); }
+.gnss { margin-top: 8px; font-size: 12px; color: var(--muted); }
+.gnss.trouble { color: var(--warn); }
+.gnss .fix { font-family: var(--mono); }
 
 .awake { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; }
 
