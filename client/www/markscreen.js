@@ -1828,15 +1828,15 @@ export const OVERVIEW_INK = {
   cog: 0.85,
   cogWidth: 1.5,
   /**
-   * The track sailed since the last line: EVERY fix, one pixel each, in the boat's own ink.
+   * The track sailed since the last line: a dot per boat length (`LEG_TRACK`).
    *
    * Dots rather than a line, because that is what the track is — a line joining them claims
-   * the boat went straight between one and the next, which at a fix a second it did not. One
-   * pixel is enough at overview scale and is what keeps a whole leg of them from becoming a
-   * band of ink wider than the course it is drawn on.
+   * the boat went straight between one and the next, which it did not. Three pixels across, so
+   * they can be seen in daylight on a phone; thinned to a boat length apart, they stay dots
+   * rather than running together into a band wider than the course they are drawn on.
    */
   trail: 0.9,
-  trailWidth: 1,
+  trailWidth: 3,
   /** Red, the palette's own (`--warn`), so the dots stand out from a course in blues and greens. */
   trailColour: 'var(--warn)',
 };

@@ -230,7 +230,11 @@ derivations; these are the rules that outlive any of them.
   nothing beyond it**, keyed off "there is no next leg", never off "the next mark is the finish".
 - **On a latch the scale deliberately does not move**; the arrow goes green and grows. Re-scaling at the
   moment of a crossing throws away the picture somebody is looking at for the one reason they are looking at
-  it. The client holds `crossed` and the screen stays on the line it crossed for the dwell.
+  it. The client holds `crossed` and the screen stays on the line it crossed for the dwell — **but only
+  until the next line's time-to-line is known** (`RaceClient.dwelling`): the readouts are the next line's
+  from the moment of the crossing, and a countdown to a line that is not in the picture is a number about
+  something the sailor cannot see. Then auto takes the screen back, usually to the course, and a chosen
+  Line screen shows the next line.
 - **Both sides of a gate are drawn, one in focus**, and both get a perpendicular distance and a next-leg
   arrow, because those are the two things the choice is made on. The other side is deliberately **not in the
   fit**, so it never costs zoom from the side the boat is sailing at. Each side's distance comes from **its

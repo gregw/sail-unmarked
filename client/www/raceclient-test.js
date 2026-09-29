@@ -342,6 +342,38 @@ export function run(check) {
     practising.courseList().find((row) => row.index === 2).next
     && practising.courseList().filter((row) => row.goto).length === practising.steps.length - 1);
 
+  /* ------------------------------------------------- the dwell after a crossing */
+
+  /*
+   * THE CROSSED LINE STAYS UP ONLY UNTIL THE NEXT ONE'S TIME IS KNOWN. The readouts are the next
+   * line's from the moment of the crossing, and a time-to-line for a line not in the picture is a
+   * number about something the sailor cannot see.
+   */
+  const dwell = fresh(WINDWARD_LEEWARD);
+  // One fix at a time northward, at 10 m a fix — so the fix that latches the start is the one
+  // the test stops on.
+  const northTo = (n) => {
+    const p = at(0, n);
+    dwell.accept({ latitude: p.latitude, longitude: p.longitude, time: new Date(tick(dwell, 2000)),
+      accuracyM: 5, satellites: 12, sogKn: 9.7, cogDeg: 0 });
+    return dwell.fix.time.getTime();
+  };
+  let at0 = null;
+  for (let n = -120; n <= 80 && at0 == null; n += 10) {
+    const when = northTo(n);
+    if (dwell.crossings.length) at0 = when;
+  }
+  check('right at the crossing the line just crossed stays up, while the next line\'s time is unknown',
+    at0 != null && dwell.dwelling(at0) && dwell.markState(at0)?.step === dwell.crossed.step);
+  let later = at0;
+  for (let k = 0; k < 2 && dwell.dwelling(later); k += 1) later = northTo(90 + 10 * k);
+  check('...and once the next line\'s time-to-line is known the dwell is over, well inside its length',
+    dwell.timeToLine().seconds != null && later < dwell.dwellUntil && !dwell.dwelling(later));
+  check('...so in auto the screen goes back to the course', dwell.view(later) === 'overview');
+  dwell.setViewMode('mark');
+  check('...and with the Line screen chosen it shows the NEXT line, not the crossed one',
+    dwell.markState(later)?.step === dwell.live());
+
   /* ------------------------------------------------- the track since the last line */
 
   /*

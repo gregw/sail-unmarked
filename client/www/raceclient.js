@@ -1347,7 +1347,7 @@ export class RaceClient {
     // The dwell is its own reason to be on the Mark screen and deliberately does NOT set
     // the hysteresis flag. Priming it here would hand the next mark the screen at the exit
     // threshold instead of the enter one, purely because the last mark had been crossed.
-    if (now < this.dwellUntil) return 'mark';
+    if (this.dwelling(now)) return 'mark';
     const near = this.approachM();
     if (near == null) return 'overview';
 
@@ -1405,11 +1405,26 @@ export class RaceClient {
    * handed a plain object and tested without a client, and so the client can be tested
    * without a screen.
    */
+  /**
+   * THE DWELL AFTER A CROSSING: the line just crossed stays on the Mark screen for a moment, so
+   * the crossing can be seen where it happened.
+   *
+   * <b>Only until the next line's time-to-line is known.</b> The readouts under the picture are
+   * the next line's from the moment of the crossing, and a time-to-line counting down to a line
+   * that is not in the picture is a number about something the sailor cannot see. So as soon as
+   * there is one, the dwell is over: in auto the rule takes the screen back (usually to the
+   * course), and with the Line screen chosen it shows the next line. Without one — the boat's
+   * course does not cut the next line yet — the dwell runs its length.
+   */
+  dwelling(now = Date.now()) {
+    return now < this.dwellUntil && !!this.crossed && this.timeToLine().seconds == null;
+  }
+
   markState(now = Date.now()) {
     // While the dwell runs, the screen stays on the mark that was just crossed rather than
     // jumping to the next one. Everything else follows from that: the frame does not move,
     // the scale does not change, and the crossing stays ringed where it happened.
-    const dwelling = now < this.dwellUntil && this.crossed;
+    const dwelling = this.dwelling(now);
     const step = dwelling ? this.crossed.step : this.live();
     if (!step || !this.point) return null;
 

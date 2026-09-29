@@ -1301,18 +1301,23 @@ export function run(check) {
     };
     for (let n = -400; n <= -100; n += 10) step(0, n, 0);
     const seen = [];
+    let crossedWhileSeen = false;
     for (let e = 0; e <= 150; e += 6) {
       step(-e, -60, 270);
       const drawn = boat.markState(when);
-      // Only while the gate is still the live step: once the boat is on the leg to the
-      // finish it is squaring up to a different line, which is not what this is about.
-      if (drawn && drawn.step.letter === '1') seen.push(upBearing(drawn, 'perp'));
+      // Only while the gate is still the one drawn: once the boat is on the leg to the finish it
+      // is squaring up to a different line, which is not what this is about.
+      if (drawn && drawn.step.letter === '1') {
+        seen.push(upBearing(drawn, 'perp'));
+        if (boat.crossings.some((c) => c.letter === '1')) crossedWhileSeen = true;
+      }
     }
+    seen.crossedWhileSeen = crossedWhileSeen;
     return seen;
   })();
   check('Line perp holds the same bearing all the way through the gate and past it, '
     + 'the crossing included',
-    latchedUp.length > 20 && latchedUp.every((b) => near(b, latchedUp[0], 1e-9)));
+    latchedUp.length > 10 && latchedUp.crossedWhileSeen && latchedUp.every((b) => near(b, latchedUp[0], 1e-9)));
 
   // On a gate whose sides are COLLINEAR the join runs along the lines, so its perpendicular
   // IS the crossing normal and the rule needs no special case for the other shape.
