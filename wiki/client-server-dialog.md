@@ -720,11 +720,18 @@ committee boat, on a laptop, with a keyboard. Both are behind the officers' logi
 
 A race lives in a series, so defining one is the editor's fourth tab —
 **`Points | Lines | Courses | Races`** — with the same chart and the same drill-down. A race's
-definition is configuration: an id, a name, a date, a format, a `division → course/variant` map, a
-planned start per division, and the race it follows. It is authored ahead of time and it diffs
-([course-editor.md](course-editor.md#the-races-tab)).
+definition is configuration: an id, a name, a date, a format, how it starts, whether it is public,
+a `division → course/variant` map, **each division's start** — its time (or opening and closing
+times), warning, preparatory and open period — and time limit, and the race it follows. It is
+authored ahead of time and it diffs ([course-editor.md](course-editor.md#the-races-tab)).
 
-**Conducting a race is a second page, `race.html`, and the reason is the undo.** The editor saves as
+**The start is the definition's.** While a race is public the server hands each division the start
+its definition works out to (`Dialog.definedStart`), as a `timer`, whenever a boat joins and whenever
+the definition is saved — only when that start has changed since it was last handed out
+(`Dialog.sync`, which keeps it with the conduct). So a delay or an AP from the race screen stands
+until somebody edits the race's start in the editor, and then the edit wins.
+
+**Managing a race is a second page, `race.html`, and the reason is the undo.** The editor saves as
 you go and holds exactly one undo, which is right for dragging a mark and wrong for raising an
 abandonment: there is no undo for telling a fleet to stop. Live conduct wants actions that are
 deliberate and confirmed — **an irreversible act asks twice, in the button itself** — and it wants
@@ -758,13 +765,22 @@ straight; the editor's `coursedraw.track` arcs them, which this screen does not 
 
 ### 12.3 The panel
 
-- **Race**: name, date, format, club and series, and the race that follows.
-- **Starts**: per division, a start time and the warning and preparatory durations that hang off
-  it, with **AP** or **abandon** beside it — whichever applies. The form asks for an **absolute time
-  of day, in the operator's own zone with that zone named**, seeded once from the race's planned
-  start. Durations are durations, because a sequence hangs off its start: moving the start moves all
-  of it, which is what a postponement does.
-- **Course**: publish the division's current published snapshot to its boats as a `course` change.
+The chart shows **every race running** — public, today, and not over (every boat finished or
+retired, or every division's line closed and time limit run) — and the panel acts on **one**, chosen
+by its tab.
+
+- **Race**: name, date, how it starts, club and series, and the race that follows.
+- **Starts**: per division, the start as it stands, with what can be done to it here and nothing
+  else — the start itself is set in the editor:
+  - **Delay** by 5, 10, 15 or any number of minutes: a new start, the whole sequence moved with it.
+    While scheduled it moves the start on from itself; after an AP it counts from now and must leave
+    a full sequence (at least a minute before the warning signal). It clears an AP. An allocated
+    start has no common time to delay.
+  - **AP** before the start, or **abandon** after it — whichever applies, each asking twice.
+- **Course**: publish the division's current published snapshot to its boats as a `course` change
+  (until shortening is designed).
+- **Fleet**: one row per boat, with whether it has seen the latest course and flag. There is no DNF
+  button: a boat that has not finished within its division's time limit is simply not finished.
 - **The channel**: the same open channel the boats are on, read and written from here. The committee
   is a participant, not a separate facility — "no private conversations" applies to it too.
 

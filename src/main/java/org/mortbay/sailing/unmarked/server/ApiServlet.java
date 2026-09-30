@@ -343,6 +343,10 @@ public class ApiServlet extends HttpServlet
         }
         Programme saved = programmes.programme(path[1], path[2]).orElse(null);
         exposure(path[1], path[2], wasPublic, saved);
+        // A RACE'S START IS ITS DEFINITION'S: a start edited here reaches the boats in it now,
+        // without anybody publishing it from the race screen (`Dialog.sync`).
+        if (saved != null)
+            dialog.definitionChanged(saved);
         send(resp, Map.of(
             "saved", true,
             "points", saved == null ? 0 : saved.points().size(),

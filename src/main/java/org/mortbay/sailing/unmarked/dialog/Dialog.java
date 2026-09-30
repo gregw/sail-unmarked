@@ -607,12 +607,106 @@ public class Dialog
     public Room room(Programme programme, Race race)
     {
         String key = programme.club() + "/" + programme.series() + "/" + race.id();
-        return rooms.computeIfAbsent(key, k ->
+        Room made = rooms.computeIfAbsent(key, k ->
         {
             Room room = new Room(programme.club(), programme.series(), race);
             room.restore(store.conduct(programme.club(), programme.series(), race.id()).orElse(null));
             return room;
         });
+        sync(made, programme);
+        return made;
+    }
+
+    /**
+     * THE PROGRAMME WAS SAVED: bring every room of it into step with the race it now defines.
+     * Called by whatever writes the file, so a start edited in the editor reaches the fleet
+     * without anybody having to publish it (see {@link #sync}).
+     */
+    public void definitionChanged(Programme programme)
+    {
+        String prefix = programme.club() + "/" + programme.series() + "/";
+        rooms.forEach((key, room) ->
+        {
+            if (key.startsWith(prefix))
+                sync(room, programme);
+        });
+    }
+
+    /**
+     * THE START IS THE DEFINITION'S. While a race is public, each division is handed the start its
+     * definition works out to ({@link #definedStart}) — published the way the committee's own
+     * would be, superseding what went before.
+     *
+     * <p><b>Only when the definition has CHANGED</b> since it was last handed out: what was last
+     * worked out is remembered per division (and kept with the conduct, so a restart does not
+     * forget it). So a DELAY or an AP from the race screen stands until somebody edits the race's
+     * start in the editor — the committee's act on the day wins over the plan, and a later change
+     * to the plan wins over that.
+     */
+    synchronized void sync(Room room, Programme programme)
+    {
+        Race race = programme.races().get(room.race.id());
+        if (race == null)
+            return;
+        room.race = race;
+        if (!race.offered())
+            return;
+        java.time.ZoneId zone = ZoneId.of(programme.timezone());
+        race.divisions().forEach((name, division) ->
+        {
+            Map<String, Object> body = definedStart(race, name, division, zone);
+            if (body == null)
+                return;
+            Standing standing = room.standing(Race.tagFor(name));
+            if (body.equals(standing.derived))
+                return;
+            standing.derived = body;
+            publish(room, Envelope.of("timer", List.of(Race.tagFor(name)), body));
+        });
+    }
+
+    /**
+     * THE START A DIVISION'S DEFINITION WORKS OUT TO, as the body of a {@code timer} — or null when
+     * it does not define one yet (a scratch or open start with no time).
+     */
+    public static Map<String, Object> definedStart(Race race, String name, Race.Division division,
+        java.time.ZoneId zone)
+    {
+        Race.StartType kind = race.start();
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("kind", kind.wire());
+        body.put("warningSeconds", division.warning() * 60);
+        body.put("startSeconds", division.prep() * 60);
+        if (division.timeLimitMinutes() != null && division.timeLimitMinutes() > 0)
+            body.put("timeLimitSeconds", division.timeLimitMinutes() * 60);
+        java.time.format.DateTimeFormatter hhmm = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
+            .withZone(zone);
+        if (kind == Race.StartType.ALLOCATED)
+        {
+            body.put("openSeconds", division.open() * 60);
+            body.put("text", name + ": allocated starts — warning " + division.warning() + " and preparatory "
+                + division.prep() + " min before each boat's own time; line open " + division.open()
+                + " min after it");
+            return body;
+        }
+        java.time.Instant at = Race.Division.at(division.start(), race.date(), zone);
+        if (at == null)
+            return null;
+        body.put("startAt", at.toString());
+        String signals = name + ": warning " + hhmm.format(at.minusSeconds(division.warning() * 60L))
+            + ", preparatory " + hhmm.format(at.minusSeconds(division.prep() * 60L));
+        if (kind == Race.StartType.OPEN)
+        {
+            java.time.Instant closes = Race.Division.at(division.closes(), race.date(), zone);
+            if (closes == null || !closes.isAfter(at))
+                return null;
+            body.put("closesAt", closes.toString());
+            body.put("text", signals + ", line opens " + hhmm.format(at) + ", closes " + hhmm.format(closes));
+            return body;
+        }
+        body.put("openSeconds", division.open() * 60);
+        body.put("text", signals + ", start " + hhmm.format(at));
+        return body;
     }
 
     public Optional<Room> room(String club, String series, String raceId)
@@ -735,7 +829,8 @@ public class Dialog
     {
         public final String club;
         public final String series;
-        public final Race race;
+        /** The race as last defined — replaced when the programme is saved (`sync`). */
+        public volatile Race race;
         final List<Envelope> channel = new ArrayList<>();
         final Map<String, Standing> standings = new LinkedHashMap<>();
         final Map<String, Set<String>> acks = new LinkedHashMap<>();
@@ -1043,6 +1138,8 @@ public class Dialog
         public Envelope timer;
         public Envelope flag;
         public Envelope course;
+        /** The start last worked out from the definition — see `Dialog.sync`. */
+        public Map<String, Object> derived;
 
         Map<String, Object> document()
         {
@@ -1050,12 +1147,16 @@ public class Dialog
             out.put("timer", timer);
             out.put("flag", flag);
             out.put("course", course);
+            out.put("derived", derived);
             return out;
         }
 
+        @SuppressWarnings("unchecked")
         static Standing from(Map<String, Object> map)
         {
             Standing standing = new Standing();
+            if (map.get("derived") instanceof Map<?, ?> m)
+                standing.derived = new LinkedHashMap<>((Map<String, Object>)m);
             if (map.get("timer") instanceof Map<?, ?> m)
                 standing.timer = envelope(cast(m));
             if (map.get("flag") instanceof Map<?, ?> m)
@@ -1109,6 +1210,8 @@ public class Dialog
             out.put("timer", timer);
             out.put("flag", flag);
             out.put("course", course);
+            // What the definition says, so the race screen can put a start back after an AP.
+            out.put("derived", derived);
             return out;
         }
     }

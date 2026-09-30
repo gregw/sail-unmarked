@@ -259,9 +259,13 @@ pointing up the screen.**
 
 Edits the race *definition* — id, long name, date, format, **how it starts** (`startType`: scratch,
 open or allocated, every division alike), whether it is **public**, which race this one **follows**, and
-one row per division naming a course, a variant and a **time limit** in minutes. The start type is the
-race's because a boat needs it on joining — an allocated start asks for the boat's own time then — while
-the times themselves are set on the race screen, which publishes them. A new race starts **not public**,
+one row per division naming a course, a variant and a **time limit** in minutes, with a row under it for
+**that division's start** — the fields the race's start type calls for: a start time (scratch), opening
+and closing times (open) or none (allocated), and the warning, preparatory and open minutes. Times are
+HH:MM on the race's date in the series' timezone. This is where a race's start is set; the race screen
+can only delay, postpone or abandon it, and while the race is public the server hands boats the start
+defined here. A public race edited inside its warning period says so, since boats are already counting
+down. A new race starts **not public**,
 so it can be set up before boats are offered it; a race in a file that predates the field is public. Conduct is elsewhere; see
 [`client-server-dialog.md`](client-server-dialog.md). `selectRace` also selects that race's first
 division's design, so the chart shows the water the race is on.

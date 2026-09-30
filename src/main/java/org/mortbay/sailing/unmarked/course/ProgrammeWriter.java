@@ -261,6 +261,14 @@ public final class ProgrammeWriter
                     out.append(", start: ").append(scalar(division.start()));
                 if (division.timeLimitMinutes() != null)
                     out.append(", timeLimitMinutes: ").append(division.timeLimitMinutes());
+                if (division.closes() != null && !division.closes().isBlank())
+                    out.append(", closes: ").append(scalar(division.closes()));
+                if (division.warningMinutes() != null)
+                    out.append(", warningMinutes: ").append(division.warningMinutes());
+                if (division.prepMinutes() != null)
+                    out.append(", prepMinutes: ").append(division.prepMinutes());
+                if (division.openMinutes() != null)
+                    out.append(", openMinutes: ").append(division.openMinutes());
                 out.append("}\n");
             });
             notes(out, race.notes(), 4);

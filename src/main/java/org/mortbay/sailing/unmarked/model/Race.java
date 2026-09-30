@@ -127,7 +127,8 @@ public record Race(
                 return;
             out.put(key, division.name() == null || division.name().isBlank()
                 ? new Division(key, division.course(), division.variant(), division.start(),
-                    division.timeLimitMinutes())
+                    division.timeLimitMinutes(), division.closes(), division.warningMinutes(),
+                    division.prepMinutes(), division.openMinutes())
                 : division);
         });
         return java.util.Collections.unmodifiableMap(out);
@@ -177,6 +178,27 @@ public record Race(
             if (division.timeLimitMinutes() != null && division.timeLimitMinutes() <= 0)
                 problems.add("race '" + id + "' division '" + key + "' has a time limit of "
                     + division.timeLimitMinutes() + " minutes; give it a positive one, or none");
+            // A START THAT CANNOT BE WORKED OUT IS SAID HERE, not found on a start line: a public
+            // race whose division has no start time hands its boats nothing to count down to.
+            if (start() != StartType.ALLOCATED)
+            {
+                java.time.ZoneId anyZone = java.time.ZoneOffset.UTC;
+                java.time.Instant opens = Division.at(division.start(), date, anyZone);
+                if (opens == null)
+                    problems.add("race '" + id + "' division '" + key + "' has no start time"
+                        + (division.start() == null ? "" : " it can read ('" + division.start() + "')")
+                        + "; give it one as HH:MM");
+                if (start() == StartType.OPEN)
+                {
+                    java.time.Instant shuts = Division.at(division.closes(), date, anyZone);
+                    if (shuts == null)
+                        problems.add("race '" + id + "' division '" + key + "' is an open start with"
+                            + " no closing time; give it one as HH:MM");
+                    else if (opens != null && !shuts.isAfter(opens))
+                        problems.add("race '" + id + "' division '" + key + "' closes its line before"
+                            + " it opens it");
+                }
+            }
             String badDiv = Ids.problem("division", key, Ids.PLAIN);
             if (badDiv != null)
                 problems.add(badDiv);
@@ -222,18 +244,87 @@ public record Race(
      * <p>{@code timeLimitMinutes} is how long a boat of this division has to finish, from the
      * instant its elapsed time runs from; after that its finish line is closed to it and a
      * crossing no longer counts. None means no limit.
+     *
+     * <h2>The start is DEFINED here</h2>
+     * {@code start} is the start time — the moment the line opens, for an open start — as
+     * {@code HH:MM} on the race's date in the series' timezone; {@code closes} is when an open
+     * start's line closes, the same way. {@code warningMinutes} and {@code prepMinutes} put the
+     * warning and preparatory signals before it (five and four unless said), and
+     * {@code openMinutes} is how long a scratch or allocated start's line stays open after it (ten
+     * unless said). While the race is public the server hands boats the start these define
+     * ({@code Dialog.definedStart}); the race screen can only delay, postpone or abandon it.
      */
     public record Division(
         @JsonProperty("name") String name,
         @JsonProperty("course") String course,
         @JsonProperty("variant") String variant,
         @JsonProperty("start") String start,
-        @JsonProperty("timeLimitMinutes") Integer timeLimitMinutes)
+        @JsonProperty("timeLimitMinutes") Integer timeLimitMinutes,
+        @JsonProperty("closes") String closes,
+        @JsonProperty("warningMinutes") Integer warningMinutes,
+        @JsonProperty("prepMinutes") Integer prepMinutes,
+        @JsonProperty("openMinutes") Integer openMinutes)
     {
         /** A division with no time limit. */
         public Division(String name, String course, String variant, String start)
         {
             this(name, course, variant, start, null);
+        }
+
+        /** A division with only a planned start and a time limit. */
+        public Division(String name, String course, String variant, String start, Integer timeLimitMinutes)
+        {
+            this(name, course, variant, start, timeLimitMinutes, null, null, null, null);
+        }
+
+        @JsonIgnore
+        public int warning()
+        {
+            return warningMinutes == null ? 5 : warningMinutes;
+        }
+
+        @JsonIgnore
+        public int prep()
+        {
+            return prepMinutes == null ? 4 : prepMinutes;
+        }
+
+        @JsonIgnore
+        public int open()
+        {
+            return openMinutes == null ? 10 : openMinutes;
+        }
+
+        /**
+         * A time in the definition — {@code HH:MM} on the race's date in the series' timezone, or
+         * an instant written in full — as an instant; null when it says nothing usable.
+         */
+        public static java.time.Instant at(String time, LocalDate date, java.time.ZoneId zone)
+        {
+            if (time == null || time.isBlank())
+                return null;
+            String t = time.trim();
+            try
+            {
+                if (t.matches("\\d{1,2}:\\d{2}"))
+                {
+                    return date == null ? null
+                        : java.time.ZonedDateTime.of(date, java.time.LocalTime.parse(t.length() == 4 ? "0" + t : t), zone)
+                            .toInstant();
+                }
+                return java.time.OffsetDateTime.parse(t).toInstant();
+            }
+            catch (Exception e)
+            {
+                try
+                {
+                    return java.time.LocalDateTime.parse(t).atZone(zone).toInstant();
+                }
+                catch (Exception again)
+                {
+                    return null;
+                }
+            }
         }
 
         /** The tag boats in this division carry. */

@@ -202,6 +202,25 @@ await settle(1400);
 ok('a division\'s time limit reaches the file, in minutes',
   Object.values((await file()).races[FIRST].divisions)[0].timeLimitMinutes === 90);
 
+// THE START IS SET HERE, field by field for the race's start type. An allocated start has no
+// common time to set; a scratch start does.
+ok('an allocated start asks for no common start time, only the signals and the open period',
+  !form().includes('data-dstart=') && form().includes('data-dwarn=') && form().includes('data-dopen='));
+H('r_start:change')({ target: { value: 'scratch' } });
+await settle(1400);
+const startField = $('raceForm').querySelectorAll('[data-dstart]')[0];
+ok('a scratch start asks for its time', !!startField);
+startField.fire('change', { target: { value: '14:05' } });
+await settle(1400);
+$('raceForm').querySelectorAll('[data-dwarn]')[0].fire('change', { target: { value: '6' } });
+await settle(1400);
+const div = Object.values((await file()).races[FIRST].divisions)[0];
+ok('...and the start time and the signals reach the file', div.start === '14:05' && div.warningMinutes === 6);
+H('r_start:change')({ target: { value: 'open' } });
+await settle(1400);
+ok('an open start asks when its line closes, and not how long it stays open',
+  form().includes('data-dcloses=') && !form().includes('data-dopen='));
+
 /* ------------------------------------------------------------------ deleting, and the chain */
 
 choose('race', SECOND);

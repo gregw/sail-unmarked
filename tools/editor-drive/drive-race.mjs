@@ -67,19 +67,23 @@ file.courses[taken.course].public = true;
 // Today, in the club's own timezone, because a race day is a local day and the chain in §12.6
 // turns on it.
 const today = new Date().toLocaleDateString('en-CA');     // yyyy-mm-dd
+// A START TIME, as the definition writes one: HH:MM in the series' own timezone, an hour off. A
+// public race with none hands its boats nothing to count down to, and the file says so.
+const inAnHour = new Intl.DateTimeFormat('en-GB', { timeZone: file.timezone ?? 'Australia/Sydney',
+  hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(Date.now() + 3600000));
 const races = {
   'drive-race-1': {
     name: 'Drive race one',
     date: today,
     format: 'fleet',
     next: 'drive-race-2',
-    divisions: { open: { course: taken.course, variant: taken.variant } },
+    divisions: { open: { course: taken.course, variant: taken.variant, start: inAnHour } },
   },
   'drive-race-2': {
     name: 'Drive race two',
     date: today,
     format: 'fleet',
-    divisions: { open: { course: taken.course, variant: taken.variant } },
+    divisions: { open: { course: taken.course, variant: taken.variant, start: inAnHour } },
   },
 };
 await fetch(at(`/api/programmes/${KEY}`), {

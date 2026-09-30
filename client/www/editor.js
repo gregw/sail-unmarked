@@ -198,7 +198,9 @@ async function loadProgramme(key) {
     // reach back into the fetched document, which is what the save is diffed against.
     divisions: Object.fromEntries(Object.entries(r.divisions ?? {}).map(([name, d]) => [name, {
       name, course: d.course ?? null, variant: d.variant ?? null, start: d.start ?? null,
-      timeLimitMinutes: d.timeLimitMinutes ?? null,
+      timeLimitMinutes: d.timeLimitMinutes ?? null, closes: d.closes ?? null,
+      warningMinutes: d.warningMinutes ?? null, prepMinutes: d.prepMinutes ?? null,
+      openMinutes: d.openMinutes ?? null,
     }])),
   }]));
   state.selectedRace = null;
@@ -3061,7 +3063,8 @@ function renderRaceFields() {
           placeholder="limit" title="time limit, minutes — none if empty" inputmode="numeric"
           style="flex:0 0 46px; min-width:0">
         <button data-ddelete="${esc(name)}" title="remove this division">&times;</button>
-      </div>`;
+      </div>
+      ${startRowFor(race, name, division)}`;
     }).join('')}
     <div class="lifecycle"><button id="r_add_div">Add division</button></div>
     <label class="label" for="r_notes">Race notes</label>
@@ -3070,6 +3073,43 @@ function renderRaceFields() {
       <a href="race.html" class="small">Run this race &rarr;</a>
     </div>`;
   wireRaceFields(race);
+}
+
+/**
+ * ONE DIVISION'S START, under its row: the fields its race's start type calls for, in minutes and
+ * HH:MM on the race's date. This is where a start is set — the race screen can only delay,
+ * postpone or abandon it — and while the race is public the server hands boats the start these
+ * define (`Dialog.definedStart`).
+ */
+function startRowFor(race, name, division) {
+  const kind = race.startType ?? 'scratch';
+  const time = (attr, value, label) => `<label class="small">${label}</label>
+    <input type="time" data-${attr}="${esc(name)}" value="${esc(/^\d{1,2}:\d{2}$/.test(value ?? '') ? value : '')}"
+      style="flex:0 0 84px; min-width:0">`;
+  const minutes = (attr, value, fallback, label) => `<label class="small">${label}</label>
+    <input data-${attr}="${esc(name)}" value="${esc(value ?? '')}" placeholder="${fallback}"
+      inputmode="numeric" style="flex:0 0 34px; min-width:0">`;
+  const soon = countingDown(race, division);
+  return `<div class="steprow alt" data-divstart="${esc(name)}">
+      ${kind === 'allocated' ? '<span class="small muted">each boat\'s own time</span>'
+    : time('dstart', division.start, kind === 'open' ? 'opens' : 'start')}
+      ${kind === 'open' ? time('dcloses', division.closes, 'closes') : ''}
+      ${minutes('dwarn', division.warningMinutes, 5, 'warn')}
+      ${minutes('dprep', division.prepMinutes, 4, 'prep')}
+      ${kind === 'open' ? '' : minutes('dopen', division.openMinutes, 10, 'open')}
+    </div>
+    ${soon ? `<div class="small warn" style="margin:0 0 4px 12px">Boats are already counting down to
+      this start: a change reaches them in the middle of their sequence.</div>` : ''}`;
+}
+
+/** Is this division's start public, today, and already inside its warning period? */
+function countingDown(race, division) {
+  if (race.public === false || !race.date || !/^\d{1,2}:\d{2}$/.test(division.start ?? '')) return false;
+  const [h, m] = division.start.split(':').map(Number);
+  const at = new Date(`${race.date}T00:00:00`);
+  at.setHours(h, m, 0, 0);
+  const warning = (division.warningMinutes ?? 5) * 60000;
+  return Date.now() >= at.getTime() - warning && Date.now() < at.getTime();
 }
 
 function wireRaceFields(race) {
@@ -3170,6 +3210,30 @@ function wireRaceFields(race) {
       render();
     });
   }
+  // A DIVISION'S START, field by field: times as HH:MM, minutes as whole numbers; empty is the
+  // default (or, for a time, not set yet).
+  const startField = (attr, field, parse) => {
+    for (const input of el('raceForm').querySelectorAll(`[data-${attr}]`)) {
+      input.addEventListener('change', (ev) => {
+        beginEdit();
+        state.races.get(race.id).divisions[input.dataset[attr]][field] = parse(ev.target.value);
+        endEdit();
+        formsChanged();
+        render();
+      });
+    }
+  };
+  const hhmm = (value) => (/^\d{1,2}:\d{2}$/.test(String(value ?? '').trim()) ? String(value).trim() : null);
+  const whole = (value) => {
+    const n = Math.round(Number(value));
+    return String(value ?? '').trim() !== '' && Number.isFinite(n) && n >= 0 ? n : null;
+  };
+  startField('dstart', 'start', hhmm);
+  startField('dcloses', 'closes', hhmm);
+  startField('dwarn', 'warningMinutes', whole);
+  startField('dprep', 'prepMinutes', whole);
+  startField('dopen', 'openMinutes', whole);
+
   // THE TIME LIMIT, in minutes from each boat's elapsed start; the finish closes to a boat after
   // it. Empty is no limit.
   for (const input of el('raceForm').querySelectorAll('[data-dlimit]')) {
@@ -4602,7 +4666,9 @@ function racesPayload() {
       public: race.public ?? null,
       divisions: Object.fromEntries(Object.entries(race.divisions ?? {}).map(([name, d]) => [
         name, { course: d.course ?? null, variant: d.variant ?? null, start: d.start ?? null,
-          timeLimitMinutes: d.timeLimitMinutes ?? null },
+          timeLimitMinutes: d.timeLimitMinutes ?? null, closes: d.closes ?? null,
+          warningMinutes: d.warningMinutes ?? null, prepMinutes: d.prepMinutes ?? null,
+          openMinutes: d.openMinutes ?? null },
       ])),
     };
   }
@@ -4673,7 +4739,9 @@ function racesFrom(payload) {
     public: r.public ?? null,
     divisions: Object.fromEntries(Object.entries(r.divisions ?? {}).map(([name, d]) => [name, {
       name, course: d.course ?? null, variant: d.variant ?? null, start: d.start ?? null,
-      timeLimitMinutes: d.timeLimitMinutes ?? null,
+      timeLimitMinutes: d.timeLimitMinutes ?? null, closes: d.closes ?? null,
+      warningMinutes: d.warningMinutes ?? null, prepMinutes: d.prepMinutes ?? null,
+      openMinutes: d.openMinutes ?? null,
     }])),
   }]));
 }

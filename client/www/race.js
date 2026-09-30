@@ -1,13 +1,15 @@
 /**
- * RUNNING A RACE — the committee's screen, `wiki/client-server-dialog.md` §12. Section numbers
+ * RACE MANAGEMENT — the committee's screen, `wiki/client-server-dialog.md` §12. Section numbers
  * (§) below are that document's.
  *
  * <h2>What this page is for, and what it deliberately is not</h2>
- * It publishes state and it reads back what the fleet said. It does not score, it does not
- * measure, and it has <b>no GO button</b> — which is not an omission but §1.2: the server keeps
- * no clock, so a start cannot be triggered. It is SCHEDULED as an absolute instant — the form
- * asks for a time of day in this operator's own zone, and the conversion to an instant happens
- * here, in this browser. Which suits sailing anyway: a start sequence is planned, not pressed.
+ * It watches every race RUNNING — public, today, and not yet over — on one chart, and acts on one
+ * of them at a time, chosen by its tab: it can DELAY a start, POSTPONE one (AP), ABANDON a race and
+ * talk on the channel. Everything else about a race — its divisions, its courses and its starts —
+ * is set in the editor's Races tab, and while a race is public the server hands its boats the
+ * starts defined there (`Dialog.sync`). It does not score, it does not measure, and it has <b>no
+ * GO button</b> — which is not an omission but §1.2: the server keeps no clock, so a start cannot be
+ * triggered, only scheduled as an absolute instant.
  *
  * <h2>The two rules that are enforced HERE and nowhere else</h2>
  * Both are arithmetic against *now*, and the only *now* that matters is the one belonging to the
@@ -78,21 +80,12 @@ const state = {
   view: new MapView(),
   basemap: 'sea',
   programmes: [],
-  races: [],            // {club, series, id, race}
-  chosen: null,
-  conduct: null,
+  races: [],            // {club, series, id, race}: every race defined
+  chosen: null,         // the race the pane is acting on: one of those running
+  conducts: new Map(),  // race key → its conduct, for every race polled
+  conduct: null,        // the chosen race's conduct
   courses: new Map(),   // revision → snapshot
-  /*
-   * WHAT IS TYPED INTO EACH DIVISION'S START, kept per division and not shared.
-   *
-   * A relative "start in N minutes" could share one number between divisions; absolute times
-   * cannot, because that is the whole point — div-1 starts at 14:05 and div-2 at 14:10, and a
-   * shared field would make the second edit overwrite the first. Seeded once per division from
-   * the race's PLANNED start where it has one, else five minutes from now, and never re-seeded:
-   * this page re-renders every couple of seconds and a seed that ran again would type over
-   * whatever the operator was in the middle of entering.
-   */
-  starts: {},           // division -> { at (local 'YYYY-MM-DDTHH:mm'), warning, prep }
+  delays: {},           // division tag → minutes typed into its Delay field
   arming: null,         // which irreversible act is asking a second time
   message: null,
   fitted: false,
@@ -112,9 +105,7 @@ async function loadRaces() {
    *
    * This runs at module top level, so an exception escaping it rejects the module and leaves a
    * page that has loaded its furniture and will never do anything again — with nothing on
-   * screen saying why. Which is the worst of the three possible outcomes, and it is what
-   * happened: `drive-racepage.mjs` died on an unhandled rejection the one time the server was
-   * still starting. A club's connection being briefly bad is not an unusual condition.
+   * screen saying why. A club's connection being briefly bad is not an unusual condition.
    */
   try {
     state.programmes = await json('/api/programmes');
@@ -130,34 +121,67 @@ async function loadRaces() {
     for (const [id, race] of Object.entries(held ?? {}))
       races.push({ club: programme.club, series: programme.series, id, race });
   }
-  // By date, newest first: on a race morning the race you want is today's, and on any other
-  // day it is the last one that happened.
-  races.sort((a, b) => String(b.race.date ?? '').localeCompare(String(a.race.date ?? '')));
   state.races = races;
-  if (!state.chosen && races.length) state.chosen = key(races[0]);
-  renderPicker();
 }
 
 const key = (row) => `${row.club}/${row.series}/${row.id}`;
-const chosen = () => state.races.find((row) => key(row) === state.chosen) ?? null;
+const today = () => new Date().toLocaleDateString('en-CA');
 
-async function poll() {
-  const row = chosen();
-  if (!row) return;
-  try {
-    state.conduct = await json(`/api/conduct/${encodeURIComponent(row.club)}`
-      + `/${encodeURIComponent(row.series)}/${encodeURIComponent(row.id)}`);
-    state.message = null;
-  } catch (error) {
-    state.message = `Could not read the race: ${error.message}`;
-  }
-  // Likewise: a snapshot that cannot be fetched costs that division's geometry on the chart,
-  // and nothing else.
-  await loadCourses(row).catch((error) => {
-    state.message = `Could not read a course: ${error.message}`;
+/** Today's races that boats may join: the ones this page polls. */
+const todays = () => state.races.filter((row) => row.race.date === today() && row.race.public !== false);
+
+/**
+ * THE RACES RUNNING NOW: public, today, and not over. A race is over once every boat in it has
+ * finished or retired, or once every division's line has closed and its time limit has run —
+ * which is known only where it has a time limit, so a race with none runs until the day is out.
+ */
+const running = () => todays().filter((row) => !over(row));
+
+function over(row, now = Date.now()) {
+  const conduct = state.conducts.get(key(row));
+  const boats = conduct?.boats ?? [];
+  if (boats.length && boats.every((boat) => boat.outcome && boat.outcome !== 'racing')) return true;
+  const names = Object.keys(row.race.divisions ?? {});
+  if (!names.length) return false;
+  return names.every((name) => {
+    const standing = conduct?.states?.[`division:${name}`];
+    if (standing?.state === 'abandoned') return true;
+    const body = standing?.timer?.body ?? standing?.derived;
+    const limit = Number(body?.timeLimitSeconds);
+    if (!body || !(limit > 0)) return false;
+    const opens = Date.parse(body.startAt ?? '');
+    if (!Number.isFinite(opens)) return false;
+    const closes = body.closesAt ? Date.parse(body.closesAt) : opens + Number(body.openSeconds ?? 600) * 1000;
+    return now > closes + limit * 1000;
   });
+}
+
+const chosen = () => running().find((row) => key(row) === state.chosen) ?? null;
+
+/** Read every one of today's races, and the geometry each division is sailing. */
+async function poll() {
+  if (++polls % 8 === 0) await loadRaces();
+  for (const row of todays()) {
+    try {
+      state.conducts.set(key(row), await json(`/api/conduct/${encodeURIComponent(row.club)}`
+        + `/${encodeURIComponent(row.series)}/${encodeURIComponent(row.id)}`));
+      state.message = null;
+    } catch (error) {
+      state.message = `Could not read ${row.id}: ${error.message}`;
+    }
+    // A snapshot that cannot be fetched costs that division's geometry on the chart, and nothing
+    // else.
+    await loadCourses(row).catch((error) => {
+      state.message = `Could not read a course: ${error.message}`;
+    });
+  }
+  if (!chosen()) state.chosen = running()[0] ? key(running()[0]) : null;
+  state.conduct = state.chosen ? state.conducts.get(state.chosen) ?? null : null;
   render();
 }
+
+/** Races are re-read every so often, so one made public in the editor appears here. */
+let polls = 0;
 
 /**
  * The geometry each division is sailing, fetched once per revision.
@@ -167,7 +191,7 @@ async function poll() {
  */
 async function loadCourses(row) {
   const published = await json('/api/public').catch(() => []);
-  for (const [name, division] of Object.entries(row.race.divisions ?? {})) {
+  for (const division of Object.values(row.race.divisions ?? {})) {
     const course = published.find((c) => c.club === row.club && c.series === row.series
       && c.course === division.course);
     const entry = (course?.published ?? []).find((p) => !division.variant
@@ -179,7 +203,6 @@ async function loadCourses(row) {
         .catch(() => null);
       if (snapshot) state.courses.set(entry.revision, snapshot);
     }
-    void name;
   }
 }
 
@@ -236,8 +259,12 @@ function sailed(boat, index, steps) {
   return boat.step >= index;
 }
 
+/**
+ * EVERY RACE RUNNING, on one chart: each division of each race in a colour of its own, its legs
+ * textured by how much of it has sailed them, and every boat that has joined. The pane acts on one
+ * race at a time; the water is shared, so the chart shows all of it.
+ */
 function renderChart() {
-  const row = chosen();
   const svg = el('chart');
   const box = svg.getBoundingClientRect();
   if (box.width > 20 && box.height > 20) {
@@ -245,12 +272,16 @@ function renderChart() {
     state.view.height = Math.round(box.height);
     svg.setAttribute('viewBox', `0 0 ${state.view.width} ${state.view.height}`);
   }
-  if (!row) {
-    svg.innerHTML = '';
+  const rows = running();
+  const divisions = rows.flatMap((row) => Object.keys(row.race.divisions ?? {})
+    .map((name) => ({ row, name, division: row.race.divisions[name] })));
+  if (!divisions.length) {
+    svg.innerHTML = state.view.tileLayer(state.basemap);
+    el('legend').innerHTML = '';
     return;
   }
   if (!state.fitted) {
-    const positions = extent(row);
+    const positions = rows.flatMap((row) => extent(row));
     if (positions.length) {
       state.view.fit(positions, 0.75);
       state.fitted = true;
@@ -258,14 +289,16 @@ function renderChart() {
   }
 
   let out = state.view.tileLayer(state.basemap);
-  const boats = state.conduct?.boats ?? [];
-  const names = Object.keys(row.race.divisions ?? {});
+  const colourOf = (row, name) => {
+    const i = divisions.findIndex((d) => d.row === row && d.name === name);
+    return DIVISION_COLOURS[(i < 0 ? 0 : i) % DIVISION_COLOURS.length];
+  };
 
-  names.forEach((name, i) => {
-    const division = row.race.divisions[name];
+  for (const { row, name, division } of divisions) {
     const snapshot = state.courses.get(division.revision);
-    if (!snapshot) return;
-    const colour = DIVISION_COLOURS[i % DIVISION_COLOURS.length];
+    if (!snapshot) continue;
+    const colour = colourOf(row, name);
+    const boats = state.conducts.get(key(row))?.boats ?? [];
     const mine = boats.filter((boat) => (boat.tags ?? []).includes(`division:${name}`));
     const steps = snapshot.steps ?? [];
 
@@ -287,8 +320,7 @@ function renderChart() {
     }
 
     // The lines themselves, and the letter of each step on them. A step handicapped by distance
-    // has no one line: every boat has its own, somewhere in the striped zone, and the
-    // track they are placed along is not crossed by anybody.
+    // has no one line: every boat has its own, somewhere in the striped zone.
     const shape = geometry(snapshot);
     steps.forEach((step, index) => {
       const corners = step.handicapWidthM != null ? envelope(snapshot, index, shape) : null;
@@ -312,48 +344,40 @@ function renderChart() {
           + `${esc(step.letter ?? index)}</text>`;
       }
     });
-  });
+  }
 
   // EVERY BOAT THAT HAS JOINED, in its division's colour and with the hull glyph its own
-  // screens use. Faded when its last fix is old, and saying how old — the same rule the boat's
-  // own staleness follows, because a screen that quietly shows an old position is the one
-  // failure a committee cannot see.
-  for (const boat of boats) {
-    if (!boat.position?.latitude) continue;
-    const i = names.indexOf((boat.tags ?? []).map((t) => t.replace('division:', ''))[0]);
-    const colour = DIVISION_COLOURS[(i < 0 ? 0 : i) % DIVISION_COLOURS.length];
-    const [bx, by] = state.view.toPx(boat.position);
-    const old = boat.fixAgeMs != null && boat.fixAgeMs > STALE_MS;
-    out += `<g opacity="${old ? 0.4 : 1}" fill="${colour}">`
-      + boatArt(bx, by, boat.cogDeg ?? 0, 22) + '</g>';
-    out += `<text x="${(bx + 15).toFixed(1)}" y="${(by - 10).toFixed(1)}" font-family="var(--mono)"`
-      + ` font-size="11" fill="${colour}"`
-      + ` style="paint-order:stroke;stroke:var(--sea);stroke-width:3px">`
-      + `${esc(boat.sailNo ?? boat.boatId ?? '?')}`
-      + `${old ? ` ${Math.round(boat.fixAgeMs / 1000)}s` : ''}</text>`;
+  // screens use. Faded when its last fix is old, and saying how old — a screen that quietly shows
+  // an old position is the one failure a committee cannot see.
+  for (const row of rows) {
+    for (const boat of state.conducts.get(key(row))?.boats ?? []) {
+      if (!boat.position?.latitude) continue;
+      const name = (boat.tags ?? []).map((t) => t.replace('division:', ''))[0];
+      const colour = colourOf(row, name);
+      const [bx, by] = state.view.toPx(boat.position);
+      const old = boat.fixAgeMs != null && boat.fixAgeMs > STALE_MS;
+      out += `<g opacity="${old ? 0.4 : 1}" fill="${colour}">`
+        + boatArt(bx, by, boat.cogDeg ?? 0, 22) + '</g>';
+      out += `<text x="${(bx + 15).toFixed(1)}" y="${(by - 10).toFixed(1)}" font-family="var(--mono)"`
+        + ` font-size="11" fill="${colour}"`
+        + ` style="paint-order:stroke;stroke:var(--sea);stroke-width:3px">`
+        + `${esc(boat.sailNo ?? boat.boatId ?? '?')}`
+        + `${old ? ` ${Math.round(boat.fixAgeMs / 1000)}s` : ''}</text>`;
+    }
   }
 
   out += state.view.scaleBar();
   svg.innerHTML = out;
 
-  el('legend').innerHTML = names.map((name, i) => {
-    const colour = DIVISION_COLOURS[i % DIVISION_COLOURS.length];
-    return `<span><i style="background:${colour}"></i>${esc(name)}</span>`;
-  }).join('') + `
+  el('legend').innerHTML = divisions.map(({ row, name }) =>
+    `<span><i style="background:${colourOf(row, name)}"></i>${esc(rows.length > 1
+      ? `${row.race.name ?? row.id} · ${name}` : name)}</span>`).join('') + `
     <span><i style="background:var(--muted)"></i>solid: some boats have sailed it</span>
     <span>dashed: nobody yet</span>
     <span>faint: everybody</span>`;
 }
 
 /* ======================================================================== the pane */
-
-function renderPicker() {
-  el('pick').innerHTML = state.races.length === 0
-    ? '<option value="">no races defined — use the editor\'s Races tab</option>'
-    : state.races.map((row) => `<option value="${esc(key(row))}"${key(row) === state.chosen
-      ? ' selected' : ''}>${esc(row.race.date ?? '')} ${esc(row.race.name ?? row.id)}`
-      + ` — ${esc(row.club)}/${esc(row.series)}</option>`).join('');
-}
 
 /*
  * THE PANE IS NOT REBUILT UNDER SOMEBODY'S HANDS. It is rebuilt on every poll, twice a second,
@@ -382,35 +406,41 @@ el('pane').addEventListener('focusout', () => { if (paneState.heldBack) setTimeo
 
 function render() {
   renderChart();
-  const row = chosen();
   el('clock').textContent = hhmmss(Date.now());
   if (paneBusy()) {
     paneState.heldBack = true;
     return;
   }
   paneState.heldBack = false;
+  const rows = running();
+  const row = chosen();
+  const now = Date.now();
+  // ONE TAB PER RACE RUNNING: the chart shows them all, and the controls act on the one chosen.
+  const tabs = rows.length > 1 ? `<div class="tabs">${rows.map((r) => `<button class="act${key(r) === state.chosen
+    ? ' on' : ''}" data-race="${esc(key(r))}">${esc(r.race.name ?? r.id)}</button>`).join('')}</div>` : '';
   if (!row) {
-    el('pane').innerHTML = '<p class="hint">No race chosen. A race is DEFINED in the '
-      + '<a href="editor.html">editor</a>, on its Races tab; this page runs one.</p>';
+    el('pane').innerHTML = `${state.message ? `<p class="warn" style="font-size:12px">${esc(state.message)}</p>` : ''}
+      <p class="hint">No race is running. A race is DEFINED — its divisions, courses and starts — in the
+      <a href="editor.html">editor</a>, on its Races tab, and runs here once it is public on its day.</p>`;
+    wirePane();
     return;
   }
   const states = state.conduct?.states ?? {};
   const boats = state.conduct?.boats ?? [];
-  const now = Date.now();
 
   el('pane').innerHTML = `
+    ${tabs}
     <h2>${esc(row.race.name ?? row.id)}</h2>
-    <p class="hint">${esc(row.race.date ?? '')} &middot; ${esc(row.race.format ?? 'race')}
+    <p class="hint">${esc(row.race.date ?? '')} &middot; ${esc(KIND_SAID[row.race.startType ?? 'scratch'])}
       &middot; ${esc(row.club)}/${esc(row.series)}
       ${row.race.next ? `&middot; next: ${esc(row.race.next)}` : ''}</p>
     ${state.message ? `<p class="warn" style="font-size:12px">${esc(state.message)}</p>` : ''}
 
     <h2>Starts</h2>
-    <p class="hint">There is no GO button, and there cannot be: the server keeps no clock, so a
-      start is scheduled as an absolute instant, typed here in this computer's own time zone.</p>
+    <p class="hint">Set in the editor, with the rest of the race. Here a start can be delayed,
+      postponed (AP) or abandoned.</p>
     ${Object.keys(row.race.divisions ?? {}).map((name) =>
-      startCard(name, row.race.divisions[name], states[`division:${name}`], now,
-        row.race.startType ?? 'scratch')).join('')}
+      startCard(name, row.race.divisions[name], states[`division:${name}`], now)).join('')}
 
     <h2>Fleet</h2>
     <p class="hint">One row per boat that has joined. The last two columns are the whole reason
@@ -433,9 +463,7 @@ function render() {
               && 'course' in boat.seen ? (boat.seen.course ? 'seen' : 'no') : '—'}</td>
             <td class="seen ${boat.seen?.flag === true ? 'yes' : 'no'}">${boat.seen
               && 'flag' in boat.seen ? (boat.seen.flag ? 'seen' : 'no') : '—'}</td>
-            <td>${boat.outcome && boat.outcome !== 'racing'
-              ? `<span class="mono">${esc(boat.outcome)}</span>`
-              : `<button class="act danger" data-dnf="${esc(boat.boatId)}">DNF</button>`}</td>
+            <td class="mono">${esc(boat.outcome && boat.outcome !== 'racing' ? boat.outcome : '')}</td>
           </tr>`).join('')}
       </table>`}
 
@@ -460,91 +488,74 @@ function render() {
   if (channel) channel.scrollTop = channel.scrollHeight;
 }
 
-/**
- * THE OPERATOR'S OWN ZONE, said on the form.
- *
- * Every time typed here is local and every time on the wire is an instant, so the conversion is
- * this browser's — and a form that showed bare times with no zone would be one somebody could
- * read wrong on a committee boat borrowed from another club. Named rather than offered as a
- * choice: the operator's clock is the one they are looking at.
- */
-const ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'local time';
-
-/** What each way of starting a race means, said on each division's card. */
+/** What each way of starting a race means, said under the race's name. */
 const KIND_SAID = {
   scratch: 'Scratch start: one start for all, elapsed from it',
   open: 'Open start: the line opens and closes, elapsed from each boat\'s crossing',
-  allocated: 'Allocated start: each boat gives its own time when it joins',
+  allocated: 'Allocated start: each boat gave its own time when it joined',
 };
-
-/** `YYYY-MM-DDTHH:mm` in local time, which is what a `datetime-local` input speaks. */
-function localValue(ms) {
-  const at = new Date(ms);
-  return new Date(ms - at.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-}
 
 /** hh:mm of an instant, for saying what a sequence works out to. */
 function hhmm(ms) {
   return Number.isFinite(ms) ? hhmmss(ms).slice(0, 5) : '—';
 }
 
+
 /**
- * What is in one division's start fields, seeded once and then left alone.
+ * A DELAYED START, as the timer that says so: the start this division has (or, after an AP, the
+ * one its definition gives) moved later, the whole sequence with it.
  *
- * <b>Seeded from the race's PLANNED start where the definition has one</b>, which is what that
- * field in the file is for: a rehearsal somebody wrote down in advance, brought to the screen
- * that publishes it. Otherwise five minutes from now, rounded up to the minute — a start time
- * with seconds in it is not a time anybody announces.
- *
- * Never re-seeded, because this page re-renders every couple of seconds: a seed that ran again
- * would type over whatever the operator was in the middle of entering.
+ * Moved on from ITSELF while it is still scheduled — delay ten minutes, and it is ten minutes
+ * later than it was. After an AP there is no start to move, so the new one counts from now, and
+ * must leave a full sequence: at least a minute before the warning signal (§8.5). An allocated
+ * start has no common time to move. Null, with the reason, when it cannot be done.
  */
-function seeded(name, division) {
-  if (!state.starts[name]) {
-    const planned = division.start ? Date.parse(division.start) : NaN;
-    const from = Number.isFinite(planned) && planned > Date.now()
-      ? planned : Math.ceil((Date.now() + 5 * 60000) / 60000) * 60000;
-    // `open` is how long a scratch or allocated start's line stays open after it; `closes` is
-    // when an open start's line closes, half an hour after it opens until somebody says.
-    state.starts[name] = { at: localValue(from), warning: 5, prep: 4, open: 10, closes: localValue(from + 30 * 60000) };
+export function delayed(standing, name, minutes, now = Date.now()) {
+  const base = standing?.timer?.body ?? standing?.derived;
+  if (!base) return { error: `${name} has no start to delay.` };
+  if (base.kind === 'allocated') return { error: `${name} starts at each boat's own time: there is no common start to delay.` };
+  const start = Date.parse(base.startAt ?? '');
+  if (!Number.isFinite(start)) return { error: `${name} has no start time to delay.` };
+  const postponed = standing?.state === 'postponed';
+  if (!postponed && start <= now) return { error: `${name} has started: abandon it instead.` };
+  const warning = Number(base.warningSeconds ?? 300) * 1000;
+  const newStart = postponed
+    ? Math.ceil((now + minutes * 60000) / 60000) * 60000
+    : start + minutes * 60000;
+  if (newStart - now < warning + 60000) {
+    return { error: `${name}: a new start has to be at least ${Math.round(warning / 60000) + 1} minutes`
+      + ' away, a minute before its warning signal.' };
   }
-  return state.starts[name];
+  const shift = newStart - start;
+  const body = { ...base, startAt: new Date(newStart).toISOString() };
+  if (base.closesAt) body.closesAt = new Date(Date.parse(base.closesAt) + shift).toISOString();
+  body.text = `${name}: delayed — warning ${hhmm(newStart - warning)}`
+    + `, preparatory ${hhmm(newStart - Number(base.startSeconds ?? 240) * 1000)}`
+    + (base.kind === 'open' ? `, line opens ${hhmm(newStart)}, closes ${hhmm(Date.parse(body.closesAt))}`
+      : `, start ${hhmm(newStart)}`);
+  return { body };
 }
 
 /**
- * One division's start: publish, suspend, edit, publish — the whole of the control (§8.4).
+ * One division's start, as it stands, and the three things that can be done to it here: delay it,
+ * postpone it (AP) before it has gone, abandon it after. Everything else about a start is set in
+ * the editor.
  *
  * <b>Each division is entirely independent and there is no rolling sequence.</b> A real race
- * committee's postponement of one start delays the next; here it does not, deliberately,
- * because there is no "now" on the server to count five minutes from. Five divisions is this
- * done five times, which is no cascade to compute and none to get wrong.
+ * committee's postponement of one start delays the next; here it does not, deliberately, because
+ * there is no "now" on the server to count five minutes from.
  */
-function startCard(name, division, standing, now, kind = 'scratch') {
+function startCard(name, division, standing, now) {
   const which = standing?.state ?? 'none';
-  const timer = standing?.timer?.body ?? null;
-  const startAt = timer?.startAt ? Date.parse(timer.startAt) : null;
+  const body = standing?.timer?.body ?? null;
+  const startAt = body?.startAt ? Date.parse(body.startAt) : null;
   const gone = startAt != null && startAt <= now;
   const postponed = which === 'postponed';
   const arming = state.arming;
-  const typed = seeded(name, division);
-
-  // AN ABSOLUTE TIME, not "in five minutes" — which is what a start sequence IS. A committee
-  // decides a race starts at five past two and says so; the countdown to it is every boat's
-  // own arithmetic, and the "in N minutes" form made the operator do that sum backwards.
-  const wanted = Date.parse(typed.at);
-  const ahead = Number.isFinite(wanted) ? (wanted - now) / 60000 : NaN;
-
-  // The two rules of §8.5, enforced where the clock is — and the only clock that matters is the
-  // one belonging to the person deciding. Said out loud rather than merely disabling a button:
-  // a control that refuses without saying why teaches nothing.
-  const floor = postponed ? 6 : 0;
-  // AN ALLOCATED START HAS NO COMMON TIME: each boat gave its own when it joined, so what is
-  // published is only the sequence and the open period that hang off each boat's time.
-  const allocated = kind === 'allocated';
-  const tooSoon = !allocated && (!Number.isFinite(ahead) || ahead < floor);
-  const past = !allocated && Number.isFinite(ahead) && ahead < 0;
-  const closes = Date.parse(typed.closes);
-  const limit = division.timeLimitMinutes ? `time limit ${division.timeLimitMinutes} min` : 'no time limit';
+  const tag = `division:${name}`;
+  const typed = state.delays[tag] ?? '';
+  const allocated = (body ?? standing?.derived)?.kind === 'allocated';
+  const canDelay = !allocated && !gone && which !== 'abandoned' && (standing?.timer || standing?.derived);
 
   return `<div class="card" data-division="${esc(name)}">
     <div class="who">
@@ -553,71 +564,26 @@ function startCard(name, division, standing, now, kind = 'scratch') {
         ? `/${esc(division.variant)}` : ''}</span>
       <span class="state ${which}">${esc(which)}</span>
     </div>
-    ${startAt ? `<div class="said">start ${esc(hhmmss(startAt))}
-      ${gone ? '(gone)' : `in ${Math.round((startAt - now) / 1000)} s`}
-      &middot; ${esc(timer?.text ?? '')}</div>` : ''}
-    ${postponed ? '<div class="said warn">Postponed. Publishing a start is what clears it — '
-      + 'and it must be at least six minutes ahead, a minute before the warning signal and '
-      + 'then the usual five.</div>' : ''}
-    <div class="said" style="margin:0">${esc(KIND_SAID[kind] ?? KIND_SAID.scratch)} &middot; ${esc(limit)}</div>
-    ${allocated ? '' : `<div class="row">
-      <label for="at_${esc(name)}">${kind === 'open' ? 'line opens' : 'start at'}</label>
-      <input type="datetime-local" id="at_${esc(name)}" data-at="${esc(name)}"
-        value="${esc(typed.at)}" style="width:190px">
-      <span class="said" style="margin:0">${esc(ZONE)}</span>
-    </div>`}
-    ${kind === 'open' ? `<div class="row">
-      <label for="c_${esc(name)}">line closes</label>
-      <input type="datetime-local" id="c_${esc(name)}" data-closes="${esc(name)}"
-        value="${esc(typed.closes)}" style="width:190px">
-    </div>` : `<div class="row">
-      <label for="o_${esc(name)}">line open for</label>
-      <input type="number" min="1" max="120" id="o_${esc(name)}" data-open="${esc(name)}"
-        value="${typed.open}" style="width:54px">
-      <label>min after ${allocated ? "each boat's" : 'the'} start</label>
-    </div>`}
-    <!--
-      TWO DURATIONS BEFORE IT, which is what the boat needs to show the flags a sailor expects:
-      the warning signal five minutes out and the preparatory four. They are durations rather
-      than instants because that is what they are — a sequence hangs off its start, and moving
-      the start moves all of it.
-    -->
-    <div class="row">
-      <label for="w_${esc(name)}">warning</label>
-      <input type="number" min="0" max="60" id="w_${esc(name)}" data-warning="${esc(name)}"
-        value="${typed.warning}" style="width:54px">
-      <label for="p_${esc(name)}">preparatory</label>
-      <input type="number" min="0" max="60" id="p_${esc(name)}" data-prep="${esc(name)}"
-        value="${typed.prep}" style="width:54px">
-      <label>min before</label>
-    </div>
-    <div class="row">
-      <button class="act" data-publish="${esc(name)}"${tooSoon ? ' disabled' : ''}>
-        ${allocated ? 'Publish start rules' : postponed ? 'Re-start sequence'
-          : kind === 'open' ? 'Schedule open start' : 'Schedule start'}</button>
-      <span class="said" style="margin:0">${allocated
-        ? `warning ${esc(typed.warning)} and preparatory ${esc(typed.prep)} min before each boat's own time`
-        : Number.isFinite(wanted)
-          ? `warning ${esc(hhmm(wanted - typed.warning * 60000))}`
-            + ` &middot; preparatory ${esc(hhmm(wanted - typed.prep * 60000))}`
-            + ` &middot; ${kind === 'open' ? 'opens' : 'start'} ${esc(hhmm(wanted))}`
-            + (kind === 'open' && Number.isFinite(closes) ? ` &middot; closes ${esc(hhmm(closes))}` : '')
-          : 'give it a time'}</span>
-    </div>
-    ${past ? '<div class="said warn">That is in the past. A start already gone cannot be '
-      + 'scheduled; abandon the race instead, or give it a later time.</div>'
-      : tooSoon ? `<div class="said warn">At least ${floor} minutes ahead after a postponement —
-        a minute before the warning signal, then the usual five. A start a boat cannot see coming
-        is worse than no postponement.</div>` : ''}
+    ${body ? `<div class="said">${esc(body.text ?? '')}</div>` : ''}
+    ${startAt ? `<div class="said">${body?.kind === 'open' ? 'opens' : 'start'} ${esc(hhmmss(startAt))}
+      ${gone ? '(gone)' : `in ${Math.round((startAt - now) / 1000)} s`}</div>` : ''}
+    ${postponed ? '<div class="said warn">Postponed. Delay gives it a new start, which clears the AP.</div>' : ''}
+    ${!body && !standing?.derived ? '<div class="said warn">No start yet: set one in the editor.</div>' : ''}
+    ${canDelay ? `<div class="row">
+      <label>delay</label>
+      ${[5, 10, 15].map((m) => `<button class="act" data-delay="${esc(name)}:${m}">${m} min</button>`).join('')}
+      <input data-delaymin="${esc(tag)}" value="${esc(typed)}" placeholder="min" inputmode="numeric" style="width:48px">
+      <button class="act" data-delaygo="${esc(name)}">Delay</button>
+    </div>` : ''}
     <div class="row">
       ${gone || which === 'racing'
         // AP IS THE PRE-START SIGNAL AND ABANDONMENT IS THE POST-START ONE — which is not an
         // extra rule but what the two flags mean. So the screen offers the one that applies.
         ? `<button class="act danger ${arming === `abandon:${name}` ? 'arming' : ''}"
-            data-abandon="${esc(name)}">${arming === `abandon:${name}`
-            ? 'Abandon — press again' : 'Abandon'}</button>`
-        : `<button class="act danger ${arming === `ap:${name}` ? 'arming' : ''}"
-            data-ap="${esc(name)}"${which === 'none' ? ' disabled' : ''}>
+            data-abandon="${esc(name)}"${which === 'abandoned' ? ' disabled' : ''}>${arming === `abandon:${name}`
+          ? 'Abandon — press again' : 'Abandon'}</button>`
+        : `<button class="act ${arming === `ap:${name}` ? 'arming' : ''}"
+            data-ap="${esc(name)}"${which === 'none' || postponed ? ' disabled' : ''}>
             ${arming === `ap:${name}` ? 'AP — press again' : 'AP (postpone)'}</button>`}
       <button class="act" data-course="${esc(name)}"${division.revision ? '' : ' disabled'}>
         Publish course ${division.revision ? `(${esc(division.revision.slice(0, 6))})` : ''}</button>
@@ -663,85 +629,45 @@ function arm(what, then) {
 }
 
 function wirePane() {
-  /*
-   * THE FIELDS ARE READ ON `change`, NOT ON `input`, and that is not a detail here.
-   *
-   * This pane is rebuilt on every poll, and it waits while a field in it has focus (`paneBusy`),
-   * so a half-typed time keeps its caret. On `change` the value is committed and the field has
-   * been left, which is exactly when the held-back redraw is free to happen.
-   */
-  const field = (attr, apply) => {
-    for (const input of el('pane').querySelectorAll(`[data-${attr}]`)) {
-      input.addEventListener('change', (ev) => {
-        apply(input.dataset[attr], ev.target.value);
-        render();
-      });
-    }
-  };
-  field('at', (name, value) => { seeded(name, {}).at = value; });
-  field('warning', (name, value) => {
-    seeded(name, {}).warning = Math.max(0, Number(value) || 0);
-  });
-  field('prep', (name, value) => { seeded(name, {}).prep = Math.max(0, Number(value) || 0); });
-  field('open', (name, value) => { seeded(name, {}).open = Math.max(1, Number(value) || 10); });
-  field('closes', (name, value) => { seeded(name, {}).closes = value; });
-
-  for (const button of el('pane').querySelectorAll('[data-publish]')) {
+  for (const button of el('pane').querySelectorAll('[data-race]')) {
     button.addEventListener('click', () => {
-      const name = button.dataset.publish;
-      const row = chosen();
-      const kind = row?.race.startType ?? 'scratch';
-      const division = row?.race.divisions?.[name] ?? {};
-      const typed = seeded(name, {});
-      const wanted = Date.parse(typed.at);
-      if (kind !== 'allocated' && !Number.isFinite(wanted)) return;
-      /*
-       * AN ABSOLUTE INSTANT GOES ON THE WIRE, and the conversion from what was typed is this
-       * browser's — which is the whole of the timing model (§1.2, §8.4). The operator types a
-       * local time because that is what a start is announced in; every boat then counts down to
-       * the instant on its own clock, and the server neither ticks nor holds one.
-       *
-       * HOW THE RACE STARTS SAYS WHAT ELSE GOES WITH IT (`Race.StartType`): a scratch start's
-       * line is open for a period after it; an open start's closes at its own time; an allocated
-       * start has no common time at all, only the sequence and the open period each boat's own
-       * time carries. The division's time limit rides along, so a boat knows when its finish
-       * closes to it.
-       */
-      const body = {
-        kind,
-        // DURATIONS BEFORE THE START, so a boat can show the flags a sailor expects: the warning
-        // signal and then the preparatory. They hang off the start rather than being instants of
-        // their own, so moving the start moves the whole sequence with it.
-        warningSeconds: typed.warning * 60,
-        startSeconds: typed.prep * 60,
-      };
-      if (division.timeLimitMinutes) body.timeLimitSeconds = division.timeLimitMinutes * 60;
-      if (kind === 'allocated') {
-        body.openSeconds = typed.open * 60;
-        body.text = `${name}: allocated starts — warning ${typed.warning} and preparatory `
-          + `${typed.prep} min before each boat's own time; line open ${typed.open} min after it`;
-      } else if (kind === 'open') {
-        const closes = Date.parse(typed.closes);
-        if (!Number.isFinite(closes) || closes <= wanted) {
-          state.message = `${name}: the line has to close after it opens.`;
-          render();
-          return;
-        }
-        body.startAt = new Date(wanted).toISOString();
-        body.closesAt = new Date(closes).toISOString();
-        body.text = `${name}: warning ${hhmm(wanted - typed.warning * 60000)}`
-          + `, preparatory ${hhmm(wanted - typed.prep * 60000)}, line opens ${hhmm(wanted)}`
-          + `, closes ${hhmm(closes)}`;
-      } else {
-        body.startAt = new Date(wanted).toISOString();
-        body.openSeconds = typed.open * 60;
-        // TEXT IS REQUIRED ON EVERY STATE MESSAGE (§9.4): it is what the channel shows, and what
-        // reaches a sailor whose client is too old to act on the rest — so it spells the
-        // sequence out in the times it will actually happen at.
-        body.text = `${name}: warning ${hhmm(wanted - typed.warning * 60000)}`
-          + `, preparatory ${hhmm(wanted - typed.prep * 60000)}, start ${hhmm(wanted)}`;
+      state.chosen = button.dataset.race;
+      state.conduct = state.conducts.get(state.chosen) ?? null;
+      state.arming = null;
+      render();
+    });
+  }
+
+  // DELAY: a new start, the whole sequence moved with it — see `delayed`.
+  const delay = (name, minutes) => {
+    const standing = state.conduct?.states?.[`division:${name}`];
+    const result = delayed(standing, name, minutes);
+    if (result.error) {
+      state.message = result.error;
+      render();
+      return;
+    }
+    publish({ v: 1, type: 'timer', tags: [`division:${name}`], body: result.body });
+  };
+  for (const button of el('pane').querySelectorAll('[data-delay]')) {
+    button.addEventListener('click', () => {
+      const [name, minutes] = button.dataset.delay.split(':');
+      delay(name, Number(minutes));
+    });
+  }
+  for (const input of el('pane').querySelectorAll('[data-delaymin]')) {
+    input.addEventListener('change', (ev) => { state.delays[input.dataset.delaymin] = ev.target.value; });
+  }
+  for (const button of el('pane').querySelectorAll('[data-delaygo]')) {
+    button.addEventListener('click', () => {
+      const name = button.dataset.delaygo;
+      const minutes = Math.round(Number(state.delays[`division:${name}`]));
+      if (!(minutes > 0)) {
+        state.message = `${name}: give the delay in minutes.`;
+        render();
+        return;
       }
-      publish({ v: 1, type: 'timer', tags: [`division:${name}`], body });
+      delay(name, minutes);
     });
   }
 
@@ -753,7 +679,7 @@ function wirePane() {
       body: {
         flag: 'postponed',
         reason: 'postponed by the race committee',
-        text: `${button.dataset.ap}: AP — postponed. The start is void until a new one is published.`,
+        text: `${button.dataset.ap}: AP — postponed. The start is void until a new one is given.`,
       },
     })));
   }
@@ -772,6 +698,7 @@ function wirePane() {
       })));
   }
 
+  // A COURSE CHANGE, kept until shortening is designed: the same course handed out again.
   for (const button of el('pane').querySelectorAll('[data-course]')) {
     button.addEventListener('click', () => {
       const row = chosen();
@@ -793,21 +720,6 @@ function wirePane() {
     });
   }
 
-  for (const button of el('pane').querySelectorAll('[data-dnf]')) {
-    button.addEventListener('click', () => arm(`dnf:${button.dataset.dnf}`, () => publish({
-      v: 1,
-      type: 'outcome',
-      body: {
-        boatId: button.dataset.dnf,
-        outcome: 'dnf',
-        reason: 'did not finish',
-        // NEVER INFERRED (§8.6): a boat is DNF because a committee decided and typed it, not
-        // because the server worked it out from a boat that stopped reporting.
-        text: `${button.dataset.dnf}: DNF, recorded by the race committee.`,
-      },
-    })));
-  }
-
   el('sayGo')?.addEventListener('click', () => {
     const field = el('sayText');
     const text = field?.value?.trim();
@@ -818,13 +730,6 @@ function wirePane() {
 }
 
 /* ========================================================================== start-up */
-
-el('pick').addEventListener('change', (ev) => {
-  state.chosen = ev.target.value;
-  state.fitted = false;
-  state.conduct = null;
-  poll();
-});
 
 el('basemap').innerHTML = Object.entries(BASEMAPS)
   .map(([k, spec]) => `<option value="${k}"${k === state.basemap ? ' selected' : ''}>${spec.label}</option>`)

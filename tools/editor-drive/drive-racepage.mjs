@@ -1,5 +1,6 @@
 /**
- * THE RACE SCREEN as a page: a fleet on the chart, a start scheduled, and a flag raised.
+ * THE RACE SCREEN as a page: every race running on one chart, a start given by the definition and
+ * delayed here, and a flag raised.
  *
  * `drive-race.mjs` drives the protocol, which proves the conversation. This drives the screen
  * the committee actually presses, which is where a protocol that works fails a fleet anyway: a
@@ -45,19 +46,38 @@ if (!taken) {
 await post(`/api/lifecycle/${KEY}/publications`, { publish: [taken] });
 file.courses[taken.course].public = true;
 const today = new Date().toLocaleDateString('en-CA');
+/**
+ * A start time as the definition writes it — HH:MM in the SERIES' timezone, which need not be this
+ * machine's — `minutes` from now.
+ */
+const zone = file.timezone ?? 'Australia/Sydney';
+const hhmmIn = (minutes) => new Intl.DateTimeFormat('en-GB', { timeZone: zone, hour: '2-digit',
+  minute: '2-digit', hour12: false }).format(new Date(Date.now() + minutes * 60000));
 const races = {
   'page-race': {
     name: 'Page race',
     date: today,
     format: 'fleet',
-    divisions: { 'div-1': { course: taken.course, variant: taken.variant } },
+    divisions: { 'div-1': { course: taken.course, variant: taken.variant, start: hhmmIn(20) } },
+  },
+  'page-race-2': {
+    name: 'Second race',
+    date: today,
+    divisions: { 'div-1': { course: taken.course, variant: taken.variant, start: hhmmIn(40) } },
+  },
+  'page-hidden': {
+    name: 'Hidden race',
+    date: today,
+    public: false,
+    divisions: { 'div-1': { course: taken.course, variant: taken.variant, start: hhmmIn(30) } },
   },
 };
-await fetch(`/api/programmes/${KEY}`, {
+const saveRaces = () => fetch(`/api/programmes/${KEY}`, {
   method: 'PUT',
   headers: { 'content-type': 'application/json' },
   body: JSON.stringify({ points: file.points, lines: file.lines, courses: file.courses, races }),
 });
+await saveRaces();
 
 /** Two boats, one further round than the other, so the progress textures have something to say. */
 const speak = async (session, ...envelopes) => (await post(
@@ -70,7 +90,7 @@ for (const [sail, along] of [['AUS 1', 0], ['AUS 42', 2]]) {
     type: 'join',
     body: {
       sailNo: sail, name: sail, club: programme.club, series: programme.series,
-      course: taken.course, variant: taken.variant,
+      course: taken.course, variant: taken.variant, race: 'page-race',
     },
   });
   const joined = got.find((m) => m.type === 'joined');
@@ -111,11 +131,13 @@ const chart = () => $('chart').innerHTML || '';
 
 ok('the page finds the races defined in the series file',
   mod.__state.races.some((row) => row.id === 'page-race'));
-ok('...and opens on one, because on a race morning the race you want is today\'s',
-  !!mod.__state.chosen);
+ok('...and opens on one that is running', !!mod.__state.chosen);
 ok('...and reads its conduct', !!mod.__state.conduct);
 ok('the pane names the race and its divisions',
   pane().includes('Page race') && pane().includes('div-1'));
+// EVERY RACE RUNNING, one tab each; a race still being set up is not running.
+ok('each race running today has a tab', pane().includes('data-race="') && pane().includes('Second race'));
+ok('...and a race that is not public is not among them', !pane().includes('Hidden race'));
 
 /* ------------------------------------------- the chart: colour is division, texture is progress */
 
@@ -141,7 +163,7 @@ ok('one row per boat, with the marks it has passed',
 ok('...and a column for whether the latest course and flag have been SEEN',
   pane().includes('Course') && pane().includes('Flag'));
 
-/* ------------------------------------------------ scheduling a start, which is not a GO */
+/* ------------------------------------------ the start is the definition's, delayed here */
 
 const press = (attr, value) => {
   const button = $('pane').querySelectorAll(`[data-${attr}]`)
@@ -149,61 +171,34 @@ const press = (attr, value) => {
   if (!button) throw new Error(`no [data-${attr}="${value}"] on the pane`);
   return button.fire('click', {});
 };
+const stateOf = () => mod.__state.conduct.states['division:div-1'];
 
-/** Type an absolute local time into a division's start field, the way a person does. */
-const typeStart = (division, minutesAhead) => {
-  const at = new Date(Date.now() + minutesAhead * 60000);
-  const local = new Date(at.getTime() - at.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-  const input = $('pane').querySelectorAll('[data-at]').find((i) => i.dataset.at === division);
-  if (!input) throw new Error(`no start field for ${division}`);
-  input.value = local;
-  input.fire('change', { target: { value: local } });
-  return Date.parse(local);
-};
-
-// AN ABSOLUTE TIME, not "in five minutes". A committee decides a race starts at five past two
-// and says so; the countdown to it is every boat's own arithmetic.
-ok('the start is asked for as an absolute time, with the operator\'s zone named',
-  pane().includes('type="datetime-local"') && !pane().includes('start in'));
-ok('...and the two signal periods are asked for in minutes before it',
-  pane().includes('data-warning="div-1"') && pane().includes('data-prep="div-1"'));
-ok('...defaulting to the sequence a sailor expects: warning 5, preparatory 4',
-  /data-warning="div-1"[^>]*value="5"/.test(pane())
-  && /data-prep="div-1"[^>]*value="4"/.test(pane()));
-ok('...and the form works the sequence out in the times it will happen at, before publishing',
-  /warning \d\d:\d\d/.test(pane()) && /preparatory \d\d:\d\d/.test(pane()));
-
-const wanted = typeStart('div-1', 12);
-await settle(600);
-press('publish', 'div-1');
-await settle(1200);
-let states = mod.__state.conduct.states['division:div-1'];
-ok('scheduling a start publishes one, and the division is SCHEDULED', states.state === 'scheduled');
-// THERE IS NO GO BUTTON AND THERE CANNOT BE. The server keeps no clock, so what goes on the
-// wire is an absolute instant — and the conversion from what was typed happened in this
-// browser, against this operator's clock.
-ok('...at the instant that was TYPED, converted here rather than there',
-  Math.abs(Date.parse(states.timer.body.startAt) - wanted) < 60000);
-ok('...with the warning and preparatory signals as durations before it, so the boat can show '
-  + 'the flags a sailor expects',
-  states.timer.body.warningSeconds === 300 && states.timer.body.startSeconds === 240);
-// TEXT IS REQUIRED ON EVERY STATE MESSAGE: it is what the channel shows, and what reaches a
-// sailor whose client is too old to act on the rest.
+// THE START IS SET IN THE EDITOR, with the rest of the race: this screen has no start form.
+ok('the race screen has no start form: a start is set in the editor',
+  !pane().includes('type="datetime-local"') && !pane().includes('data-publish='));
+let states = stateOf();
+ok('the start the definition gives is what the division is SCHEDULED to',
+  states.state === 'scheduled' && Math.abs(Date.parse(states.timer.body.startAt) - (Date.now() + 20 * 60000)) < 90000);
+ok('...a scratch start, open ten minutes after it, with the signals before it',
+  states.timer.body.kind === 'scratch' && states.timer.body.openSeconds === 600
+  && states.timer.body.warningSeconds === 300 && states.timer.body.startSeconds === 240);
 ok('...and words a sailor can read', (states.timer.body.text ?? '').length > 10);
-// HOW IT STARTS goes with it: a race that says nothing starts scratch, and its line is open ten
-// minutes after the start unless the screen was told otherwise.
-ok('...saying it is a scratch start, open ten minutes after it',
-  states.timer.body.kind === 'scratch' && states.timer.body.openSeconds === 600);
-
 const boat = joinedBoats[0];
-const got = await speak(boat.session);
-ok('the boats are sent it', got.some((m) => m.type === 'timer'));
+
+// DELAY: a new start, the whole sequence moved with it.
+const before = Date.parse(states.timer.body.startAt);
+press('delay', 'div-1:5');
+await settle(1500);
+states = stateOf();
+ok('delaying five minutes puts the start five minutes later',
+  Date.parse(states.timer.body.startAt) - before === 5 * 60000 && /delayed/.test(states.timer.body.text));
+ok('...and the boats are sent it', (await speak(boat.session)).some((m) => m.type === 'timer'));
 
 /* ---------------------------------------------- AP, and the second press that means it */
 
 press('ap', 'div-1');
 await settle(600);
-states = mod.__state.conduct.states['division:div-1'];
+states = stateOf();
 // AN IRREVERSIBLE ACT ASKS TWICE, in the button itself rather than in a dialog, so nobody is
 // ever agreeing to something that has scrolled out of view.
 ok('the first press on AP only ARMS it — nothing is published', states.state === 'scheduled');
@@ -211,37 +206,32 @@ ok('...and the button says so, so it is not a press that silently did nothing',
   pane().includes('press again'));
 press('ap', 'div-1');
 await settle(1200);
-states = mod.__state.conduct.states['division:div-1'];
+states = stateOf();
 ok('the second press publishes it', states.state === 'postponed');
-// AP SUSPENDS, IT DOES NOT RESCHEDULE.
 ok('...and voids the start rather than moving it', !states.timer);
 
-// AFTER AN AP THE NEXT START IS AT LEAST SIX MINUTES AHEAD — a minute before the warning
-// signal, then the usual five. Enforced where the clock is, which is the operator's screen.
+// AFTER AN AP A DELAY COUNTS FROM NOW, and has to leave a full sequence: at least a minute before
+// the warning signal.
 mod.__state.arming = null;
-typeStart('div-1', 2);
+press('delay', 'div-1:5');
 await settle(400);
-ok('a start two minutes after a postponement is refused, and the screen says why',
-  pane().includes('At least 6 minutes ahead after a postponement'));
-ok('...with the button refusing rather than only the words',
-  /data-publish="div-1"[^>]*disabled/.test(pane()));
+ok('a new start five minutes after a postponement is refused, and the screen says why',
+  pane().includes('at least 6 minutes'));
+press('delay', 'div-1:10');
+await settle(1500);
+states = stateOf();
+ok('...while ten minutes gives it a new start, which clears the AP with no message of its own',
+  states.state === 'scheduled' && !states.flag
+  && Math.abs(Date.parse(states.timer.body.startAt) - (Date.now() + 10 * 60000)) < 90000);
 
-// And a time already gone is its own refusal, with its own reason: a start that has passed
-// cannot be scheduled, and abandonment is the instrument that applies.
-typeStart('div-1', -3);
-await settle(400);
-ok('a start in the past is refused too, and says that abandonment is the instrument',
-  pane().includes('That is in the past'));
-
-typeStart('div-1', 9);
-await settle(400);
-press('publish', 'div-1');
-await settle(1200);
-states = mod.__state.conduct.states['division:div-1'];
-// RE-PUBLISHING THE START IS WHAT CLEARS THE AP. There is no "clear" message and there must
-// not be: the last message to arrive for a tag is the state.
-ok('...while a time far enough ahead is allowed, and clears the AP with no message of its own',
-  states.state === 'scheduled' && !states.flag);
+// THE DEFINITION WINS WHEN IT CHANGES: editing the race's start in the editor hands the boats the
+// new one, over the delay.
+races['page-race'].divisions['div-1'].start = hhmmIn(30);
+await saveRaces();
+await settle(2600);
+states = stateOf();
+ok('editing the start in the definition hands out the new one, over a delay',
+  Math.abs(Date.parse(states.timer.body.startAt) - (Date.now() + 30 * 60000)) < 90000);
 
 /* -------------------------------------- the flag that applies, and the one that does not */
 
@@ -262,10 +252,9 @@ await post(`/api/conduct/${KEY}/page-race`, {
   },
 });
 await settle(2500);
-ok('once the start has gone the division is RACING',
-  mod.__state.conduct.states['division:div-1'].state === 'racing');
-ok('...and now it is abandonment that is offered, not AP',
-  pane().includes('data-abandon=') && !pane().includes('data-ap='));
+ok('once the start has gone the division is RACING', stateOf().state === 'racing');
+ok('...and now it is abandonment that is offered, not AP, and no delay',
+  pane().includes('data-abandon=') && !pane().includes('data-ap=') && !pane().includes('data-delay='));
 
 /* ----------------------------------------------------- a course change, and the channel */
 
@@ -298,15 +287,16 @@ ok('the committee can say something to the fleet',
 ok('...on the same channel the boats are on', (await speak(boat.session))
   .some((m) => m.type === 'say' && m.body.text === 'Shortening at the windward mark'));
 
-/* --------------------------------------------------------- DNF, which is never inferred */
+/* ----------------------------------------- no DNF here: the time limit does it */
 
-press('dnf', 'AUS 42');
+ok('there is no DNF button: a boat that does not finish in its time limit is not finished',
+  !pane().includes('data-dnf='));
+
+/* ----------------------------------------------------------- the other race, by its tab */
+
+press('race', `${KEY}/page-race-2`);
 await settle(400);
-ok('a DNF asks twice as well — it is a result being recorded about somebody',
-  mod.__state.conduct.boats.find((b) => b.sailNo === 'AUS 42')?.outcome !== 'dnf');
-press('dnf', 'AUS 42');
-await settle(1200);
-ok('...and then records what a person decided, which the software never works out',
-  mod.__state.conduct.boats.find((b) => b.sailNo === 'AUS 42')?.outcome === 'dnf');
+ok('the tab of another running race puts it in the pane', mod.__state.chosen === `${KEY}/page-race-2`
+  && pane().includes('Second race'));
 
 report();

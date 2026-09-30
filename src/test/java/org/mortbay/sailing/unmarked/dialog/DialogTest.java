@@ -134,6 +134,39 @@ class DialogTest
     }
 
     @Test
+    void aDivisionsStartIsWorkedOutFromItsDefinition()
+    {
+        java.time.ZoneId sydney = java.time.ZoneId.of("Australia/Sydney");
+        LocalDate day = LocalDate.of(2026, 10, 3);
+        Race.Division scratch = new Race.Division("open", "c", null, "14:05", 90, null, 6, null, null);
+        Race race = new Race("r", null, day, null, Map.of("open", scratch), null, null,
+            Race.StartType.SCRATCH, true);
+        Map<String, Object> body = Dialog.definedStart(race, "open", scratch, sydney);
+        // HH:MM IN THE SERIES' OWN ZONE, on the race's date: 14:05 AEST is 04:05 UTC.
+        assertEquals("2026-10-03T04:05:00Z", body.get("startAt"));
+        assertEquals("scratch", body.get("kind"));
+        assertEquals(360, body.get("warningSeconds"), "six minutes, as the definition says");
+        assertEquals(240, body.get("startSeconds"), "four, when it says nothing");
+        assertEquals(600, body.get("openSeconds"), "ten minutes open, when it says nothing");
+        assertEquals(5400, body.get("timeLimitSeconds"));
+
+        Race.Division open = new Race.Division("open", "c", null, "14:05", null, "14:35", null, null, null);
+        Race openRace = new Race("r", null, day, null, Map.of("open", open), null, null, Race.StartType.OPEN, true);
+        assertEquals("2026-10-03T04:35:00Z", Dialog.definedStart(openRace, "open", open, sydney).get("closesAt"));
+
+        Race.Division none = new Race.Division("open", "c", null, null);
+        assertNull(Dialog.definedStart(race, "open", none, sydney), "no time, no start to hand out");
+        Race allocated = new Race("r", null, day, null, Map.of("open", none), null, null,
+            Race.StartType.ALLOCATED, true);
+        assertEquals("allocated", Dialog.definedStart(allocated, "open", none, sydney).get("kind"),
+            "an allocated start needs no common time");
+        assertTrue(race.problems(Map.of()).stream().noneMatch(p -> p.contains("no start time")));
+        Race untimed = new Race("r", null, day, null, Map.of("open", none), null, null, Race.StartType.SCRATCH, true);
+        assertTrue(untimed.problems(Map.of()).stream().anyMatch(p -> p.contains("no start time")),
+            "a scratch start with no time is reported");
+    }
+
+    @Test
     void theDivisionTagIsSpeltInOnePlace()
     {
         // The map key is the division's plain id and the tag is derived from it, because a YAML
