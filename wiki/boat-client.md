@@ -327,6 +327,9 @@ in blues and greens and from the cyan COG.
   ink, because the course's colours mean leg role and the cyan dashes mean COG.
 - **The live line is marked in the live triangle's own colour**, and counts as live while *any* of its
   crossings is: it is the same piece of water either way.
+- **Its triangles grow as it is zoomed in** (`OVERVIEW_MARK`): a fifth larger than the editor's at the fit,
+  then with the square root of the zoom up to a cap, and their letters with them — white, bold and outlined
+  in the sea colour, which reads on a green, blue or grey triangle alike.
 - **An infinite end runs on to the edge, thin and faint** (`OVERVIEW_INK.infinite`) — the editor's
   notation: the line is real out there, but it is a bearing rather than more of the line.
 - **Nothing under the numbers but the chart.** No sentence saying which mark is next — the waypoint row

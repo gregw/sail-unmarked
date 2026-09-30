@@ -103,18 +103,22 @@ export function seats(count, screenLength) {
  * track arrives at the base and leaves from the apex, which is what makes the drawn track
  * pass through the line in the required direction rather than merely near it.
  */
-export function triangle(at, along, normal) {
+export function triangle(at, along, normal, scale = 1) {
+  // `scale` grows the whole triangle about its base — the boat's overview draws them larger as
+  // the picture is zoomed in (`OVERVIEW_MARK`). One everywhere else.
+  const height = TRIANGLE.height * scale;
+  const half = TRIANGLE.half * scale;
   const base = { x: at.x, y: at.y };
-  const apex = { x: at.x + normal.x * TRIANGLE.height, y: at.y + normal.y * TRIANGLE.height };
-  const a = { x: at.x - along.x * TRIANGLE.half, y: at.y - along.y * TRIANGLE.half };
-  const b = { x: at.x + along.x * TRIANGLE.half, y: at.y + along.y * TRIANGLE.half };
+  const apex = { x: at.x + normal.x * height, y: at.y + normal.y * height };
+  const a = { x: at.x - along.x * half, y: at.y - along.y * half };
+  const b = { x: at.x + along.x * half, y: at.y + along.y * half };
   return {
     base,
     apex,
     points: `${a.x.toFixed(1)},${a.y.toFixed(1)} ${b.x.toFixed(1)},${b.y.toFixed(1)} ${apex.x.toFixed(1)},${apex.y.toFixed(1)}`,
     // Where the letter goes: inside the triangle, a third of the way to the apex, which
     // keeps it clear of both the base and the point.
-    label: { x: at.x + normal.x * TRIANGLE.height * 0.42, y: at.y + normal.y * TRIANGLE.height * 0.42 },
+    label: { x: at.x + normal.x * height * 0.42, y: at.y + normal.y * height * 0.42 },
   };
 }
 

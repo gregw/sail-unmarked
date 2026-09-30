@@ -45,6 +45,7 @@ import {
   COG_FIT_PERP,
   BOAT_LENGTHS_ACROSS,
   OVERVIEW_INK,
+  OVERVIEW_MARK,
   FLOOR_SPAN_M,
   minSpanM,
   realFor,
@@ -619,6 +620,15 @@ export function run(check) {
     return flown;
   })();
   const imagesIn = (svg) => (svg.match(/<image/g) || []).length;
+
+  // THE TRIANGLES GROW AS THE PICTURE IS ZOOMED IN, from a fifth larger than the editor's, and
+  // their letters with them — white, bold and outlined, to read against any triangle's colour.
+  const fontIn = (svg) => Number((/font-size="([\d.]+)" font-weight="700" fill="#fff"/.exec(svg) ?? [])[1]);
+  const atFit = courseOf(overClient);
+  const zoomedIn = courseOf(overClient, { view: new OverviewView().zoomBy(4) });
+  check('the overview\'s letters are white and bold on their triangles', fontIn(atFit) > 0);
+  check('...a fifth larger than the editor\'s at the fit', Math.abs(fontIn(atFit) - OVERVIEW_MARK.fontPx) < 0.05);
+  check('...and larger again when the picture is zoomed in', fontIn(zoomedIn) > fontIn(atFit) * 1.5);
 
   // THE START LINE WEARS ITS STATE, with a race behind the run: orange between the preparatory
   // signal and the start, and green once open.

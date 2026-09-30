@@ -1831,6 +1831,14 @@ export const LINE_STATE_COLOUR = {
   open: 'var(--ok)',
 };
 
+/**
+ * HOW BIG THE OVERVIEW'S TRIANGLES ARE, and their letters. A fifth larger than the editor's at the
+ * fit, and larger again as the picture is zoomed in — with the square root of the zoom, so they
+ * grow with it without swamping the lines they sit on — up to `max`. The letter grows with its
+ * triangle, from `fontPx`.
+ */
+export const OVERVIEW_MARK = { base: 1.2, max: 2.6, fontPx: 13 };
+
 export const OVERVIEW_INK = {
   /** An infinite end's run-on: a bearing, not more of the line, so thin and faint. */
   infinite: 0.45,
@@ -2073,6 +2081,8 @@ export function overview(client, options = {}) {
     }
   });
 
+  // Larger as the picture is zoomed in: see `OVERVIEW_MARK`.
+  const markScale = Math.min(OVERVIEW_MARK.max, OVERVIEW_MARK.base * Math.sqrt(Math.max(1, view.zoom)));
   const placed = new Map();
   for (const [, uses] of byLine) {
     const a = to(uses[0].crossing.prepared.port);
@@ -2085,7 +2095,7 @@ export function overview(client, options = {}) {
       const sign = crossing.required === 'reverse' ? -1 : 1;
       const seat = { x: a.x + along.x * atPx, y: a.y + along.y * atPx };
       placed.set(`${step.index}:${crossing.line}`, triangle(seat, along,
-        { x: normal.x * sign, y: normal.y * sign }));
+        { x: normal.x * sign, y: normal.y * sign }, markScale));
     });
   }
 
@@ -2151,7 +2161,12 @@ export function overview(client, options = {}) {
       const colour = live ? ROLE_COLOUR.start : done ? 'var(--muted)' : ROLE_COLOUR.leg;
       out += `<polygon points="${shape.points}" fill="${colour}"`
         + ` opacity="${live ? 1 : done ? OVERVIEW_INK.done : OVERVIEW_INK.ahead}"/>`;
-      out += `<text x="${shape.label.x.toFixed(1)}" y="${(shape.label.y + 4).toFixed(1)}" text-anchor="middle" font-family="var(--mono)" font-size="${LABEL.fontPx}" fill="var(--sea)">${esc(step.letter)}</text>`;
+      // THE LETTER, as large as its triangle allows and as readable as it can be made: white and
+      // bold, with a dark outline under it, which holds against green, blue and grey alike.
+      const font = OVERVIEW_MARK.fontPx * (markScale / OVERVIEW_MARK.base);
+      out += `<text x="${shape.label.x.toFixed(1)}" y="${(shape.label.y + font * 0.36).toFixed(1)}" text-anchor="middle"`
+        + ` font-family="var(--mono)" font-size="${font.toFixed(1)}" font-weight="700" fill="#fff"`
+        + ` stroke="var(--sea)" stroke-width="${(font * 0.22).toFixed(1)}" paint-order="stroke">${esc(step.letter)}</text>`;
     }
   });
 
