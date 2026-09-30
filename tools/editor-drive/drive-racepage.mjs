@@ -272,6 +272,18 @@ const toBoat = await speak(boat.session);
 ok('...and reaches the boats as geometry rather than a reference',
   toBoat.some((m) => m.type === 'course' && !!m.body.course?.steps));
 
+// NOTHING IS REBUILT UNDER SOMEBODY'S HANDS. The pane is redrawn on every poll; while a field in
+// it has focus it waits, so whatever is being typed keeps its focus and its caret.
+const typing = $('sayText');
+typing.tagName = 'INPUT';
+document.activeElement = typing;
+await settle(2600);
+ok('a field being typed in survives the poll: the pane is not rebuilt under it', $('sayText') === typing);
+document.activeElement = null;
+H('pane:focusout')?.({});
+await settle(300);
+ok('...and the pane catches up once the field is left', $('sayText') !== typing);
+
 $('sayText').value = 'Shortening at the windward mark';
 H('sayGo:click')();
 await settle(1200);

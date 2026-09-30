@@ -476,6 +476,10 @@ list: it collapses to nothing when there is nothing to choose. Settled into `thi
 than into the markup, because the join reads its course from there. **`NO_RACE` does not make a
 single race into two answers** — it is opting out of the question, not another race.
 
+**A race is raced.** With a race chosen there is no "how you are sailing" selector — the run counts as a
+race and goes to the club; with no race it offers practice or a record attempt, and never a race there is
+none of.
+
 **Choosing a level reads again what it opens up**, so a course published after the page loaded can be
 joined without reloading it: the club or the series reads the courses and the day's races, the course reads
 the courses (`refreshFor`). Opening a level starts the read as well as changing it does, because a `<select>`

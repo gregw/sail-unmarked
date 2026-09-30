@@ -355,10 +355,40 @@ function renderPicker() {
       + ` — ${esc(row.club)}/${esc(row.series)}</option>`).join('');
 }
 
+/*
+ * THE PANE IS NOT REBUILT UNDER SOMEBODY'S HANDS. It is rebuilt on every poll, twice a second,
+ * and rebuilding it replaces every field in it — so a start time being typed, or the channel's
+ * text box, lost its focus and its caret mid-edit, and a click whose press and release met two
+ * different buttons was swallowed. While a field in the pane has focus, or a pointer is down in
+ * it, the pane waits; the chart and the clock go on. The redraw held back happens when the field
+ * is left or the press released — after the click has landed, and after `change` has committed
+ * what was typed, which is when the fields read their value.
+ */
+const paneState = { pressing: false, heldBack: false };
+function paneBusy() {
+  const active = document.activeElement;
+  return paneState.pressing || (!!active && !!el('pane').contains?.(active)
+    && /^(INPUT|SELECT|TEXTAREA)$/.test(active.tagName ?? ''));
+}
+el('pane').addEventListener('pointerdown', () => { paneState.pressing = true; }, true);
+const releasePane = () => {
+  if (!paneState.pressing) return;
+  paneState.pressing = false;
+  if (paneState.heldBack) setTimeout(render, 0);
+};
+window.addEventListener('pointerup', releasePane, true);
+window.addEventListener('pointercancel', releasePane, true);
+el('pane').addEventListener('focusout', () => { if (paneState.heldBack) setTimeout(render, 0); });
+
 function render() {
   renderChart();
   const row = chosen();
   el('clock').textContent = hhmmss(Date.now());
+  if (paneBusy()) {
+    paneState.heldBack = true;
+    return;
+  }
+  paneState.heldBack = false;
   if (!row) {
     el('pane').innerHTML = '<p class="hint">No race chosen. A race is DEFINED in the '
       + '<a href="editor.html">editor</a>, on its Races tab; this page runs one.</p>';
@@ -606,10 +636,9 @@ function wirePane() {
   /*
    * THE FIELDS ARE READ ON `change`, NOT ON `input`, and that is not a detail here.
    *
-   * This pane is rebuilt on every poll, so re-rendering as somebody types would take the caret
-   * out of a half-typed time twice a second — the same trap the editor's forms are guarded
-   * against, met on a page that has no guard because everything else on it is a button. On
-   * `change` the value is committed and the field has been left, so the render is free.
+   * This pane is rebuilt on every poll, and it waits while a field in it has focus (`paneBusy`),
+   * so a half-typed time keeps its caret. On `change` the value is committed and the field has
+   * been left, which is exactly when the held-back redraw is free to happen.
    */
   const field = (attr, apply) => {
     for (const input of el('pane').querySelectorAll(`[data-${attr}]`)) {

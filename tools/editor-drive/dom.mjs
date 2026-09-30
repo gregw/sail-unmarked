@@ -72,6 +72,9 @@ const mk = (id) => ({
   removeAttribute(k) { delete this._attrs[k]; },
   parentNode: PARENT,
   closest() { return null; },
+  // CONTAINMENT, as far as a stub can say it: an element contains itself, and whatever it drew
+  // by id. Enough for a page asking "is the focused field one of mine?".
+  contains(other) { return !!other && (other === this || String(this._html).includes(`id="${other.id}"`)); },
   select() {},
   // Pointer capture is a browser concern with no meaning here, but a page that uses it
   // would throw on the first pointerdown — so the stub has to answer, not to do anything.

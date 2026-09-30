@@ -842,6 +842,11 @@ export class Device {
     const tcfRange = offered?.tcfMin != null && offered?.tcfMax != null
       ? `${Number(offered.tcfMin).toFixed(3)} to ${Number(offered.tcfMax).toFixed(3)}` : null;
 
+    // How the run counts follows from what is being joined: a race is raced, and a course with no
+    // race behind it is practice or a record attempt — never a race there is none of.
+    if (!courseOnly) this.boat.mode = 'RACE';
+    else if (this.boat.mode === 'RACE') this.boat.mode = 'ANONYMOUS';
+
     const ready = !!(club && chosenSeries && !blocked
       && (courseOnly ? (chosenCourse && chosenVariant) : (chosenRace && chosenDivision
         && racePublished)));
@@ -936,12 +941,17 @@ export class Device {
               revision ${esc(chosenVariant.revision)} &middot; ${chosenVariant.steps ?? '?'} marks</p>` : ''}`}
 
           <h2>How you are sailing</h2>
-          <label for="j_mode">This counts as</label>
+          <!--
+            A RACE IS RACED. Joining one leaves nothing to choose about how the run counts — it
+            goes to the club, which scores it — so there is no selector; and a course sailed with
+            no race behind it cannot count as a race, so there it offers practice or a record.
+          -->
+          ${courseOnly ? `<label for="j_mode">This counts as</label>
           <select id="j_mode">${options([
             { value: 'ANONYMOUS', label: 'Practice — kept for you, published to nobody' },
-            { value: 'RACE', label: 'Race — goes to the club, which scores it' },
             { value: 'RECORD', label: 'Record attempt — stands against every other' },
-          ], this.boat.mode)}</select>
+          ], this.boat.mode)}</select>`
+    : '<p class="muted" style="font-size:12px; margin:0 0 4px">Racing &mdash; your result goes to the club, which scores it.</p>'}
           <div class="pair">
             <div><label for="j_tcf">TCF</label>
               <input id="j_tcf" value="${esc(this.boat.tcf)}"></div>

@@ -87,6 +87,18 @@ pick('division', 'open');
 ok('...and shows the revision it is about to hand over', /revision [0-9a-f]{12}/.test(device()));
 ok('...with no course selector at all, because that is not a second decision',
   !device().includes('id="j_course"'));
+// A RACE IS RACED: joining one leaves nothing to choose about how the run counts.
+ok('...and no choice of how it counts either: a race is raced',
+  !device().includes('id="j_mode"') && device().includes('Racing &mdash;'));
+
+// With NO race the choice is back, and it is practice or a record — never a race there is none of.
+pick('race', '__course');
+ok('with no race, how the run counts is asked again', device().includes('id="j_mode"'));
+ok('...offering practice and a record attempt, and not a race',
+  device().includes('value="ANONYMOUS"') && device().includes('value="RECORD"')
+  && !/<select id="j_mode">[\s\S]*?value="RACE"[\s\S]*?<\/select>/.test(device()));
+pick('race', 'alert-race');
+pick('division', 'open');
 
 H('j_go:click')();
 await settle(2000);
