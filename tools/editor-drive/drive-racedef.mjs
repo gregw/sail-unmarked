@@ -182,6 +182,26 @@ ok('with several, the empty option says how many there are to pick from',
 ok('...and the file reports it rather than waiting for a boat to find out',
   JSON.stringify((await file()).problems ?? []).includes('must say which variant'));
 
+/* ------------------------------------------- how it starts, whether it is offered, its limit */
+
+// A NEW RACE IS NOT OFFERED YET — set up first, then made public — and it starts scratch.
+choose('race', FIRST);
+await settle(900);
+ok('a new race starts not public, so it can be set up before boats are offered it',
+  (await file()).races[FIRST].public === false && !/id="r_public" checked/.test(form()));
+ok('...with a scratch start unless somebody says otherwise', chosen('r_start') === 'scratch');
+H('r_start:change')({ target: { value: 'allocated' } });
+await settle(1400);
+ok('the start type is the race\'s, and reaches the file', (await file()).races[FIRST].startType === 'allocated');
+H('r_public:change')({ target: { checked: true } });
+await settle(1400);
+ok('ticking public reaches the file too', (await file()).races[FIRST].public === true);
+const limitField = $('raceForm').querySelectorAll('[data-dlimit]')[0];
+limitField.fire('change', { target: { value: '90' } });
+await settle(1400);
+ok('a division\'s time limit reaches the file, in minutes',
+  Object.values((await file()).races[FIRST].divisions)[0].timeLimitMinutes === 90);
+
 /* ------------------------------------------------------------------ deleting, and the chain */
 
 choose('race', SECOND);

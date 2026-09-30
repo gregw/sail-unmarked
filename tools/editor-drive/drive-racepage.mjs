@@ -190,6 +190,10 @@ ok('...with the warning and preparatory signals as durations before it, so the b
 // TEXT IS REQUIRED ON EVERY STATE MESSAGE: it is what the channel shows, and what reaches a
 // sailor whose client is too old to act on the rest.
 ok('...and words a sailor can read', (states.timer.body.text ?? '').length > 10);
+// HOW IT STARTS goes with it: a race that says nothing starts scratch, and its line is open ten
+// minutes after the start unless the screen was told otherwise.
+ok('...saying it is a scratch start, open ten minutes after it',
+  states.timer.body.kind === 'scratch' && states.timer.body.openSeconds === 600);
 
 const boat = joinedBoats[0];
 const got = await speak(boat.session);

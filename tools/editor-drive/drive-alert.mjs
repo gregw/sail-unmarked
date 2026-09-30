@@ -54,6 +54,20 @@ const races = {
     format: 'fleet',
     divisions: { open: { course: taken.course, variant: taken.variant } },
   },
+  // Being set up: not yet public, so not offered to a boat.
+  'hidden-race': {
+    name: 'Hidden race',
+    date: new Date().toLocaleDateString('en-CA'),
+    public: false,
+    divisions: { open: { course: taken.course, variant: taken.variant } },
+  },
+  // Each boat gives its own start time on joining.
+  'allocated-race': {
+    name: 'Allocated race',
+    date: new Date().toLocaleDateString('en-CA'),
+    startType: 'allocated',
+    divisions: { open: { course: taken.course, variant: taken.variant } },
+  },
 };
 await fetch(`/api/programmes/${KEY}`, {
   method: 'PUT',
@@ -74,6 +88,21 @@ $('j_sail').value = 'AUS 1';
 H('j_sail:input')({ target: { value: 'AUS 1' } });
 pick('club', programme.club);
 pick('series', programme.series);
+
+// A RACE STILL BEING SET UP IS NOT OFFERED; one that is public is.
+const raceOptions = () => [...(/<select id="j_race">([\s\S]*?)<\/select>/.exec(device())?.[1] ?? '')
+  .matchAll(/<option value="([^"]*)"/g)].map((m) => m[1]);
+ok('a race that is not public yet is not offered to a boat',
+  raceOptions().includes('alert-race') && !raceOptions().includes('hidden-race'));
+
+// AN ALLOCATED START ASKS THE BOAT FOR ITS OWN START TIME, and joining waits for it.
+pick('race', 'allocated-race');
+pick('division', 'open');
+ok('a race with an allocated start asks for this boat\'s start time',
+  device().includes('id="j_alloc"') && /id="j_go" disabled>Give your start time</.test(device()));
+H('j_alloc:input')({ target: { value: '23:59' } });
+H('j_alloc:change')({ target: { value: '23:59' } });
+ok('...and once it is given, the boat may join', /id="j_go">Join and sail</.test(device()));
 
 // A BOAT JOINS A RACE WHERE THERE IS ONE, and the course follows from the division rather than
 // being picked again: a boat does not choose the geometry it was entered for.

@@ -476,6 +476,16 @@ list: it collapses to nothing when there is nothing to choose. Settled into `thi
 than into the markup, because the join reads its course from there. **`NO_RACE` does not make a
 single race into two answers** — it is opting out of the question, not another race.
 
+**A start line is open for a period, and says so.** With a race behind the run the start line is drawn
+red until the preparatory signal, orange from it, and green while it is open, on the overview and the
+Line screen alike (`RaceClient.lineState`, `LINE_STATE_COLOUR`); a finish the division's time limit has
+closed is red. A crossing counts only while its line is open: a boat over early is OCS, nothing
+registers, and it has to come back and cross again (`startLineAt`, `finishClosedAt`). Elapsed runs from
+the start for a scratch start, from the boat's own allocated time for an allocated one, and from its own
+crossing for an open start or a run with no race. The start row says it the traditional way for scratch
+and allocated starts — a countdown — and for an open start says when the line opens, for how long, and
+then when it closes.
+
 **A race is raced.** With a race chosen there is no "how you are sailing" selector — the run counts as a
 race and goes to the club; with no race it offers practice or a record attempt, and never a race there is
 none of.

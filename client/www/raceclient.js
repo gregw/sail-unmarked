@@ -273,6 +273,16 @@ export class RaceClient {
      */
     this.boatLengthM = Number(this.boat.lengthM) > 0 ? Number(this.boat.lengthM) : 10;
     this.approach = { ...APPROACH, ...(options.approach ?? {}) };
+    /*
+     * THE RACE'S START, asked for rather than held: it comes from what the committee published and
+     * can change under a running client (a new start time, a postponement), so this is a function
+     * the page supplies — `Dialog.startPlan` — and null means no race behind the run, whose start
+     * line is always open. See `lineState`.
+     */
+    this.startPlan = options.startPlan ?? (() => null);
+    // A start crossed before the line opened (or after it closed): the boat has to come back and
+    // cross again while it is open. Said on the screens until it does.
+    this.ocs = null;
 
     const defaults = snapshot.defaults ?? {};
     this.confirmFixes = defaults.confirmFixes ?? 3;
@@ -437,6 +447,56 @@ export class RaceClient {
     return index === this.at;
   }
 
+  /**
+   * THE STEP THAT STARTS THE RUN, while the run has not started: an open course's first step,
+   * or the entry line a cycle's lap will begin at.
+   */
+  isStartStep(index) {
+    if (this.startAt) return false;
+    if (this.starting) return index === this.startChoice.stepIndex;
+    return !this.snapshot.closed && index === 0 && this.at === 0;
+  }
+
+  /** The step that finishes the run, when it is the one being sailed to. */
+  isFinishStep(index) {
+    if (this.snapshot.closed) return this.atFinish() && index === this.at;
+    return index === this.steps.length - 1 && this.at === index;
+  }
+
+  /**
+   * WHERE THE START LINE STANDS at `now`: `closed` before the preparatory signal, `prep` from it
+   * until the line opens, `open` while a crossing counts, `shut` once it has closed. `open`
+   * always with no race behind the run.
+   */
+  startLineAt(now = Date.now()) {
+    const plan = this.startPlan();
+    if (!plan) return 'open';
+    if (now < plan.prepAt) return 'closed';
+    if (now < plan.startAt) return 'prep';
+    if (plan.closesAt == null || now <= plan.closesAt) return 'open';
+    return 'shut';
+  }
+
+  /** Whether the finish has closed to this boat: its division's time limit has run. */
+  finishClosedAt(now = Date.now()) {
+    const limit = this.startPlan()?.timeLimitMs;
+    return !!limit && !!this.startAt && now > this.startAt.getTime() + limit;
+  }
+
+  /**
+   * HOW A LINE IS TO BE COLOURED, where its state says something: the start line before the run
+   * has started — red until the preparatory signal, orange from it, green while open, red again
+   * once closed — and the finish, red once the time limit has closed it. Null for every other
+   * line, which is coloured the ordinary way.
+   */
+  lineState(index, now = Date.now()) {
+    // Only with a race behind the run: without one the start line is simply always open, and is
+    // drawn the ordinary way rather than as a signal nobody gave.
+    if (this.isStartStep(index)) return this.startPlan() ? this.startLineAt(now) : null;
+    if (this.isFinishStep(index) && this.finishClosedAt(now)) return 'shut';
+    return null;
+  }
+
   /** Make the entry line at step `index` the one a lap will begin at. */
   setStart(index) {
     this.startChoice.stepIndex = index;
@@ -553,6 +613,30 @@ export class RaceClient {
     if (!latched) return { accepted: true, verdict: 'ACCEPTED', reason: null, relocated };
 
     /*
+     * A LINE THAT IS NOT OPEN DOES NOT REGISTER A CROSSING. The start line is open from its start
+     * (or its opening) for a period, and a boat over before it opens — or after it has closed —
+     * has crossed nothing that counts: it is told it is OCS, the detectors are armed afresh, and
+     * it has to come back and cross again while the line is open. The finish line likewise closes
+     * to a boat when its division's time limit has run. Judged at the interpolated instant of the
+     * crossing, which is when it happened.
+     */
+    const startLine = this.isStartStep(step.index);
+    const finishLine = this.isFinishStep(step.index);
+    const when = latched.time.getTime();
+    if (startLine && this.startLineAt(when) !== 'open') {
+      this.ocs = { at: latched.time, why: this.startLineAt(when) === 'shut' ? 'closed' : 'early' };
+      this.rejects.push({ at: latched.time, line: took.line, reason: this.ocs.why === 'closed'
+        ? 'start line crossed after it closed' : 'start line crossed before it opened (OCS)' });
+      this.arm();
+      return { accepted: true, verdict: 'ACCEPTED', reason: null, relocated, ocs: this.ocs.why };
+    }
+    if (finishLine && this.finishClosedAt(when)) {
+      this.rejects.push({ at: latched.time, line: took.line, reason: 'finish crossed after the time limit' });
+      this.arm();
+      return { accepted: true, verdict: 'ACCEPTED', reason: null, relocated, closed: 'finish' };
+    }
+
+    /*
      * WHICH STEP WAS JUST CROSSED. Before a cycle's start the live "step" is the choice of
      * entry lines, and what the boat actually crossed is the one those candidate crossings
      * came from — so the dwell, the plot and the record all name that, not the choice. The
@@ -578,8 +662,13 @@ export class RaceClient {
     // opened. On a cycle it runs from the entry line the boat took, which is what makes the
     // number a lap time.
     if (wasStarting || (!this.snapshot.closed && step.index === 0)) {
-      this.startAt = latched.time;
+      // ELAPSED RUNS FROM THE START, whose instant depends on how the race starts: the gun for a
+      // scratch start and this boat's own time for an allocated one, however late it crossed;
+      // its own crossing for an open start, or with no race behind it.
+      const plan = this.startPlan();
+      this.startAt = plan && plan.kind !== 'open' ? new Date(plan.startAt) : latched.time;
       this.finishAt = null;
+      this.ocs = null;
     }
     /*
      * ROLES ARE POSITIONAL IN THE RECORD TOO, and that is why nothing here says "start" or
@@ -1259,6 +1348,9 @@ export class RaceClient {
       boatName: this.boat?.name ?? null,
       sailNumber: this.boat?.sail ?? null,
       tcf: Number(this.boat?.tcf) > 0 ? Number(this.boat.tcf) : null,
+      // HOW THE RACE STARTED, which says what `startTime` is: the start itself, this boat's
+      // allocated time, or its own crossing (open, or no race).
+      startType: this.startPlan()?.kind ?? null,
       // THE LINES THIS BOAT WAS GIVEN, where the course is handicapped by distance: what makes
       // its elapsed time already corrected, and what a protest over one of them is argued from.
       handicap: snapshot.handicap
@@ -1510,6 +1602,10 @@ export class RaceClient {
       stale: this.stale(now),
       sinceGood: this.sinceGood,
       ttl: this.timeToLine(),
+      // Whether the line being approached is open, where that is the question — the start before
+      // the run has started, a finish the time limit has closed. See `lineState`.
+      lineState: dwelling ? null : this.lineState(watched.stepIndex, now),
+      ocs: this.ocs && !this.startAt ? this.ocs.why : null,
       // The other side of a gate, so the plot can show it where it falls in view. Not part of
       // what the screen is focused on — the readouts, the fit and the time all belong to the
       // one the boat is sailing towards — but drawing only one side of a gate says there is

@@ -486,12 +486,17 @@ public class Dialog
     /** The race a course and variant are being sailed as today, or null — which is §8.2's case. */
     private Race raceFor(Programme programme, String named, String courseId, String variant)
     {
+        // A RACE NOT YET PUBLIC IS NOT JOINED, named or found: it is being set up, and a boat that
+        // could enter it would be racing something the committee has not opened.
         if (named != null && !named.isBlank())
-            return programme.races().get(named);
+        {
+            Race race = programme.races().get(named);
+            return race != null && race.offered() ? race : null;
+        }
         LocalDate today = LocalDate.now(ZoneId.of(programme.timezone()));
         for (Race race : programme.races().values())
         {
-            if (race.on(today) && divisionFor(race, courseId, variant) != null)
+            if (race.offered() && race.on(today) && divisionFor(race, courseId, variant) != null)
                 return race;
         }
         return null;

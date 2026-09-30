@@ -257,8 +257,12 @@ pointing up the screen.**
 
 ## The Races tab
 
-Edits the race *definition* — id, long name, date, format, which race this one **follows**, and one row
-per division naming a course and a variant. Conduct is elsewhere; see
+Edits the race *definition* — id, long name, date, format, **how it starts** (`startType`: scratch,
+open or allocated, every division alike), whether it is **public**, which race this one **follows**, and
+one row per division naming a course, a variant and a **time limit** in minutes. The start type is the
+race's because a boat needs it on joining — an allocated start asks for the boat's own time then — while
+the times themselves are set on the race screen, which publishes them. A new race starts **not public**,
+so it can be set up before boats are offered it; a race in a file that predates the field is public. Conduct is elsewhere; see
 [`client-server-dialog.md`](client-server-dialog.md). `selectRace` also selects that race's first
 division's design, so the chart shows the water the race is on.
 

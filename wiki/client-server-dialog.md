@@ -429,8 +429,8 @@ two geometries needs to know which is which.
 |---|---|---|---|
 | `fleet` | S→C | `race`, `boats[]` — `boatId`, `sailNo`, `name`, `tags[]`, `position`, `cogDeg`, `sogKn`, `revision`, `step`, `lap`, `startedAt`, `finishedAt`, `elapsedMs`, `tcf`, `outcome`, `at` | no |
 | `course` | S→C | `revision`, `course` (the whole snapshot), `reason`, **`text`** | **yes** |
-| `timer` | S→C | `startAt` (absolute), `warningSeconds`, `startSeconds`, `flags[]`, **`text`** | no |
-| `window` | S→C | `opensAt`, `closesAt`, **`text`** | no |
+| `timer` | S→C | `kind`, `startAt` (absolute), `closesAt`, `openSeconds`, `warningSeconds`, `startSeconds`, `timeLimitSeconds`, `flags[]`, **`text`** | no |
+| `window` | S→C | `opensAt`, `closesAt`, **`text`** — superseded by a `timer` of kind `open`; still read | no |
 | `flag` | S→C | `flag` (`postponed` \| `abandoned` \| …), `reason`, **`text`** | **yes** |
 | `say` | S→C | `from`, `text` | **yes, by being read** |
 | `say` | C→S | `session`, `text` | relayed to all |
@@ -446,8 +446,21 @@ knots a boat moves twenty-three metres in five seconds, which on a screen showin
 nothing; sixty boats at 1 Hz would be sixty fan-outs a second to say what a fleet screen cannot draw
 the difference of. One message carries every boat, so the cost is per boat rather than per pair.
 
-**`timer` is an instant and two durations, and nothing else.** `startAt` is absolute;
-`warningSeconds` and `startSeconds` say when the warning and preparatory signals fall before it.
+**`timer` is a division's start: how it starts, when, and for how long its line is open.** Every
+start line is OPEN for a period and a crossing counts only while it is — a boat over early sees
+nothing register and comes back (OCS). How the race starts is the race's (`startType` in the
+definition, every division alike) and says what else goes with it:
+
+| `kind` | The line is open | Elapsed runs from | The boat is shown |
+|---|---|---|---|
+| `scratch` | from `startAt` for `openSeconds` (600 unless said) | `startAt`, however late the boat crossed | a countdown to the start |
+| `open` | from `startAt` to `closesAt` | the boat's own crossing | when the line opens, for how long, then when it closes |
+| `allocated` | from this boat's own start time for `openSeconds` | that time | a countdown to its own start |
+
+An allocated start has no common `startAt`: each boat gives its own time when it joins
+(`allocatedStart` on `join`). `warningSeconds` and `startSeconds` say when the warning and
+preparatory signals fall before the line opens, in every kind; `timeLimitSeconds` is the division's
+time limit from the instant a boat's elapsed runs from, after which its finish is closed to it.
 **Every countdown is run by the boat**, against the boat's own clock — the server sends this once
 and does not tick.
 

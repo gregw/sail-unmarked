@@ -31,6 +31,14 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * next, so "regatta" never has to become a word. Guarded by the date, which is checked where
  * the chain fires rather than here — a file may perfectly well name next Saturday's race, and
  * that is a chain that simply does not fire today.
+ *
+ * <h2>How it starts, and whether boats can see it</h2>
+ * {@code startType} is the race's, and every division of it starts the same way — see
+ * {@link StartType}. It is here rather than in the conduct because a boat has to know it on
+ * JOINING: an allocated start asks each boat for its own time then. {@code public} is whether
+ * boats are offered the race at all, so it can be set up before it is. A race written before the
+ * field existed says nothing and stays what it was — joinable; one created in the editor starts
+ * not public.
  */
 public record Race(
     @JsonProperty("id") String id,
@@ -39,11 +47,74 @@ public record Race(
     @JsonProperty("format") String format,
     @JsonProperty("divisions") Map<String, Division> divisions,
     @JsonProperty("next") String next,
-    @JsonProperty("notes") String notes)
+    @JsonProperty("notes") String notes,
+    @JsonProperty("startType") StartType startType,
+    @JsonProperty("public") Boolean isPublic)
 {
     public Race
     {
         divisions = divisions == null ? Map.of() : keyed(divisions);
+    }
+
+    /** A race as it was before starts had a type or races a public flag. */
+    public Race(String id, String name, LocalDate date, String format, Map<String, Division> divisions,
+        String next, String notes)
+    {
+        this(id, name, date, format, divisions, next, notes, null, null);
+    }
+
+    /** How the race starts: {@code scratch} when the file says nothing. */
+    @JsonIgnore
+    public StartType start()
+    {
+        return startType == null ? StartType.SCRATCH : startType;
+    }
+
+    /** Whether boats are offered it. Absent in the file means yes — see the class comment. */
+    @JsonIgnore
+    public boolean offered()
+    {
+        return isPublic == null || isPublic;
+    }
+
+    /**
+     * THE THREE WAYS A RACE STARTS, and the one thing they share: every start line is OPEN for a
+     * period, and a crossing counts only while it is — a boat over early sees nothing register and
+     * comes back. What differs is how that is presented to the boat and what its elapsed time runs
+     * from.
+     *
+     * <ul>
+     *   <li>{@link #SCRATCH} — one start time for everybody, with a warning and a preparatory
+     *       signal before it. The line is open from the start for a period (ten minutes unless the
+     *       race screen says otherwise), and elapsed time runs FROM THE START, however late a boat
+     *       crossed.</li>
+     *   <li>{@link #OPEN} — the line opens at one time and closes at another, with a warning and
+     *       a preparatory signal before it opens, and each boat's elapsed time runs from its own
+     *       crossing.</li>
+     *   <li>{@link #ALLOCATED} — each boat has its own start time, given when it joins, with the
+     *       warning, preparatory signal and open period of a scratch start hung off it; elapsed
+     *       runs from that boat's time.</li>
+     * </ul>
+     */
+    public enum StartType
+    {
+        SCRATCH,
+        OPEN,
+        ALLOCATED;
+
+        @com.fasterxml.jackson.annotation.JsonCreator
+        public static StartType parse(String raw)
+        {
+            if (raw == null || raw.isBlank())
+                return null;
+            return valueOf(raw.trim().toUpperCase(java.util.Locale.ROOT));
+        }
+
+        @com.fasterxml.jackson.annotation.JsonValue
+        public String wire()
+        {
+            return name().toLowerCase(java.util.Locale.ROOT);
+        }
     }
 
     /** The id is the map key in the file, so it is backfilled rather than stated twice. */
@@ -55,7 +126,8 @@ public record Race(
             if (division == null)
                 return;
             out.put(key, division.name() == null || division.name().isBlank()
-                ? new Division(key, division.course(), division.variant(), division.start())
+                ? new Division(key, division.course(), division.variant(), division.start(),
+                    division.timeLimitMinutes())
                 : division);
         });
         return java.util.Collections.unmodifiableMap(out);
@@ -102,6 +174,9 @@ public record Race(
             problems.add("race '" + id + "' has no divisions, so no boat can be given a course");
         divisions.forEach((key, division) ->
         {
+            if (division.timeLimitMinutes() != null && division.timeLimitMinutes() <= 0)
+                problems.add("race '" + id + "' division '" + key + "' has a time limit of "
+                    + division.timeLimitMinutes() + " minutes; give it a positive one, or none");
             String badDiv = Ids.problem("division", key, Ids.PLAIN);
             if (badDiv != null)
                 problems.add(badDiv);
@@ -143,13 +218,24 @@ public record Race(
      * <p>{@code start} is the <b>planned</b> start, and publishing it is a separate act. A
      * planned instant in a file is a rehearsal; the {@code timer} a fleet counts down to is
      * conduct, and it is sent by somebody deciding to send it.
+     *
+     * <p>{@code timeLimitMinutes} is how long a boat of this division has to finish, from the
+     * instant its elapsed time runs from; after that its finish line is closed to it and a
+     * crossing no longer counts. None means no limit.
      */
     public record Division(
         @JsonProperty("name") String name,
         @JsonProperty("course") String course,
         @JsonProperty("variant") String variant,
-        @JsonProperty("start") String start)
+        @JsonProperty("start") String start,
+        @JsonProperty("timeLimitMinutes") Integer timeLimitMinutes)
     {
+        /** A division with no time limit. */
+        public Division(String name, String course, String variant, String start)
+        {
+            this(name, course, variant, start, null);
+        }
+
         /** The tag boats in this division carry. */
         @JsonIgnore
         public String tag()

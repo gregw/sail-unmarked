@@ -206,8 +206,13 @@ button.plain.on { border-color: var(--ok); color: var(--ok); }
 }
 .start .value { font-family: var(--disp); font-size: min(9cqi, 36px); font-weight: 700; line-height: 1; }
 .start .said { font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.start.warning { color: var(--toside); }
-.start.warning .value { color: var(--toside); }
+/* The start row wears the start line's colours: red to the preparatory signal, orange from it,
+   green once the line is open — and red for an OCS or a line that has closed. */
+.start.warning { color: var(--warn); }
+.start.warning .value { color: var(--warn); }
+.start.prep { color: var(--toside); }
+.start.prep .value { color: var(--toside); }
+.start.ocs, .start.closed { color: var(--warn); }
 .start.racing { color: var(--ok); }
 .start.racing .value { color: var(--ok); }
 .start.postponed, .start.abandoned { color: var(--warn); }

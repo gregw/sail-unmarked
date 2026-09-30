@@ -409,7 +409,8 @@ function render() {
     <p class="hint">There is no GO button, and there cannot be: the server keeps no clock, so a
       start is scheduled as an absolute instant, typed here in this computer's own time zone.</p>
     ${Object.keys(row.race.divisions ?? {}).map((name) =>
-      startCard(name, row.race.divisions[name], states[`division:${name}`], now)).join('')}
+      startCard(name, row.race.divisions[name], states[`division:${name}`], now,
+        row.race.startType ?? 'scratch')).join('')}
 
     <h2>Fleet</h2>
     <p class="hint">One row per boat that has joined. The last two columns are the whole reason
@@ -469,6 +470,13 @@ function render() {
  */
 const ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'local time';
 
+/** What each way of starting a race means, said on each division's card. */
+const KIND_SAID = {
+  scratch: 'Scratch start: one start for all, elapsed from it',
+  open: 'Open start: the line opens and closes, elapsed from each boat\'s crossing',
+  allocated: 'Allocated start: each boat gives its own time when it joins',
+};
+
 /** `YYYY-MM-DDTHH:mm` in local time, which is what a `datetime-local` input speaks. */
 function localValue(ms) {
   const at = new Date(ms);
@@ -496,7 +504,9 @@ function seeded(name, division) {
     const planned = division.start ? Date.parse(division.start) : NaN;
     const from = Number.isFinite(planned) && planned > Date.now()
       ? planned : Math.ceil((Date.now() + 5 * 60000) / 60000) * 60000;
-    state.starts[name] = { at: localValue(from), warning: 5, prep: 4 };
+    // `open` is how long a scratch or allocated start's line stays open after it; `closes` is
+    // when an open start's line closes, half an hour after it opens until somebody says.
+    state.starts[name] = { at: localValue(from), warning: 5, prep: 4, open: 10, closes: localValue(from + 30 * 60000) };
   }
   return state.starts[name];
 }
@@ -509,7 +519,7 @@ function seeded(name, division) {
  * because there is no "now" on the server to count five minutes from. Five divisions is this
  * done five times, which is no cascade to compute and none to get wrong.
  */
-function startCard(name, division, standing, now) {
+function startCard(name, division, standing, now, kind = 'scratch') {
   const which = standing?.state ?? 'none';
   const timer = standing?.timer?.body ?? null;
   const startAt = timer?.startAt ? Date.parse(timer.startAt) : null;
@@ -528,8 +538,13 @@ function startCard(name, division, standing, now) {
   // one belonging to the person deciding. Said out loud rather than merely disabling a button:
   // a control that refuses without saying why teaches nothing.
   const floor = postponed ? 6 : 0;
-  const tooSoon = !Number.isFinite(ahead) || ahead < floor;
-  const past = Number.isFinite(ahead) && ahead < 0;
+  // AN ALLOCATED START HAS NO COMMON TIME: each boat gave its own when it joined, so what is
+  // published is only the sequence and the open period that hang off each boat's time.
+  const allocated = kind === 'allocated';
+  const tooSoon = !allocated && (!Number.isFinite(ahead) || ahead < floor);
+  const past = !allocated && Number.isFinite(ahead) && ahead < 0;
+  const closes = Date.parse(typed.closes);
+  const limit = division.timeLimitMinutes ? `time limit ${division.timeLimitMinutes} min` : 'no time limit';
 
   return `<div class="card" data-division="${esc(name)}">
     <div class="who">
@@ -544,12 +559,23 @@ function startCard(name, division, standing, now) {
     ${postponed ? '<div class="said warn">Postponed. Publishing a start is what clears it — '
       + 'and it must be at least six minutes ahead, a minute before the warning signal and '
       + 'then the usual five.</div>' : ''}
-    <div class="row">
-      <label for="at_${esc(name)}">start at</label>
+    <div class="said" style="margin:0">${esc(KIND_SAID[kind] ?? KIND_SAID.scratch)} &middot; ${esc(limit)}</div>
+    ${allocated ? '' : `<div class="row">
+      <label for="at_${esc(name)}">${kind === 'open' ? 'line opens' : 'start at'}</label>
       <input type="datetime-local" id="at_${esc(name)}" data-at="${esc(name)}"
         value="${esc(typed.at)}" style="width:190px">
       <span class="said" style="margin:0">${esc(ZONE)}</span>
-    </div>
+    </div>`}
+    ${kind === 'open' ? `<div class="row">
+      <label for="c_${esc(name)}">line closes</label>
+      <input type="datetime-local" id="c_${esc(name)}" data-closes="${esc(name)}"
+        value="${esc(typed.closes)}" style="width:190px">
+    </div>` : `<div class="row">
+      <label for="o_${esc(name)}">line open for</label>
+      <input type="number" min="1" max="120" id="o_${esc(name)}" data-open="${esc(name)}"
+        value="${typed.open}" style="width:54px">
+      <label>min after ${allocated ? "each boat's" : 'the'} start</label>
+    </div>`}
     <!--
       TWO DURATIONS BEFORE IT, which is what the boat needs to show the flags a sailor expects:
       the warning signal five minutes out and the preparatory four. They are durations rather
@@ -567,12 +593,16 @@ function startCard(name, division, standing, now) {
     </div>
     <div class="row">
       <button class="act" data-publish="${esc(name)}"${tooSoon ? ' disabled' : ''}>
-        ${postponed ? 'Re-start sequence' : 'Schedule start'}</button>
-      <span class="said" style="margin:0">${Number.isFinite(wanted)
-        ? `warning ${esc(hhmm(wanted - typed.warning * 60000))}`
-          + ` &middot; preparatory ${esc(hhmm(wanted - typed.prep * 60000))}`
-          + ` &middot; start ${esc(hhmm(wanted))}`
-        : 'give it a time'}</span>
+        ${allocated ? 'Publish start rules' : postponed ? 'Re-start sequence'
+          : kind === 'open' ? 'Schedule open start' : 'Schedule start'}</button>
+      <span class="said" style="margin:0">${allocated
+        ? `warning ${esc(typed.warning)} and preparatory ${esc(typed.prep)} min before each boat's own time`
+        : Number.isFinite(wanted)
+          ? `warning ${esc(hhmm(wanted - typed.warning * 60000))}`
+            + ` &middot; preparatory ${esc(hhmm(wanted - typed.prep * 60000))}`
+            + ` &middot; ${kind === 'open' ? 'opens' : 'start'} ${esc(hhmm(wanted))}`
+            + (kind === 'open' && Number.isFinite(closes) ? ` &middot; closes ${esc(hhmm(closes))}` : '')
+          : 'give it a time'}</span>
     </div>
     ${past ? '<div class="said warn">That is in the past. A start already gone cannot be '
       + 'scheduled; abandon the race instead, or give it a later time.</div>'
@@ -653,40 +683,65 @@ function wirePane() {
     seeded(name, {}).warning = Math.max(0, Number(value) || 0);
   });
   field('prep', (name, value) => { seeded(name, {}).prep = Math.max(0, Number(value) || 0); });
+  field('open', (name, value) => { seeded(name, {}).open = Math.max(1, Number(value) || 10); });
+  field('closes', (name, value) => { seeded(name, {}).closes = value; });
 
   for (const button of el('pane').querySelectorAll('[data-publish]')) {
     button.addEventListener('click', () => {
       const name = button.dataset.publish;
+      const row = chosen();
+      const kind = row?.race.startType ?? 'scratch';
+      const division = row?.race.divisions?.[name] ?? {};
       const typed = seeded(name, {});
       const wanted = Date.parse(typed.at);
-      if (!Number.isFinite(wanted)) return;
+      if (kind !== 'allocated' && !Number.isFinite(wanted)) return;
       /*
        * AN ABSOLUTE INSTANT GOES ON THE WIRE, and the conversion from what was typed is this
        * browser's — which is the whole of the timing model (§1.2, §8.4). The operator types a
        * local time because that is what a start is announced in; every boat then counts down to
        * the instant on its own clock, and the server neither ticks nor holds one.
+       *
+       * HOW THE RACE STARTS SAYS WHAT ELSE GOES WITH IT (`Race.StartType`): a scratch start's
+       * line is open for a period after it; an open start's closes at its own time; an allocated
+       * start has no common time at all, only the sequence and the open period each boat's own
+       * time carries. The division's time limit rides along, so a boat knows when its finish
+       * closes to it.
        */
-      const startAt = new Date(wanted).toISOString();
-      publish({
-        v: 1,
-        type: 'timer',
-        tags: [`division:${name}`],
-        body: {
-          startAt,
-          // DURATIONS BEFORE THE START, so a boat can show the flags a sailor expects: the
-          // warning signal and then the preparatory. They hang off the start rather than being
-          // instants of their own, so moving the start moves the whole sequence with it.
-          warningSeconds: typed.warning * 60,
-          startSeconds: typed.prep * 60,
-          // TEXT IS REQUIRED ON EVERY STATE MESSAGE (§9.4): it is what the channel shows, and
-          // what reaches a sailor whose client is too old to act on the rest. A flag with no
-          // words on it is a flag only the software can read — so this spells the sequence out
-          // in the times it will actually happen at.
-          text: `${name}: warning ${hhmm(wanted - typed.warning * 60000)}`
-            + `, preparatory ${hhmm(wanted - typed.prep * 60000)}`
-            + `, start ${hhmm(wanted)}`,
-        },
-      });
+      const body = {
+        kind,
+        // DURATIONS BEFORE THE START, so a boat can show the flags a sailor expects: the warning
+        // signal and then the preparatory. They hang off the start rather than being instants of
+        // their own, so moving the start moves the whole sequence with it.
+        warningSeconds: typed.warning * 60,
+        startSeconds: typed.prep * 60,
+      };
+      if (division.timeLimitMinutes) body.timeLimitSeconds = division.timeLimitMinutes * 60;
+      if (kind === 'allocated') {
+        body.openSeconds = typed.open * 60;
+        body.text = `${name}: allocated starts — warning ${typed.warning} and preparatory `
+          + `${typed.prep} min before each boat's own time; line open ${typed.open} min after it`;
+      } else if (kind === 'open') {
+        const closes = Date.parse(typed.closes);
+        if (!Number.isFinite(closes) || closes <= wanted) {
+          state.message = `${name}: the line has to close after it opens.`;
+          render();
+          return;
+        }
+        body.startAt = new Date(wanted).toISOString();
+        body.closesAt = new Date(closes).toISOString();
+        body.text = `${name}: warning ${hhmm(wanted - typed.warning * 60000)}`
+          + `, preparatory ${hhmm(wanted - typed.prep * 60000)}, line opens ${hhmm(wanted)}`
+          + `, closes ${hhmm(closes)}`;
+      } else {
+        body.startAt = new Date(wanted).toISOString();
+        body.openSeconds = typed.open * 60;
+        // TEXT IS REQUIRED ON EVERY STATE MESSAGE (§9.4): it is what the channel shows, and what
+        // reaches a sailor whose client is too old to act on the rest — so it spells the
+        // sequence out in the times it will actually happen at.
+        body.text = `${name}: warning ${hhmm(wanted - typed.warning * 60000)}`
+          + `, preparatory ${hhmm(wanted - typed.prep * 60000)}, start ${hhmm(wanted)}`;
+      }
+      publish({ v: 1, type: 'timer', tags: [`division:${name}`], body });
     });
   }
 

@@ -185,7 +185,7 @@ service user, `/opt/sail-unmarked`, `/var/lib/sail-unmarked` — carry the `sail
 
 Not built: the Capacitor wrapper and an offline tile cache; the brief's Live place picture; caching
 a joined race across a reload; the boat switching to a course change or to the next race's course;
-re-posting a record with its track; the WebSocket, `ask`, `window` and muting; a club entering its
+re-posting a record with its track; the WebSocket, `ask` and muting; a club entering its
 fleet's TCFs in advance, rather than each boat declaring its own at the join. The dialog's list,
 with reasons, is [dialog §14](wiki/client-server-dialog.md#14-where-it-lives-how-it-is-tested-and-what-is-not-built).
 

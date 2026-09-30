@@ -21,10 +21,11 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * of it. Owning none of that is what lets this be right about the one thing it is uniquely
  * able to be right about: detecting and timing a crossing.
  *
- * <p>The consequence, and it is a commitment rather than a gap: <b>every elapsed time is
- * self-timed</b>. A boat's clock starts when it crosses the start line, even where a
- * committee published a start time. A club scoring from a gun scores from its own gun and
- * this record's crossing times.
+ * <p><b>Every elapsed time is the boat's own reading</b>, on its own clock, and what it runs
+ * FROM is how the race started ({@link #startType}): the published start of a scratch race, the
+ * boat's own allocated time, or — for an open start or a run with no race — its own crossing.
+ * A crossing counts only while its start line was open, so a boat over early has no start until
+ * it comes back. The crossings always keep the instants the boat actually crossed at.
  *
  * <h2>This record is the interface</h2>
  * Since it is the only artefact that leaves this system, it has to carry everything a
@@ -90,8 +91,27 @@ public record CourseRecord(
      * changed. And they are what says the TCF has already been applied — in the distance — so
      * nobody multiplies the elapsed time by it a second time.
      */
-    @JsonProperty("handicap") Applied handicap)
+    @JsonProperty("handicap") Applied handicap,
+    /**
+     * HOW THE RACE STARTED, and so what {@link #startTime} is: the start for a {@code scratch}
+     * race, this boat's own allocated time for an {@code allocated} one — however late it crossed —
+     * and its own crossing for an {@code open} one or a run with no race behind it (null). The
+     * crossings keep the instants the boat actually crossed at, whichever it is.
+     */
+    @JsonProperty("startType") String startType)
 {
+    /** A record from before the start type was carried. */
+    public CourseRecord(String club, String series, String course, String courseRevision,
+        JoinMode join, String boatId, String boatName, String sailNumber, Double tcf,
+        Double lengthM, String race, String division, Instant startTime, Instant finishTime,
+        Instant submittedAt, String appVersion, List<CrossingEvent> crossings, List<Fix> fixes,
+        Applied handicap)
+    {
+        this(club, series, course, courseRevision, join, boatId, boatName, sailNumber, tcf,
+            lengthM, race, division, startTime, finishTime, submittedAt, appVersion, crossings,
+            fixes, handicap, null);
+    }
+
     /** The lines placed for a boat's TCF: how far along the tracks, and each line itself. */
     public record Applied(
         @JsonProperty("fraction") Double fraction,
@@ -121,7 +141,7 @@ public record CourseRecord(
     {
         this(club, series, course, courseRevision, join, boatId, boatName, sailNumber, tcf,
             lengthM, race, division, startTime, finishTime, submittedAt, appVersion, crossings,
-            fixes, null);
+            fixes, null, null);
     }
 
     public CourseRecord
@@ -145,7 +165,7 @@ public record CourseRecord(
             return this;
         return new CourseRecord(club, series, course, courseRevision, join, boatId, boatName,
             sailNumber, tcf, lengthM, inRace, inDivision, startTime, finishTime, submittedAt,
-            appVersion, crossings, fixes, handicap);
+            appVersion, crossings, fixes, handicap, startType);
     }
 
     /** Elapsed seconds on the boat's own clock, or empty until it has finished. */

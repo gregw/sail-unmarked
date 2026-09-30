@@ -65,7 +65,8 @@ public record Programme(
         courses = keyById(courses, Course::id, (c, id) ->
             new Course(id, c.name(), c.notes(), c.isPublic(), c.variants()));
         races = keyById(races, Race::id, (r, id) ->
-            new Race(id, r.name(), r.date(), r.format(), r.divisions(), r.next(), r.notes()));
+            new Race(id, r.name(), r.date(), r.format(), r.divisions(), r.next(), r.notes(),
+                r.startType(), r.isPublic()));
     }
 
     /**

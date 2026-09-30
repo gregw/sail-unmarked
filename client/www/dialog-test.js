@@ -13,6 +13,7 @@
 
 import { Dialog, QUIET_MS, ladder } from './dialog.js';
 import { validate } from './schema.js';
+import { startRow } from './screens.js';
 
 /** A dialog with no transport behind it: everything below is what arrives, not how. */
 function boat(tags = ['division:1']) {
@@ -47,6 +48,45 @@ export function run(check) {
     one.countdown(at + 5000) === -5);
   check('...and the state follows the boat\'s own clock past the start',
     one.state(at + 1000) === 'racing');
+
+  /* ------------------------------------------------ the three ways a race starts */
+
+  // SCRATCH: one start for everybody, the line open ten minutes after it unless told otherwise.
+  const gun = Date.parse('2026-10-03T13:05:00');
+  const scratch = boat();
+  scratch.receive(message('timer', { kind: 'scratch', startAt: new Date(gun).toISOString(),
+    warningSeconds: 300, startSeconds: 240, text: 'start 13:05' }, ['division:1']));
+  const sp = scratch.startPlan();
+  check('a scratch start opens its line at the start and keeps it open ten minutes',
+    sp.kind === 'scratch' && sp.startAt === gun && sp.closesAt === gun + 600000
+    && sp.prepAt === gun - 240000 && sp.warningAt === gun - 300000);
+  check('...and is shown the traditional way: a countdown to the start, no closing time',
+    /Start 13:05 in/.test(startRow(scratch, gun - 60000)) && !/closes/.test(startRow(scratch, gun - 60000)));
+  check('...orange from the preparatory signal', /class="start prep"/.test(startRow(scratch, gun - 60000)));
+  check('...red before it, from the warning', /class="start warning"/.test(startRow(scratch, gun - 280000)));
+
+  // OPEN: the line opens at one time and closes at another.
+  const opens = Date.parse('2026-10-03T13:05:00');
+  const shuts = Date.parse('2026-10-03T13:35:00');
+  const open = boat();
+  open.receive(message('timer', { kind: 'open', startAt: new Date(opens).toISOString(),
+    closesAt: new Date(shuts).toISOString(), warningSeconds: 300, startSeconds: 240, text: 'open 13:05' },
+  ['division:1']));
+  check('an open start says when the line opens, and for how long',
+    /Line opens at 13:05[\s\S]*Open for 30:00/.test(startRow(open, opens - 252000)));
+  check('...and once open, when it closes', /Line closes at 13:35/.test(startRow(open, opens + 60000)));
+  check('...and after that, that it has closed', /Line closed at 13:35/.test(startRow(open, shuts + 1000)));
+
+  // ALLOCATED: each boat's own start time, given when it joined.
+  const allocated = boat();
+  allocated.receive(message('timer', { kind: 'allocated', warningSeconds: 300, startSeconds: 240,
+    openSeconds: 300, timeLimitSeconds: 5400, text: 'allocated starts' }, ['division:1']));
+  check('an allocated start with no time given for this boat has no start to count to',
+    allocated.startPlan() === null && /No start time given/.test(startRow(allocated, gun)));
+  allocated.allocatedAt = gun + 120000;
+  check('...and with one, counts to this boat\'s own time, open for the period the committee set',
+    allocated.startPlan().startAt === gun + 120000 && allocated.startPlan().closesAt === gun + 420000
+    && allocated.startPlan().timeLimitMs === 5400000);
 
   one.receive(message('flag', { flag: 'postponed', text: 'AP' }, ['division:1']));
   check('an AP postpones it', one.state() === 'postponed');

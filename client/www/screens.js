@@ -41,25 +41,60 @@ export function clock(seconds) {
  * The colours carry the state, which is the same rule the next-leg arrow follows: green once
  * racing, amber inside the warning, red postponed or abandoned.
  */
-export function startRow(dialog, now = Date.now()) {
+export function startRow(dialog, now = Date.now(), client = null) {
   if (!dialog?.live) return '';
+  // OCS FIRST, because it is the one thing the boat has to act on: over the line before it opened
+  // (or after it closed), nothing registered, and it has to go back and cross again.
+  const ocs = client?.ocs && !client.startAt
+    ? `<div class="start ocs"><span class="what">OCS</span><span class="said">${client.ocs.why === 'closed'
+      ? 'Crossed after the line closed &mdash; it did not count.'
+      : 'Over before the line opened &mdash; go back and cross again.'}</span></div>` : '';
   const state = dialog.state(now);
-  if (state === 'none') return '';
   const held = dialog.held();
-  const seconds = dialog.countdown(now);
-  const warning = Number(held?.timer?.body?.warningSeconds ?? 300);
-
   if (state === 'postponed' || state === 'abandoned') {
     return `<div class="start ${state}">
       <span class="what">${state === 'postponed' ? 'AP &mdash; postponed' : 'Abandoned'}</span>
       <span class="said">${esc(held?.flag?.body?.text ?? '')}</span>
     </div>`;
   }
-  const cls = state === 'racing' ? 'racing' : (seconds != null && seconds <= warning ? 'warning' : '');
-  return `<div class="start ${cls}">
-    <span class="what">${state === 'racing' ? 'Started' : 'Start in'}</span>
-    <span class="value">${esc(clock(seconds))}</span>
-    <span class="said">${esc(held?.timer?.body?.text ?? '')}</span>
+  const plan = dialog.startPlan();
+  if (!plan) {
+    return held?.timer?.body?.kind === 'allocated'
+      ? '<div class="start"><span class="what">Allocated start</span><span class="said">No start time given for this boat.</span></div>'
+      : ocs;
+  }
+  const hm = (ms) => hhmmss(ms).slice(0, 5);
+  const inSeconds = (ms) => clock(Math.round((ms - now) / 1000));
+  /*
+   * AN OPEN START SAYS WHEN THE LINE OPENS, FOR HOW LONG, AND THEN WHEN IT CLOSES — the closing
+   * time is the whole of how that start works. A scratch or allocated start is presented the
+   * traditional way, as a countdown to the start, and leaves the closing time out, where sailing
+   * instructions normally bury it.
+   */
+  if (plan.kind === 'open') {
+    if (now < plan.startAt) {
+      const cls = now >= plan.prepAt ? 'prep' : 'warning';
+      return ocs + `<div class="start ${now >= plan.warningAt ? cls : ''}">
+        <span class="what">Line opens at ${esc(hm(plan.startAt))}</span>
+        <span class="value">${esc(inSeconds(plan.startAt))}</span>
+        <span class="said">${plan.closesAt ? `Open for ${esc(clock(Math.round((plan.closesAt - plan.startAt) / 1000)))}` : ''}</span>
+      </div>`;
+    }
+    if (plan.closesAt == null || now <= plan.closesAt) {
+      return ocs + `<div class="start racing">
+        <span class="what">${plan.closesAt ? `Line closes at ${esc(hm(plan.closesAt))}` : 'Line open'}</span>
+        <span class="value">${plan.closesAt ? esc(inSeconds(plan.closesAt)) : ''}</span>
+        <span class="said">The line is open: start when you cross it.</span>
+      </div>`;
+    }
+    return ocs + `<div class="start closed"><span class="what">Line closed at ${esc(hm(plan.closesAt))}</span></div>`;
+  }
+  const racing = now >= plan.startAt;
+  const cls = racing ? 'racing' : now >= plan.prepAt ? 'prep' : now >= plan.warningAt ? 'warning' : '';
+  return ocs + `<div class="start ${cls}">
+    <span class="what">${racing ? `Started ${esc(hm(plan.startAt))}` : `Start ${esc(hm(plan.startAt))} in`}</span>
+    <span class="value">${esc(racing ? '' : inSeconds(plan.startAt))}</span>
+    <span class="said">${esc(plan.kind === 'allocated' ? 'Your allocated start' : held?.timer?.body?.text ?? '')}</span>
   </div>`;
 }
 

@@ -620,6 +620,15 @@ export function run(check) {
   })();
   const imagesIn = (svg) => (svg.match(/<image/g) || []).length;
 
+  // THE START LINE WEARS ITS STATE, with a race behind the run: orange between the preparatory
+  // signal and the start, and green once open.
+  const racing = new RaceClient(snapshot, { startPlan: () => ({
+    kind: 'scratch', startAt: 100000, prepAt: 60000, warningAt: 40000, closesAt: 700000, timeLimitMs: null }) });
+  check('with a race behind it, the overview draws the start line orange from the preparatory signal',
+    overview(racing, { now: 70000 }).includes('stroke="var(--toside)" stroke-width="3.5"'));
+  check('...and green once it is open', overview(racing, { now: 120000 }).includes('stroke="var(--ok)" stroke-width="3.5"'));
+  check('...and red before the preparatory signal', overview(racing, { now: 10000 }).includes('stroke="var(--warn)" stroke-width="3.5"'));
+
   /*
    * A CHANGE OF ORIENTATION GLIDES. A boat sailing east, drawn North up and then switched to COG
    * up: a quarter turn. The boat must not jump when the switch is made, must be on its way

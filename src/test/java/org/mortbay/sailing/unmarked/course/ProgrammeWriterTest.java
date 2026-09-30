@@ -597,6 +597,37 @@ public class ProgrammeWriterTest
     }
 
     @Test
+    public void aRacesStartTypePublicFlagAndTimeLimitAreWrittenAndReadBack() throws Exception
+    {
+        Map<String, org.mortbay.sailing.unmarked.model.Race> races = new LinkedHashMap<>();
+        races.put("r1", new org.mortbay.sailing.unmarked.model.Race("r1", "Race 1",
+            java.time.LocalDate.of(2026, 10, 3), "fleet",
+            Map.of("open", new org.mortbay.sailing.unmarked.model.Race.Division("open", "c", null, null, 90)),
+            null, null, org.mortbay.sailing.unmarked.model.Race.StartType.OPEN, false));
+        races.put("r2", new org.mortbay.sailing.unmarked.model.Race("r2", null,
+            java.time.LocalDate.of(2026, 10, 3), null,
+            Map.of("open", new org.mortbay.sailing.unmarked.model.Race.Division("open", "c", null, null)),
+            null, null));
+        String yaml = ProgrammeWriter.emitRaces(races);
+        assertThat(yaml, containsString("    startType: open\n"));
+        assertThat(yaml, containsString("    public: false\n"));
+        assertThat(yaml, containsString("timeLimitMinutes: 90"));
+        assertThat("a race that says nothing is written saying nothing",
+            yaml.substring(yaml.indexOf("  r2:")), not(containsString("startType")));
+
+        Map<String, org.mortbay.sailing.unmarked.model.Race> back = new com.fasterxml.jackson.databind.json.JsonMapper.Builder(
+            new com.fasterxml.jackson.databind.json.JsonMapper(
+                new com.fasterxml.jackson.dataformat.yaml.YAMLFactory()))
+            .addModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule())
+            .build()
+            .readValue(yaml, Programme.class).races();
+        assertThat(back.get("r1").start(), is(org.mortbay.sailing.unmarked.model.Race.StartType.OPEN));
+        assertThat(back.get("r1").offered(), is(false));
+        assertThat(back.get("r1").divisions().get("open").timeLimitMinutes(), is(90));
+        assertThat(back.get("r2").offered(), is(true));
+    }
+
+    @Test
     public void aHandicapWidthIsWrittenAndReadBack() throws Exception
     {
         // A new field in the programme file has to reach the disk and come back; a field the

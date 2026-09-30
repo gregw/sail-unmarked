@@ -240,6 +240,11 @@ public final class ProgrammeWriter
                 out.append("    format: ").append(scalar(race.format())).append('\n');
             if (race.next() != null && !race.next().isBlank())
                 out.append("    next: ").append(scalar(race.next())).append('\n');
+            // Written only when said, so a race from before either existed reads back unchanged.
+            if (race.startType() != null)
+                out.append("    startType: ").append(race.startType().wire()).append('\n');
+            if (race.isPublic() != null)
+                out.append("    public: ").append(race.isPublic()).append('\n');
             out.append("    divisions:\n");
             if (race.divisions().isEmpty())
             {
@@ -254,6 +259,8 @@ public final class ProgrammeWriter
                     out.append(", variant: ").append(scalar(division.variant()));
                 if (division.start() != null && !division.start().isBlank())
                     out.append(", start: ").append(scalar(division.start()));
+                if (division.timeLimitMinutes() != null)
+                    out.append(", timeLimitMinutes: ").append(division.timeLimitMinutes());
                 out.append("}\n");
             });
             notes(out, race.notes(), 4);

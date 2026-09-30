@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "join",
-  "description": "C→S. A boat takes a course. `revision` is what the boat already holds. `race` and `division` are named where the sailor named them — which is the only thing that can settle which division a boat is in once two of them sail one course; without them the server finds the race from the course and the day (§8.2).",
+  "description": "C\u2192S. A boat takes a course. `revision` is what the boat already holds. `race` and `division` are named where the sailor named them \u2014 which is the only thing that can settle which division a boat is in once two of them sail one course; without them the server finds the race from the course and the day (\u00a78.2).",
   "type": "object",
   "properties": {
     "sailNo": {
@@ -42,6 +42,11 @@
     },
     "division": {
       "type": "string"
+    },
+    "allocatedStart": {
+      "description": "This boat's own start time, for a race with an allocated start \u2014 asked when it joins.",
+      "type": "string",
+      "format": "date-time"
     }
   },
   "required": [

@@ -192,10 +192,13 @@ async function loadProgramme(key) {
     format: r.format ?? null,
     next: r.next ?? null,
     notes: r.notes ?? null,
+    startType: r.startType ?? null,
+    public: r.public ?? null,
     // Copied out rather than referred to, like every other level here: an edit must not
     // reach back into the fetched document, which is what the save is diffed against.
     divisions: Object.fromEntries(Object.entries(r.divisions ?? {}).map(([name, d]) => [name, {
       name, course: d.course ?? null, variant: d.variant ?? null, start: d.start ?? null,
+      timeLimitMinutes: d.timeLimitMinutes ?? null,
     }])),
   }]));
   state.selectedRace = null;
@@ -2859,6 +2862,10 @@ function addRace() {
     format: 'fleet',
     next: null,
     notes: null,
+    startType: 'scratch',
+    // NOT PUBLIC YET: a race is set up before boats are offered it, and ticking public is the
+    // deliberate act that opens it. A race in a file that predates the field is public.
+    public: false,
     // ONE DIVISION, because a race with none can hand no boat a course — and the first thing
     // anybody does is pick the course, which is a division whether or not they use the word.
     divisions: { open: { name: 'open', course: [...state.courses.keys()][0] ?? null, variant: null, start: null } },
@@ -2978,6 +2985,20 @@ function renderRaceFields() {
         <input id="r_format" value="${esc(race.format ?? '')}" placeholder="fleet"></div>
     </div>
     <!--
+      HOW THE RACE STARTS is the race's, every division alike, and it is here rather than on the
+      race screen because a boat needs it on JOINING: an allocated start asks each boat for its
+      own time then. The times themselves are set on the race screen, which publishes them.
+    -->
+    <label class="label" for="r_start">Start</label>
+    <select id="r_start">${[
+      ['scratch', 'Scratch — one start for all; elapsed from it'],
+      ['open', 'Open — the line opens and closes; elapsed from each boat\'s crossing'],
+      ['allocated', 'Allocated — each boat gives its own start time when it joins'],
+    ].map(([value, label]) => `<option value="${value}"${(race.startType ?? 'scratch') === value
+      ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select>
+    <label class="cb"><input type="checkbox" id="r_public"${race.public === false ? '' : ' checked'}>
+      public &mdash; boats are offered this race; untick while it is being set up</label>
+    <!--
       A RACE KNOWS ITS NEXT RACE — that is the model, and it is the whole answer to several races
       in a day: a boat that stops racing one is entered for the next, provided it is the same day
       and has a division of the same name. Which is why "regatta" never has to become a word.
@@ -3036,6 +3057,9 @@ function renderRaceFields() {
           ${variants.map((v) => `<option value="${esc(v.id)}"${v.id === division.variant
             ? ' selected' : ''}>${esc(v.id)}</option>`).join('')}
         </select>
+        <input data-dlimit="${esc(name)}" value="${esc(division.timeLimitMinutes ?? '')}"
+          placeholder="limit" title="time limit, minutes — none if empty" inputmode="numeric"
+          style="flex:0 0 46px; min-width:0">
         <button data-ddelete="${esc(name)}" title="remove this division">&times;</button>
       </div>`;
     }).join('')}
@@ -3059,6 +3083,14 @@ function wireRaceFields(race) {
   text('r_name', 'name');
   text('r_date', 'date');
   text('r_format', 'format');
+  text('r_start', 'startType');
+  el('r_public')?.addEventListener('change', (ev) => {
+    beginEdit();
+    state.races.get(race.id).public = ev.target.checked;
+    endEdit();
+    formsChanged();
+    render();
+  });
   text('r_notes', 'notes');
 
   /*
@@ -3133,6 +3165,19 @@ function wireRaceFields(race) {
     select.addEventListener('change', (ev) => {
       beginEdit();
       state.races.get(race.id).divisions[select.dataset.dvariant].variant = ev.target.value || null;
+      endEdit();
+      formsChanged();
+      render();
+    });
+  }
+  // THE TIME LIMIT, in minutes from each boat's elapsed start; the finish closes to a boat after
+  // it. Empty is no limit.
+  for (const input of el('raceForm').querySelectorAll('[data-dlimit]')) {
+    input.addEventListener('change', (ev) => {
+      beginEdit();
+      const minutes = Math.round(Number(ev.target.value));
+      state.races.get(race.id).divisions[input.dataset.dlimit].timeLimitMinutes =
+        Number.isFinite(minutes) && minutes > 0 ? minutes : null;
       endEdit();
       formsChanged();
       render();
@@ -4553,8 +4598,11 @@ function racesPayload() {
       format: race.format ?? null,
       next: race.next ?? null,
       notes: race.notes ?? null,
+      startType: race.startType ?? null,
+      public: race.public ?? null,
       divisions: Object.fromEntries(Object.entries(race.divisions ?? {}).map(([name, d]) => [
-        name, { course: d.course ?? null, variant: d.variant ?? null, start: d.start ?? null },
+        name, { course: d.course ?? null, variant: d.variant ?? null, start: d.start ?? null,
+          timeLimitMinutes: d.timeLimitMinutes ?? null },
       ])),
     };
   }
@@ -4621,8 +4669,11 @@ function racesFrom(payload) {
     format: r.format ?? null,
     next: r.next ?? null,
     notes: r.notes ?? null,
+    startType: r.startType ?? null,
+    public: r.public ?? null,
     divisions: Object.fromEntries(Object.entries(r.divisions ?? {}).map(([name, d]) => [name, {
       name, course: d.course ?? null, variant: d.variant ?? null, start: d.start ?? null,
+      timeLimitMinutes: d.timeLimitMinutes ?? null,
     }])),
   }]));
 }

@@ -1,12 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "timer",
-  "description": "S→C. An instant and two durations, and nothing else. EVERY COUNTDOWN IS RUN BY THE BOAT against the boat's own clock; the server sends this once and does not tick (§8.4).",
+  "description": "S\u2192C. A division's start: how it starts (`kind`), when, and for how long its line is open \u2014 with the warning and preparatory signals before it. EVERY COUNTDOWN IS RUN BY THE BOAT against the boat's own clock; the server sends this once and does not tick (\u00a78.4).",
   "type": "object",
   "properties": {
     "startAt": {
       "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "description": "The start (scratch) or the moment the line opens (open). Absent for an allocated start, where each boat has its own."
     },
     "warningSeconds": {
       "type": "integer",
@@ -24,10 +25,28 @@
     },
     "text": {
       "type": "string"
+    },
+    "kind": {
+      "description": "scratch (one start for all, elapsed from it), open (a line open between two times, elapsed from each boat's crossing) or allocated (each boat's own start time, given when it joined). Absent means scratch.",
+      "type": "string"
+    },
+    "closesAt": {
+      "description": "When an open start's line closes.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "openSeconds": {
+      "description": "How long a scratch or allocated start's line stays open after the start.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "timeLimitSeconds": {
+      "description": "The division's time limit, from the instant a boat's elapsed time runs from; its finish line is closed to it after that.",
+      "type": "integer",
+      "minimum": 0
     }
   },
   "required": [
-    "startAt",
     "text"
   ]
 }

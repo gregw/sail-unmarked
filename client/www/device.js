@@ -78,6 +78,18 @@ export const NO_RACE = '__course';
  */
 export const REMEMBERED = 'unmarked.join';
 
+/**
+ * An allocated start time, typed as HH:MM, as today's instant on this device's clock — or null
+ * when nothing sensible was given. Today because a race is joined on its day.
+ */
+export function allocatedToday(hhmm) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm ?? '').trim());
+  if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return null;
+  const at = new Date();
+  at.setHours(Number(m[1]), Number(m[2]), 0, 0);
+  return at.getTime();
+}
+
 export function recall() {
   try {
     const held = JSON.parse(sessionStorage.getItem(REMEMBERED) ?? '{}');
@@ -415,7 +427,7 @@ export class Device {
       basemapInk: this.basemapInk, backgroundLight: this.backgroundLight,
     });
 
-    this.host.innerHTML = startRow(this.dialog, now)
+    this.host.innerHTML = startRow(this.dialog, now, this.client)
       + screen
       + this.bottomRow()
       + (alert && !approaching ? alertModal(alert) : '');
@@ -794,7 +806,8 @@ export class Device {
      */
     const today = Device.today();
     const all = (this.races?.[`${club}/${chosenSeries}`] ?? []);
-    const racesToday = all.filter((race) => race.date === today);
+    // Today's races that are PUBLIC: one still being set up is not offered (`Race.offered`).
+    const racesToday = all.filter((race) => race.date === today && race.public !== false);
     /*
      * ONE RACE TODAY IS ONE ANSWER, and `NO_RACE` does not make it two.
      *
@@ -846,8 +859,12 @@ export class Device {
     // race behind it is practice or a record attempt — never a race there is none of.
     if (!courseOnly) this.boat.mode = 'RACE';
     else if (this.boat.mode === 'RACE') this.boat.mode = 'ANONYMOUS';
+    // AN ALLOCATED START ASKS THIS BOAT FOR ITS OWN START TIME, here, on joining: it is the time
+    // its whole sequence and its elapsed time hang off (`Race.StartType`).
+    const allocating = !courseOnly && chosenRace?.startType === 'allocated';
+    const allocatedAt = allocating ? allocatedToday(this.boat.allocated) : null;
 
-    const ready = !!(club && chosenSeries && !blocked
+    const ready = !!(club && chosenSeries && !blocked && (!allocating || allocatedAt != null)
       && (courseOnly ? (chosenCourse && chosenVariant) : (chosenRace && chosenDivision
         && racePublished)));
 
@@ -940,6 +957,9 @@ export class Device {
             ${chosenVariant ? `<p class="muted mono" style="font-size:11px; margin-top:6px">
               revision ${esc(chosenVariant.revision)} &middot; ${chosenVariant.steps ?? '?'} marks</p>` : ''}`}
 
+          ${allocating ? `<h2>Your start</h2>
+          <label for="j_alloc">Your allocated start time</label>
+          <input id="j_alloc" type="time" value="${esc(this.boat.allocated ?? '')}">` : ''}
           <h2>How you are sailing</h2>
           <!--
             A RACE IS RACED. Joining one leaves nothing to choose about how the run counts — it
@@ -997,7 +1017,8 @@ export class Device {
                 : !chosenSeries ? 'Choose a series'
                   : !courseOnly ? (!chosenRace ? 'Choose a race'
                     : !chosenDivision ? 'Choose a division'
-                      : 'That division has no published course')
+                      : !racePublished ? 'That division has no published course'
+                        : 'Give your start time')
                     : !chosenCourse ? 'Choose a course' : 'Choose a variant')}</button>`}
           ${this.hooks.status?.() ?? ''}`}
         ${this.message ? `<p class="warn" style="font-size:12.5px; margin-top:10px">${esc(this.message)}</p>` : ''}
@@ -1013,6 +1034,9 @@ export class Device {
     keep('j_name', 'name', true);
     keep('j_tcf', 'tcf');
     keep('j_length', 'lengthM', true);
+    keep('j_alloc', 'allocated');
+    // Redrawn when the time is set, not as it is typed, so the button can say it is ready.
+    this.el('j_alloc')?.addEventListener('change', () => this.renderJoin());
     keep('j_mode', 'mode');
 
     // The drill resets everything BELOW the level that changed. Keeping a course id chosen
@@ -1056,7 +1080,7 @@ export class Device {
         this.join(club, chosenSeries, chosenCourse.course, chosenVariant.variant);
       } else {
         this.join(club, chosenSeries, chosenDivision.course, chosenDivision.variant
-          ?? racePublished.variant, { race: chosenRace.id, division: chosenDivision.name });
+          ?? racePublished.variant, { race: chosenRace.id, division: chosenDivision.name, allocatedAt });
       }
     });
 
@@ -1087,6 +1111,7 @@ export class Device {
       // older client does, and §5 rule 1 is why that goes on working.
       ...(entered.race ? { race: entered.race } : {}),
       ...(entered.division ? { division: entered.division } : {}),
+      ...(entered.allocatedAt != null ? { allocatedStart: new Date(entered.allocatedAt).toISOString() } : {}),
     };
     try {
       /*
@@ -1096,6 +1121,7 @@ export class Device {
        * `fixSeconds` is how the boat is told.
        */
       const joined = await this.dialog.join(request);
+      this.dialog.allocatedAt = entered.allocatedAt ?? null;
       this.snapshot = joined.course;
       this.dialog.revision = joined.revision ?? this.snapshot?.revision ?? null;
       this.start();
@@ -1150,6 +1176,9 @@ export class Device {
     const sailed = personalise(this.snapshot, Number(this.boat.tcf) > 0 ? Number(this.boat.tcf) : null);
     this.client = new RaceClient(sailed, {
       boat: { ...this.boat }, joinMode: this.boat.mode,
+      // THE RACE'S START, from what the committee published and this boat's allocated time; none
+      // with no race behind the run, whose start line is always open.
+      startPlan: () => (this.dialog.live ? this.dialog.startPlan() : null),
     });
     this.plotView = new PlotView();
     this.courseTurn = new Turner();

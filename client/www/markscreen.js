@@ -1016,6 +1016,7 @@ export function plot(state, options = {}) {
   const art = crossingArt(prepared, state.watched.required, {
     real,
     to, scale, boat, focused: true, missed: state.state === 'missed', reach,
+    colour: LINE_STATE_COLOUR[state.lineState],
   });
   out += art.out;
   const seatPx = art.seatPx;
@@ -1223,6 +1224,8 @@ export function crossingArt(prepared, required, options) {
   const real = options.real ?? REAL;
   const lineW = atScale(real.lineM, scale, real.linePx);
   const fade = focused ? 0.9 : 0.3;
+  // The line's own colour, unless its state says otherwise: see `LINE_STATE_COLOUR`.
+  const ink = options.colour ?? 'var(--line)';
 
   // BUTT ENDS, not round. A round cap extends a stroke by half its width past the point it was
   // drawn to, which was invisible at three pixels and is half a boat-length once the line is
@@ -1230,7 +1233,7 @@ export function crossingArt(prepared, required, options) {
   // line stops. A line that looks longer than it can be crossed is the one lie this must not
   // tell.
   let out = `<line x1="${port.x.toFixed(1)}" y1="${port.y.toFixed(1)}" x2="${starboard.x.toFixed(1)}"`
-    + ` y2="${starboard.y.toFixed(1)}" stroke="var(--line)" stroke-width="${lineW.toFixed(1)}"`
+    + ` y2="${starboard.y.toFixed(1)}" stroke="${ink}" stroke-width="${lineW.toFixed(1)}"`
     + ` stroke-linecap="butt" opacity="${fade}"/>`;
 
   for (const [end, infinite, direction] of [
@@ -1245,7 +1248,7 @@ export function crossingArt(prepared, required, options) {
       const away = { x: end.x + screenUnit.x * reach * direction, y: end.y + screenUnit.y * reach * direction };
       const dash = Math.max(9, lineW * 1.6);
       out += `<line x1="${end.x.toFixed(1)}" y1="${end.y.toFixed(1)}" x2="${away.x.toFixed(1)}"`
-        + ` y2="${away.y.toFixed(1)}" stroke="var(--line)" stroke-width="${(lineW * 0.85).toFixed(1)}"`
+        + ` y2="${away.y.toFixed(1)}" stroke="${ink}" stroke-width="${(lineW * 0.85).toFixed(1)}"`
         + ` stroke-dasharray="${dash.toFixed(0)},${(dash * 0.55).toFixed(0)}" opacity="${(fade * 0.78).toFixed(2)}"/>`;
     } else {
       out += `<circle cx="${end.x.toFixed(1)}" cy="${end.y.toFixed(1)}" r="${missed ? 6.5 : 3}"`
@@ -1533,6 +1536,11 @@ export function hhmmss(time) {
  * latch defensible, and a result nobody can interrogate is a result nobody will accept.
  */
 export function statusLine(state) {
+  // OCS comes first: nothing registered, and the boat has to go back and cross again.
+  if (state.ocs === 'early') return 'OCS — over before the line opened. Go back and cross again.';
+  if (state.ocs === 'closed') return 'Crossed after the line closed. It did not count.';
+  if (state.lineState === 'closed' || state.lineState === 'prep') return 'Line not open yet — a crossing now will not count.';
+  if (state.lineState === 'shut') return 'This line is closed — a crossing now will not count.';
   if (state.state === 'crossed' && state.latched)
     return `Crossed ${hhmmss(state.latched.time)}. Required direction. Latched.`;
   if (state.state === 'missed') {
@@ -1811,6 +1819,18 @@ export const BASEMAP_INK = 0.32;
  * The one thing that stays faint is the basemap (`BASEMAP_INK`), because that is a background
  * and is the thing everything else has to be read against.
  */
+/**
+ * The colour a line's state is drawn in, on both screens: the start before the preparatory signal
+ * and after it has closed, and a finish closed by the time limit, red; the start between the
+ * preparatory signal and its opening, orange; the start while it is open, green.
+ */
+export const LINE_STATE_COLOUR = {
+  closed: 'var(--warn)',
+  shut: 'var(--warn)',
+  prep: 'var(--toside)',
+  open: 'var(--ok)',
+};
+
 export const OVERVIEW_INK = {
   /** An infinite end's run-on: a bearing, not more of the line, so thin and faint. */
   infinite: 0.45,
@@ -2087,6 +2107,10 @@ export function overview(client, options = {}) {
     // A line may carry several crossings (the leeward line is start, mark 2 and finish), and it
     // counts as live while ANY of them is: it is the same piece of water either way.
     const live = uses.some(({ step }) => client.isLive(step.index));
+    // A LINE WHOSE STATE MATTERS WEARS IT: the start line red until the preparatory signal,
+    // orange from it, green while open; a finish closed by the time limit, red (`lineState`).
+    const stated = uses.map(({ step }) => client.lineState?.(step.index, options.now ?? Date.now()))
+      .find(Boolean);
     // AN INFINITE END RUNS ON, thin and faint, to the edge of the picture: the line is real out
     // there — a boat crossing it a mile off has crossed it — but nobody chose where it goes, so
     // it is drawn as the bearing it is rather than as more of the line. The editor's notation.
@@ -2101,8 +2125,8 @@ export function overview(client, options = {}) {
     if (prepared.portInfinite) out += faint(a.x, a.y, a.x - ux * run, a.y - uy * run);
     if (prepared.starboardInfinite) out += faint(b.x, b.y, b.x + ux * run, b.y + uy * run);
     out += `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}"`
-      + ` stroke="${live ? ROLE_COLOUR.start : 'var(--line)'}" stroke-width="${live ? 3.5 : 2}"`
-      + ` opacity="${live ? 1 : OVERVIEW_INK.ahead}"/>`;
+      + ` stroke="${LINE_STATE_COLOUR[stated] ?? (live ? ROLE_COLOUR.start : 'var(--line)')}"`
+      + ` stroke-width="${live || stated ? 3.5 : 2}" opacity="${live || stated ? 1 : OVERVIEW_INK.ahead}"/>`;
   }
 
   const steps = client.steps.map((step) => ({

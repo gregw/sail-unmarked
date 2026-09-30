@@ -57,6 +57,9 @@ export const CANNED = {
 /** The types that are STATE rather than events, and therefore hold a standing (§9.4). */
 const STANDING = new Set(['course', 'timer', 'window', 'flag']);
 
+/** How long a scratch or allocated start's line stays open when the race screen did not say. */
+export const DEFAULT_OPEN_SECONDS = 600;
+
 /**
  * The types whose "did they see it?" is a real question, and are therefore acknowledged (§8.4).
  *
@@ -92,6 +95,8 @@ export class Dialog {
     this.race = null;
     this.raceName = null;
     this.tags = [];
+    // This boat's own start time, for a race with an allocated start: given on joining.
+    this.allocatedAt = null;
     this.fixSeconds = null;      // absent means "report no fixes" — §8.2, and it is the default
     this.poll = 1000;
     this.features = [];
@@ -475,11 +480,53 @@ export class Dialog {
   }
 
   startAt() {
+    const plan = this.startPlan();
+    if (plan) return plan.startAt;
     const held = this.held();
-    const at = held?.timer?.body?.startAt ?? held?.window?.body?.opensAt ?? null;
+    const at = held?.window?.body?.opensAt ?? null;
     if (!at) return null;
     const parsed = Date.parse(at);
     return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  /**
+   * THIS BOAT'S START, worked out from what was published and — for an allocated start — the
+   * time the boat gave when it joined. Every start line is OPEN for a period and a crossing
+   * counts only while it is; the kinds differ in what the boat is shown and in what its elapsed
+   * time runs from (`Race.StartType`):
+   *
+   *   `scratch`    one start for everybody; the line opens at it and stays open `openSeconds`
+   *                (ten minutes unless the race screen said); elapsed runs from the start.
+   *   `open`       the line opens at `startAt` and closes at `closesAt`; elapsed runs from the
+   *                boat's own crossing.
+   *   `allocated`  this boat's own start time, with the scratch start's open period after it;
+   *                elapsed runs from that time.
+   *
+   * The warning and preparatory signals fall `warningSeconds` and `startSeconds` before the line
+   * opens, in every kind. Null while there is nothing to start to — no timer yet, a postponement,
+   * an abandonment, or an allocated start this boat has not given a time for.
+   */
+  startPlan() {
+    const held = this.held();
+    const body = held?.timer?.body;
+    if (!body || held?.flag?.body?.flag === 'postponed' || held?.flag?.body?.flag === 'abandoned') {
+      return null;
+    }
+    const kind = ['open', 'allocated'].includes(body.kind) ? body.kind : 'scratch';
+    const startAt = kind === 'allocated' ? this.allocatedAt ?? null : Date.parse(body.startAt ?? '');
+    if (!Number.isFinite(startAt)) return null;
+    const closing = Date.parse(body.closesAt ?? '');
+    const closesAt = kind === 'open'
+      ? (Number.isFinite(closing) ? closing : null)
+      : startAt + (Number(body.openSeconds ?? DEFAULT_OPEN_SECONDS)) * 1000;
+    return {
+      kind,
+      startAt,
+      closesAt,
+      warningAt: startAt - Number(body.warningSeconds ?? 300) * 1000,
+      prepAt: startAt - Number(body.startSeconds ?? 240) * 1000,
+      timeLimitMs: body.timeLimitSeconds > 0 ? body.timeLimitSeconds * 1000 : null,
+    };
   }
 
   /**

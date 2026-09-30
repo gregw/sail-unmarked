@@ -112,6 +112,28 @@ class DialogTest
     }
 
     @Test
+    void aRaceSaysHowItStartsAndWhetherBoatsMaySeeIt()
+    {
+        // A file from before either field existed says nothing, and means what it meant: a
+        // scratch start, and a race boats may join.
+        Race old = new Race("r1", null, LocalDate.of(2026, 9, 17), "fleet", Map.of(), null, null);
+        assertEquals(Race.StartType.SCRATCH, old.start());
+        assertTrue(old.offered(), "a race that says nothing about being public is joinable");
+
+        Race setUp = new Race("r2", null, LocalDate.of(2026, 9, 17), "fleet", Map.of(), null, null,
+            Race.StartType.ALLOCATED, false);
+        assertEquals(Race.StartType.ALLOCATED, setUp.start());
+        assertFalse(setUp.offered(), "a race being set up is not offered to boats");
+        assertEquals("allocated", Race.StartType.ALLOCATED.wire());
+        assertEquals(Race.StartType.OPEN, Race.StartType.parse(" Open "));
+
+        Race limited = new Race("r3", null, LocalDate.of(2026, 9, 17), "fleet",
+            Map.of("open", new Race.Division("open", "c", null, null, 0)), null, null);
+        assertTrue(limited.problems(Map.of()).stream().anyMatch(p -> p.contains("time limit")),
+            "a time limit of nothing is reported");
+    }
+
+    @Test
     void theDivisionTagIsSpeltInOnePlace()
     {
         // The map key is the division's plain id and the tag is derived from it, because a YAML

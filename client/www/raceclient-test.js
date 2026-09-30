@@ -342,6 +342,57 @@ export function run(check) {
     practising.courseList().find((row) => row.index === 2).next
     && practising.courseList().filter((row) => row.goto).length === practising.steps.length - 1);
 
+  /* ------------------------------------------------- when the start line is open */
+
+  /*
+   * A LINE THAT IS NOT OPEN DOES NOT REGISTER A CROSSING. The harness clock starts at zero and
+   * each fix is two seconds; a start at 400 s puts its preparatory signal at 160 s.
+   */
+  const scratchPlan = (startAt, extra = {}) => () => ({
+    kind: 'scratch', startAt, prepAt: startAt - 240000, warningAt: startAt - 300000,
+    closesAt: startAt + 600000, timeLimitMs: null, ...extra,
+  });
+  const early = fresh(WINDWARD_LEEWARD, { startPlan: scratchPlan(400000) });
+  check('before the preparatory signal the start line is red — closed',
+    early.lineState(0, 0) === 'closed' && early.startLineAt(0) === 'closed');
+  check('...orange from the preparatory signal', early.startLineAt(400000 - 60000) === 'prep');
+  check('...green while it is open', early.startLineAt(400000 + 1000) === 'open');
+  check('...and red again once it has closed', early.startLineAt(400000 + 700000) === 'shut');
+  sail(early, { e: 0, n: -120 }, { e: 0, n: 60 });
+  check('a boat over before the start has crossed nothing that counts: it is OCS',
+    early.crossings.length === 0 && early.ocs?.why === 'early' && !early.startAt);
+  check('...and the start line is still the live step, to be crossed again', early.at === 0 && early.isLive(0));
+  // Back below the line, wait for the gun, and cross again.
+  sail(early, { e: 0, n: 60 }, { e: 0, n: -60 });
+  while ((CLOCK.get(early) ?? 0) < 405000) sail(early, { e: 0, n: -60 }, { e: 0, n: -60 }, { stepM: 1 });
+  sail(early, { e: 0, n: -60 }, { e: 0, n: 60 });
+  check('crossing again once the line is open starts the run', early.crossings.length === 1 && !early.ocs);
+  check('...and a SCRATCH start times it from the gun, not from the boat\'s late crossing',
+    early.startAt.getTime() === 400000 && early.crossings[0].time.getTime() > 400000);
+
+  const open = fresh(WINDWARD_LEEWARD, { startPlan: () => ({
+    kind: 'open', startAt: 10000, prepAt: 5000, warningAt: 0, closesAt: 400000, timeLimitMs: null }) });
+  sail(open, { e: 0, n: -120 }, { e: 0, n: 60 });
+  check('an OPEN start times each boat from its own crossing',
+    open.crossings.length === 1 && open.startAt.getTime() === open.crossings[0].time.getTime());
+
+  const late = fresh(WINDWARD_LEEWARD, { startPlan: () => ({
+    kind: 'open', startAt: 0, prepAt: 0, warningAt: 0, closesAt: 5000, timeLimitMs: null }) });
+  sail(late, { e: 0, n: -120 }, { e: 0, n: 60 });
+  check('a boat that crosses after the line has closed has not started either',
+    late.crossings.length === 0 && late.ocs?.why === 'closed');
+
+  // THE FINISH CLOSES WHEN THE TIME LIMIT HAS RUN. A two-minute limit, and a course that takes
+  // longer than that to sail.
+  const limited = fresh(WINDWARD_LEEWARD, { startPlan: () => ({
+    kind: 'open', startAt: 0, prepAt: 0, warningAt: 0, closesAt: 10 ** 9, timeLimitMs: 120000 }) });
+  sail(limited, { e: 0, n: -120 }, { e: 0, n: 420 });
+  sail(limited, { e: 0, n: 420 }, { e: 0, n: -120 });
+  check('a finish crossed after the division\'s time limit does not count',
+    !limited.finished && limited.at === 2 && limited.rejects.some((r) => /time limit/.test(r.reason ?? '')));
+  check('...and the finish line is shown closed', limited.lineState(2, CLOCK.get(limited)) === 'shut');
+  check('with no race behind it, the start line is always open', fresh(WINDWARD_LEEWARD).startLineAt(0) === 'open');
+
   /* ------------------------------------------------- the dwell after a crossing */
 
   /*
