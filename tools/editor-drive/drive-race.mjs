@@ -125,7 +125,7 @@ ok('...and there is no time in the reply, because the server is not a clock',
 got = await speak(null, {
   type: 'join',
   body: {
-    sailNo: 'AUS 1', name: 'Bombora', club: programme.club, series: programme.series,
+    sailNo: 'aus 1', name: 'Bombora', club: programme.club, series: programme.series,
     course: taken.course, variant: taken.variant, tcf: 1.02,
   },
 });
@@ -217,7 +217,8 @@ await speak(SESSION, {
   },
 });
 let table = await conduct();
-let mine = table.boats.find((b) => b.sailNo === 'AUS 1');
+let mine = table.boats.find((b) => b.sailNo === 'AUS1');
+ok('a sail number typed "aus 1" is the boat AUS1 — upper case, letters and digits', !!mine);
 ok('a fix puts the boat on the committee\'s chart', Math.abs(mine.position.latitude - mid.latitude) < 1e-9);
 ok('...with an age, because a screen that shows an old position quietly is the one failure a '
   + 'committee cannot see', mine.fixAgeMs != null);
@@ -252,7 +253,7 @@ await speak(SESSION, {
   },
 });
 table = await conduct();
-mine = table.boats.find((b) => b.sailNo === 'AUS 1');
+mine = table.boats.find((b) => b.sailNo === 'AUS1');
 ok('a crossing moves the boat along the course', mine.step === 1 && mine.crossings === 2);
 // ELAPSED IS THE DIFFERENCE BETWEEN TWO OF THE BOAT'S OWN INSTANTS, which is the whole reason a
 // clock offset costs nothing: the quantity racing is decided on never leaves one clock.
@@ -291,11 +292,11 @@ const course = only(got, 'course');
 ok('a course change reaches the boat whole, not as a reference', !!course?.body?.course?.steps);
 
 table = await conduct();
-mine = table.boats.find((b) => b.sailNo === 'AUS 1');
+mine = table.boats.find((b) => b.sailNo === 'AUS1');
 ok('...and the committee can see it has NOT been acknowledged yet', mine.seen.course === false);
 await speak(SESSION, { type: 'ack', body: { session: SESSION, ackOf: course.id, what: 'course' } });
 table = await conduct();
-mine = table.boats.find((b) => b.sailNo === 'AUS 1');
+mine = table.boats.find((b) => b.sailNo === 'AUS1');
 // THIS IS THE WHOLE REASON ACKNOWLEDGEMENTS ARE IN THE PROTOCOL (§12.4): the question a
 // committee genuinely has before starting is "have all boats seen the new course?", and without
 // somewhere to read the answer the acks are bookkeeping nobody looks at.
@@ -313,9 +314,9 @@ const record = {
   course: taken.course,
   courseRevision: joined.body.revision,
   join: 'RACE',
-  boatId: 'AUS 1',
+  boatId: 'AUS1',
   boatName: 'Bombora',
-  sailNumber: 'AUS 1',
+  sailNumber: 'AUS1',
   tcf: 1.02,
   startTime: crossedAt,
   finishTime: secondAt,
@@ -352,8 +353,8 @@ const filedUnder = new Date(record.startTime).toLocaleDateString('en-CA', { time
 const filed = await json(`/api/records/${programme.club}/${taken.course}/${filedUnder}`)
   .catch(() => null);
 ok('a record sent over the dialog is FILED, not merely received',
-  Array.isArray(filed) && filed.some((r) => r.sailNumber === 'AUS 1'));
-const held = (filed ?? []).find((r) => r.sailNumber === 'AUS 1');
+  Array.isArray(filed) && filed.some((r) => r.sailNumber === 'AUS1'));
+const held = (filed ?? []).find((r) => r.sailNumber === 'AUS1');
 ok('...naming the revision it was sailed on, not just the course',
   held?.courseRevision === joined.body.revision);
 ok('...and carrying what was REFUSED as well as what counted, which is the half a protest '
@@ -369,7 +370,7 @@ got = await speak(null,
   {
     type: 'join',
     body: {
-      sailNo: 'AUS 2', name: 'Late', club: programme.club, series: programme.series,
+      sailNo: 'AUS2', name: 'Late', club: programme.club, series: programme.series,
       course: taken.course, variant: taken.variant,
     },
   });
@@ -402,7 +403,7 @@ ok('a boat that stops racing is entered for the next race of the day, unasked',
 ok('...carrying its division across, and told the new course',
   (next.body.tags ?? []).includes('division:open') && !!next.body.course?.steps);
 const second = await json(`/api/conduct/${KEY}/drive-race-2`);
-ok('...and it is on the second race\'s fleet list', second.boats.some((b) => b.sailNo === 'AUS 1'));
+ok('...and it is on the second race\'s fleet list', second.boats.some((b) => b.sailNo === 'AUS1'));
 ok('...with that race\'s channel starting clean, since a channel belongs to its race',
   (second.channel ?? []).length <= 2);
 
@@ -411,11 +412,11 @@ ok('...with that race\'s channel starting clean, since a channel belongs to its 
 await post(`/api/conduct/${KEY}/drive-race-2`, {
   v: 1,
   type: 'outcome',
-  body: { boatId: 'AUS 1', outcome: 'dnf', reason: 'did not finish', text: 'AUS 1: DNF' },
+  body: { boatId: 'AUS1', outcome: 'dnf', reason: 'did not finish', text: 'AUS1: DNF' },
 });
 const after = await json(`/api/conduct/${KEY}/drive-race-2`);
 ok('a committee can record a DNF, which the software never infers',
-  after.boats.find((b) => b.sailNo === 'AUS 1')?.outcome === 'dnf');
+  after.boats.find((b) => b.sailNo === 'AUS1')?.outcome === 'dnf');
 
 /* ------------------------------------- a join with no race behind it gets NO channel */
 
@@ -437,7 +438,7 @@ if (other) {
     got = await speak(null, { type: 'hello', body: { versions: [1] } }, {
       type: 'join',
       body: {
-        sailNo: 'AUS 3', name: 'Tuesday', club: programme.club, series: programme.series,
+        sailNo: 'AUS3', name: 'Tuesday', club: programme.club, series: programme.series,
         course: other, variant: soleVariantOf(saved.courses[other]),
       },
     });

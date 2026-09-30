@@ -14,7 +14,8 @@
  */
 
 import { CANNED, ladder } from './dialog.js';
-import { esc, hhmmss, LINE_STATE_COLOUR } from './markscreen.js';
+import { BASEMAP_INK, basemapArt, esc, hhmmss, LINE_STATE_COLOUR } from './markscreen.js';
+import { toLocal } from './crossing.js';
 
 /** mm:ss, or -mm:ss once a start has gone. A countdown is the one clock read as a duration. */
 export function clock(seconds) {
@@ -276,6 +277,10 @@ export const WAIT_ZONE_M = 100;
  * to wait in, the boat, and the word to wait. North up and fitted to the zone and the boat —
  * the course overview needs a course, and there is none until it is published.
  *
+ * <b>Over a chart</b>, the course screen's own when one is chosen and the plain chart when not:
+ * a circle on an empty sea says nothing about where to go, and the land and the harbour under it
+ * are what say where it is. Tiles as on the overview, so a dead network costs the background only.
+ *
  * @param waiting the `joined` body's `waiting`: `text`, and `startLine` with its two ends
  * @param fix the latest fix, or null
  */
@@ -286,11 +291,12 @@ export function waitingPanel(waiting, fix = null, options = {}) {
       <p>${esc(waiting?.text ?? 'Wait for the course details.')}</p>
     </div>`;
   if (!line?.port || !line?.starboard) return text;
-  const lat0 = (line.port.latitude + line.starboard.latitude) / 2;
-  const lon0 = (line.port.longitude + line.starboard.longitude) / 2;
-  const cos = Math.cos(lat0 * Math.PI / 180);
-  // Metres east and north of the line's middle: a few hundred metres is flat enough.
-  const local = (p) => ({ x: (p.longitude - lon0) * 111320 * cos, y: (p.latitude - lat0) * 110574 });
+  const origin = {
+    latitude: (line.port.latitude + line.starboard.latitude) / 2,
+    longitude: (line.port.longitude + line.starboard.longitude) / 2,
+  };
+  // Metres east and north of the line's middle, the way the rest of the boat measures.
+  const local = (p) => toLocal(origin, p);
   const a = local(line.port);
   const b = local(line.starboard);
   const radius = Math.hypot(a.x - b.x, a.y - b.y) / 2 + WAIT_ZONE_M;
@@ -306,9 +312,13 @@ export function waitingPanel(waiting, fix = null, options = {}) {
   // does not resolve.
   const colour = LINE_STATE_COLOUR.closed;
   const at = boat ? px(boat) : null;
+  const basemap = options.basemap && options.basemap !== 'none' ? options.basemap : 'chart';
+  const chart = basemapArt(basemap, { x: 0, y: 0 }, origin, scale, size, size, 0,
+    options.basemapInk ?? BASEMAP_INK);
   const away = boat ? Math.round(Math.hypot(boat.x, boat.y)) : null;
   return `${text}
     <svg class="waitzone" viewBox="0 0 ${size} ${size}" width="100%" style="max-height:60vh">
+      ${chart}
       <circle cx="${size / 2}" cy="${size / 2}" r="${(radius * scale).toFixed(1)}"
         fill="rgba(80,160,255,0.12)" stroke="#50a0ff" stroke-width="2" stroke-dasharray="8 6"/>
       <line x1="${pa.x.toFixed(1)}" y1="${pa.y.toFixed(1)}" x2="${pb.x.toFixed(1)}" y2="${pb.y.toFixed(1)}"

@@ -107,4 +107,14 @@ public class IdsTest
             assertThat(raw + " -> '" + domain + "'", domain.isEmpty() || Ids.domain(domain), is(true));
         }
     }
+
+    @Test
+    public void aSailNumberIsKeptAsTheClubsOtherSoftwareKeepsIt()
+    {
+        assertThat(Ids.sailNumber("aus 1234"), is("AUS1234"));
+        assertThat(Ids.sailNumber("AUS-1234"), is("AUS1234"));
+        assertThat(Ids.sailNumber(" myc 7 "), is("MYC7"));
+        assertThat("nothing left is no sail number, not an empty one", Ids.sailNumber(" - "), nullValue());
+        assertThat(Ids.sailNumber(null), nullValue());
+    }
 }

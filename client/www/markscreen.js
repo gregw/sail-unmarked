@@ -88,8 +88,9 @@ export const VIEWS = {
  * the Mark screen has nothing to zoom — it is fitted to one line and holds still on purpose —
  * and nothing to draw behind it, being offline-first by a rule that is not up for trading.
  *
- * <b>The slider is in from the edge and the selector is at it</b>: a finger dragging a slider at
- * the edge of a touch screen slides off it, onto the bezel or into the system's edge gesture.
+ * <b>The slider is in from the edge, then the background, then which way is up</b>: a finger
+ * dragging a slider at the edge of a touch screen slides off it, onto the bezel or into the
+ * system's edge gesture, and a selector at the edge is only tapped.
  *
  * <b>Fit says what it does and is lit while the picture is the screen's own.</b> A reset
  * control that looks the same whether or not there is anything to reset leaves somebody
@@ -110,10 +111,10 @@ export const chartBar = (options = {}) => {
       value="${Math.round(100 * (options.basemapInk ?? BASEMAP_INK))}"
       title="How strongly the chart is drawn: from not at all to full brightness"
       aria-label="Chart brightness">`}
-    ${orientationBar(options.orientation ?? 'north')}
     <select id="o_basemap" title="What is drawn behind the course">${Object.entries(BASEMAPS)
       .map(([key, spec]) => `<option value="${key}"${key === (options.basemap ?? 'none') ? ' selected' : ''}>${esc(spec.label)}</option>`)
       .join('')}</select>
+    ${orientationBar(options.orientation ?? 'north')}
   </div>`;
 };
 
@@ -1154,12 +1155,15 @@ export function plot(state, options = {}) {
       : `<circle cx="${hit.x.toFixed(1)}" cy="${hit.y.toFixed(1)}" r="6.5" fill="none" stroke="${colour}" stroke-width="2"/>`;
   }
 
-  // THE FIXES, coloured by the side they were resolved to and hollow past an end. The
-  // band's zero — neither side yet — is drawn muted rather than omitted, because a run of
-  // fixes that resolved to NOTHING is a thing worth seeing: it is a boat sitting on a line.
+  // THE FIXES, in the course screen's track colour while the boat is approaching — so the
+  // track runs on unchanged from one screen to the other — and hollow past an end. A dot
+  // changes colour only when it says something: on the far side with the line not crossed,
+  // which is the wrong side (orange), or on the far side once it has been crossed (green).
+  const approachSide = state.watched?.required === 'reverse' ? 1 : -1;
   for (const fix of state.trail ?? []) {
     const px = to(fix);
-    const colour = fix.side === 0 ? 'var(--muted)' : fix.side > 0 ? 'var(--toside)' : 'var(--fromside)';
+    const colour = fix.side === 0 || fix.side === approachSide ? OVERVIEW_INK.trailColour
+      : state.latched ? 'var(--ok)' : 'var(--toside)';
     out += fix.beyond
       ? `<circle cx="${px.x.toFixed(1)}" cy="${px.y.toFixed(1)}" r="3.5" fill="var(--sea)" stroke="${colour}" stroke-width="2"/>`
       : `<circle cx="${px.x.toFixed(1)}" cy="${px.y.toFixed(1)}" r="3.5" fill="${colour}"/>`;
@@ -1894,12 +1898,21 @@ export const OVERVIEW_INK = {
  * chart should follow the finger by the distance the finger moved, whatever the display is
  * turned to and however far it is zoomed in.
  */
+/**
+ * How far in from the edge, as a fraction of the picture's shorter side, a boat is kept when the
+ * orientation changes under a zoomed overview — far enough that the hull is whole and not under
+ * a finger at the bezel.
+ */
+export const OVERVIEW_BOAT_INSET = 0.12;
+
 export class OverviewView {
   constructor() {
     this.glide = new Glide();
     this.zoom = 1;
     this.pan = { x: 0, y: 0 };
     this.anchor = null;
+    // The bearing the pan was made at: see `overview`, which turns the picture about the boat.
+    this.panUp = null;
   }
 
   /** True once the picture is the sailor's rather than the fit's. */
@@ -1940,6 +1953,7 @@ export class OverviewView {
     this.zoom = 1;
     this.pan = { x: 0, y: 0 };
     this.anchor = null;
+    this.panUp = null;
     return this;
   }
 
@@ -2052,11 +2066,37 @@ export function overview(client, options = {}) {
   // The pan is in screen pixels, so it is applied in ROTATED space and taken back out again —
   // the same there-and-back the extent's centre does just above. Moving the picture right by P
   // pixels is moving the centre LEFT by P/scale, which is where the signs come from.
-  const aimed = (!view.pan.x && !view.pan.y) ? held.centre : (() => {
-    const u = (held.centre.x * cos - held.centre.y * sin) - view.pan.x / scale;
-    const v = (held.centre.y * cos + held.centre.x * sin) + view.pan.y / scale;
-    return { x: u * cos + v * sin, y: v * cos - u * sin };
-  })();
+  const aimedAt = (bearing, pan) => {
+    if (!pan.x && !pan.y) return held.centre;
+    const r = (bearing * Math.PI) / 180;
+    const c = Math.cos(r);
+    const s = Math.sin(r);
+    const u = (held.centre.x * c - held.centre.y * s) - pan.x / scale;
+    const v = (held.centre.y * c + held.centre.x * s) + pan.y / scale;
+    return { x: u * c + v * s, y: v * c - u * s };
+  };
+  /*
+   * A NEW "UP" TURNS THE PICTURE ABOUT THE BOAT, not about the anchor. The pan is a screen offset
+   * made at one bearing, and it cancels the boat's distance from the anchor only at that bearing:
+   * zoomed in, the anchor is far away, and turning about it swings the boat off the screen. So
+   * when the bearing aimed at moves, the pan is re-made to keep the boat where it was on the
+   * screen — pulled inside the frame if it had strayed — and the world turns round it.
+   */
+  if (view.manual && client.point) {
+    if (view.panUp != null && Math.abs(turnBetween(view.panUp, aim)) > 0.01) {
+      const was = projector(aimedAt(view.panUp, view.pan), view.panUp, scale, width, height)(client.point);
+      const inset = OVERVIEW_BOAT_INSET * Math.min(width, height);
+      const keep = {
+        x: Math.min(width - inset, Math.max(inset, was.x)),
+        y: Math.min(height - inset, Math.max(inset, was.y)),
+      };
+      // The boat's place is the unpanned place moved by the pan, so the pan is the difference.
+      const unpanned = projector(held.centre, aim, scale, width, height)(client.point);
+      view.pan = { x: keep.x - unpanned.x, y: keep.y - unpanned.y };
+    }
+    view.panUp = aim;
+  }
+  const aimed = aimedAt(aim, view.pan);
   // Where the boat will be at the bearing turned to, and how close in — eased there with the
   // turn (`Glide`), and the picture placed round wherever the boat is drawn.
   let centre = aimed;

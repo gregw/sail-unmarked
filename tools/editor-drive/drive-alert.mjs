@@ -202,7 +202,7 @@ await settle(1500);
 ok('dismissing it closes it', !device().includes('id="alertBox"'));
 const seen = await until(async () => {
   const conduct = await json(`/api/conduct/${KEY}/alert-race`);
-  return conduct.boats.some((b) => b.sailNo === 'AUS 1' && b.seen?.flag === true);
+  return conduct.boats.some((b) => b.sailNo === 'AUS1' && b.seen?.flag === true);
 }, 12);
 ok('...and IS the acknowledgement, which the committee reads back', seen);
 

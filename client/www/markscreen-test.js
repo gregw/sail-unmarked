@@ -200,6 +200,21 @@ export function run(check) {
   }
   const mark = client.markState(t);
   const svg = plot(mark, { orientation: 'north' });
+
+  // THE TRACK RUNS ON FROM THE COURSE SCREEN in its colour, and a dot changes colour only when
+  // it says something: the wrong side with the line not crossed, or the far side once crossed.
+  const dotIn = (trail, latched = null) => plot({ ...mark, trail, latched, latchedPoint: null },
+    { orientation: 'north', view: new PlotView() });
+  const toward = mark.watched.required === 'reverse' ? 1 : -1;
+  const at0 = mark.trail[0];
+  const dot = (colour) => `r="3.5" fill="${colour}"`;
+  check('on the approach the Line screen\'s dots are the course screen\'s track colour',
+    dotIn([{ ...at0, side: toward, beyond: false }]).includes(dot(OVERVIEW_INK.trailColour))
+    && dotIn([{ ...at0, side: 0, beyond: false }]).includes(dot(OVERVIEW_INK.trailColour)));
+  check('...changing only on the far side with the line not crossed — the wrong side',
+    dotIn([{ ...at0, side: -toward, beyond: false }]).includes(dot('var(--toside)')));
+  check('...or on the far side once it has been crossed',
+    dotIn([{ ...at0, side: -toward, beyond: false }], { time: new Date() }).includes(dot('var(--ok)')));
   check('the plot draws the line it is watching', svg.includes('var(--line)'));
   check('...the boat, as a hull seen from above rather than an arrow — an arrow says which way '
     + 'something points and on a chart reads as a cursor',
@@ -638,6 +653,46 @@ export function run(check) {
   check('...a fifth larger than the editor\'s at the fit', Math.abs(fontIn(atFit) - OVERVIEW_MARK.fontPx) < 0.05);
   check('...and larger again when the picture is zoomed in', fontIn(zoomedIn) > fontIn(atFit) * 1.5);
 
+  // A NEW "UP" UNDER A ZOOMED OVERVIEW TURNS THE PICTURE ABOUT THE BOAT. The pan is a screen
+  // offset made at one bearing; zoomed in and turned about the anchor instead, the boat swung
+  // off the screen.
+  const hullAt = (svg) => {
+    const m = /translate\(([-\d.]+),([-\d.]+)\) rotate\([^)]*\) scale\([^)]*\)"><path d="([^"]*)"/g;
+    let hit = null;
+    for (const found of svg.matchAll(m)) if (found[3] === BOAT.hull) hit = found;
+    return hit ? { x: Number(hit[1]), y: Number(hit[2]) } : null;
+  };
+  // Heading 060, so COG up is a real turn from North up rather than none.
+  const angled = (() => {
+    const flown = new RaceClient(snapshot);
+    let when = 0;
+    for (let n = -300; n <= -100; n += 20) {
+      const p = at(0, n);
+      flown.accept({ latitude: p.latitude, longitude: p.longitude, time: new Date((when += 1000)),
+        accuracyM: 3, satellites: 12, sogKn: 9, cogDeg: 60 });
+    }
+    return flown;
+  })();
+  const hullInFrame = (p) => p && p.x > 0 && p.x < 400 && p.y > 0 && p.y < 330;
+  const zoomedView = new OverviewView().zoomBy(8);
+  // Anchored at the fit, then panned so the boat is in the picture at hullNorth up.
+  courseOf(angled, { view: zoomedView, turner: new Turner() });
+  const hullNorth = hullAt(courseOf(angled, { view: zoomedView, turner: new Turner() }));
+  zoomedView.panByPx(200 - hullNorth.x, 165 - hullNorth.y + 120);
+  const hullBefore = hullAt(courseOf(angled, { view: zoomedView, turner: new Turner() }));
+  const allTurned = ['cog'].every((orientation) => {
+    const after = hullAt(courseOf(angled, { view: zoomedView, orientation, turner: new Turner() }));
+    return hullInFrame(after) && Math.hypot(after.x - hullBefore.x, after.y - hullBefore.y) < 2;
+  });
+  check('zoomed in, a new orientation keeps the boat where it was on the screen and turns the chart round it',
+    hullInFrame(hullBefore) && allTurned);
+  const strayedView = new OverviewView().zoomBy(8);
+  courseOf(angled, { view: strayedView, turner: new Turner() });
+  strayedView.panByPx(5000, 0);
+  courseOf(angled, { view: strayedView, turner: new Turner() });
+  check('...and one that had strayed off the screen is brought back inside it when the orientation changes',
+    hullInFrame(hullAt(courseOf(angled, { view: strayedView, orientation: 'cog', turner: new Turner() }))));
+
   // THE START LINE WEARS ITS STATE, with a race behind the run: orange between the preparatory
   // signal and the start, and green once open.
   const racing = new RaceClient(snapshot, { startPlan: () => ({
@@ -789,8 +844,8 @@ export function run(check) {
     /id="o_ink"[^>]*aria-label="Background lightness"/.test(chartBar({ basemap: 'none' })));
   check('...and with a chart, how strongly the chart is drawn',
     /id="o_ink"[^>]*aria-label="Chart brightness"/.test(chartBar({ basemap: 'chart' })));
-  check('the orientation is chosen in the chart bar, beside the background, not in a row of its own',
-    /id="o_orient"[\s\S]*id="o_basemap"/.test(chartBar({ basemap: 'chart', orientation: 'leg' }))
+  check('the chart bar runs slider, background, then which way is up — not a row of its own for that',
+    /id="o_ink"[\s\S]*id="o_basemap"[\s\S]*id="o_orient"/.test(chartBar({ basemap: 'chart', orientation: 'leg' }))
     && chartBar({ orientation: 'leg' }).includes('data-orient="leg" selected'));
   check('the slider is in from the edge and the background selector at it, where a slider is dragged off',
     chartBar({ basemap: 'chart' }).indexOf('id="o_ink"') < chartBar({ basemap: 'chart' }).indexOf('id="o_basemap"'));

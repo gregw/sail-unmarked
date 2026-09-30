@@ -11,7 +11,7 @@
  * state, and the moment somebody adds a `clear` message this spec should start failing.
  */
 
-import { Dialog, QUIET_MS, ladder } from './dialog.js';
+import { Dialog, QUIET_MS, ladder, sailNumber } from './dialog.js';
 import { validate } from './schema.js';
 import { startRow } from './screens.js';
 
@@ -31,6 +31,9 @@ const message = (type, body, tags = []) => ({
 });
 
 export function run(check) {
+  check('a sail number is upper case, letters and digits, its country prefix kept',
+    sailNumber('aus 1234') === 'AUS1234' && sailNumber('AUS-1234') === 'AUS1234'
+    && sailNumber(' myc 7 ') === 'MYC7' && sailNumber(null) === '');
   /* ------------------------------------------------ the state a division's start is in */
 
   const one = boat();

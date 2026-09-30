@@ -85,7 +85,7 @@ const speak = async (session, ...envelopes) => (await post(
   { envelopes: envelopes.map((e) => ({ v: 1, ...e })) })).envelopes;
 
 const joinedBoats = [];
-for (const [sail, along] of [['AUS 1', 0], ['AUS 42', 2]]) {
+for (const [sail, along] of [['AUS1', 0], ['AUS42', 2]]) {
   const got = await speak(null, { type: 'hello', body: { versions: [1] } }, {
     type: 'join',
     body: {
@@ -144,7 +144,7 @@ ok('...and a race that is not public is not among them', !pane().includes('Hidde
 
 /* ------------------------------------------- the chart: colour is division, texture is progress */
 
-ok('every boat that has joined is drawn', chart().includes('AUS 1') && chart().includes('AUS 42'));
+ok('every boat that has joined is drawn', chart().includes('AUS1') && chart().includes('AUS42'));
 // COLOUR IS DIVISION HERE, and it deliberately shares no value with the editor's ROLE_COLOUR:
 // the two mean different things and must never be confused.
 ok('...in the division\'s own colour, which is not a leg role', chart().includes('#35b5e8'));
@@ -160,7 +160,7 @@ ok('the legend says what the textures mean, rather than leaving them to be guess
 /* ------------------------------------------------------ the fleet table, and the acks */
 
 ok('one row per boat, with the marks it has passed',
-  /<table class="fleet">/.test(pane()) && pane().includes('AUS 42'));
+  /<table class="fleet">/.test(pane()) && pane().includes('AUS42'));
 // THE WHOLE REASON ACKNOWLEDGEMENTS ARE IN THE PROTOCOL: the question a committee has before
 // starting is "have all boats seen the new course?", and this is where it is read.
 ok('...and a column for whether the latest course and flag have been SEEN',

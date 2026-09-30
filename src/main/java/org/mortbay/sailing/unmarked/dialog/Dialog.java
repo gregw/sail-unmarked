@@ -22,6 +22,7 @@ import org.mortbay.sailing.unmarked.model.Course;
 import org.mortbay.sailing.unmarked.model.CourseRecord;
 import org.mortbay.sailing.unmarked.model.CourseSnapshot;
 import org.mortbay.sailing.unmarked.model.Handicap;
+import org.mortbay.sailing.unmarked.model.Ids;
 import org.mortbay.sailing.unmarked.model.Programme;
 import org.mortbay.sailing.unmarked.model.Race;
 import org.mortbay.sailing.unmarked.store.CourseLedger;
@@ -433,7 +434,7 @@ public class Dialog
         }
 
         Session session = new Session("s" + Long.toHexString(counter.incrementAndGet()));
-        session.sailNo = message.text("sailNo");
+        session.sailNo = Ids.sailNumber(message.text("sailNo"));
         session.name = message.text("name");
         session.boatId = session.sailNo == null || session.sailNo.isBlank()
             ? session.id : session.sailNo;

@@ -215,6 +215,9 @@ derivations; these are the rules that outlive any of them.
   the present course scores nothing however well it is sailed, so the mark changes shape rather than only
   colour, which is the rule the rejected fixes already follow: shape carries what happened, colour carries
   whether it matters. It is still drawn where the cut really falls.
+- **The track's dots are the course screen's colour on the approach**, so the track runs on unchanged from
+  one screen to the other. A dot changes colour only when it says something: orange on the far side with
+  the line not crossed — the wrong side — and green on the far side once it has been. Hollow past an end.
 
 - **The line carries a triangle** — the editor's own notation, base on the line, apex the way you must cross
   — because the required sense is the one thing about a virtual mark that cannot be guessed from looking at
@@ -343,6 +346,10 @@ in blues and greens and from the cyan COG.
 - **It re-fits every frame until somebody takes hold of it**, then anchors; **Fit** gives it back. The pan is
   held in screen pixels and applied in rotated space, and followed on the **document**, because the panel is
   rebuilt on every fix. Bounded to a quarter and sixteen times the fit.
+- **A new orientation turns the picture about the boat**, not about the anchor. The pan is an offset made at
+  one bearing and cancels the boat's distance from the anchor only at that bearing, so when the bearing
+  aimed at moves the pan is re-made to keep the boat where it was on the screen — brought inside the frame
+  (`OVERVIEW_BOAT_INSET`) if it had strayed — and the glide then turns the world round it.
 - **The wheel and a pinch zoom about the point under them** (`OverviewView.zoomAt`), so the water under the
   pointer or between the fingers stays there. The pointers are held on the device rather than the element —
   the second finger usually lands on a chart the first never touched — and one finger pans, two pinch.
@@ -355,7 +362,7 @@ in blues and greens and from the cyan COG.
   drawn at all — no tiles asked for — to full strength; with none it runs the background from dark to white,
   as a wash over the sea. Each keeps its own value, so the background starts dark whatever the chart was
   turned to. A drag changes the layer's opacity in place and a release renders.
-- **The chart bar is zoom, Fit, the slider, the orientation and the background, in that order.** The slider
+- **The chart bar is zoom, Fit, the slider, the background and the orientation, in that order.** The slider
   sits in from the edge, because a finger dragging one at the edge of a touch screen slides off it into the
   bezel or the system's edge gesture. The orientation is a selector in this row rather than a row of buttons
   of its own; on the Line screen the same selector sits at the end of the leg row.

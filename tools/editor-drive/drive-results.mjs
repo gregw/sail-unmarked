@@ -129,16 +129,16 @@ const sail = async (sailNo, seconds, tcf, options = {}) => {
   return { session, joined, start };
 };
 
-const quick = await sail('AUS 1', 1800, 1.02);
-await sail('AUS 2', 2100, 0.95, { claims: 'a-race-it-never-joined' });
+const quick = await sail('AUS1', 1800, 1.02);
+await sail('AUS2', 2100, 0.95, { claims: 'a-race-it-never-joined' });
 await settle(300);
 
 ok('a boat that joined a race is told which one', quick.joined?.body?.race === 'results-race');
 
 const filedUnder = new Date(quick.start).toLocaleDateString('en-CA', { timeZone: zone });
 const filed = await json(`/api/records/${programme.club}/${taken.course}/${filedUnder}`);
-const first = filed.find((r) => r.sailNumber === 'AUS 1');
-const liar = filed.find((r) => r.sailNumber === 'AUS 2');
+const first = filed.find((r) => r.sailNumber === 'AUS1');
+const liar = filed.find((r) => r.sailNumber === 'AUS2');
 ok('a record filed from a race carries the race it was entered in', first?.race === 'results-race');
 ok('...and the division it was entered as, which is how a fleet is read apart',
   first?.division === 'open');
@@ -171,8 +171,8 @@ const attempt = async (sailNo, seconds) => {
     fixes: [],
   });
 };
-await attempt('AUS 7', 2400);
-await attempt('AUS 8', 2000);
+await attempt('AUS7', 2400);
+await attempt('AUS8', 2000);
 await settle(200);
 
 /* ------------------------------------------------------------------- the API answers */
@@ -188,7 +188,7 @@ ok('...and the variants anybody has attempted, grouped by revision',
 
 const order = await json(`/api/results/${KEY}/race/results-race`);
 ok('a race reads as a finishing order, quickest elapsed first',
-  order.results.map((r) => r.sailNumber).join(',') === 'AUS 1,AUS 2');
+  order.results.map((r) => r.sailNumber).join(',') === 'AUS1,AUS2');
 ok('...with the boat\'s own elapsed time, from its own clock',
   order.results[0].elapsedSeconds === 1800 && order.results[1].elapsedSeconds === 2100);
 // CORRECTED TIME IS OFFERED BESIDE ELAPSED, NEVER INSTEAD OF IT: this server does not score,
@@ -199,9 +199,9 @@ ok('...and corrected time beside it where a boat declared a TCF, which reverses 
 const best = await json(`/api/results/${KEY}/variant/${encodeURIComponent(taken.course)}`
   + `/${encodeURIComponent(taken.variant)}`);
 ok('a variant reads as record attempts, quickest first within one revision',
-  best.revisions[0].results.map((r) => r.sailNumber).join(',') === 'AUS 8,AUS 7');
+  best.revisions[0].results.map((r) => r.sailNumber).join(',') === 'AUS8,AUS7');
 ok('...and a race entry is NOT among them, because a record attempt is a different claim',
-  !JSON.stringify(best.revisions).includes('AUS 1'));
+  !JSON.stringify(best.revisions).includes('AUS1'));
 
 /* ---------------------------------------------------------------------- the page */
 
@@ -231,7 +231,7 @@ ok('a race row opens', open('race:results-race'));
 await settle(600);
 const finishers = opened('race:results-race');
 ok('...into a finishing order, in order, with the elapsed times on it',
-  /AUS 1[\s\S]*AUS 2/.test(finishers) && finishers.includes('30:00') && finishers.includes('35:00'));
+  /AUS1[\s\S]*AUS2/.test(finishers) && finishers.includes('30:00') && finishers.includes('35:00'));
 ok('...and corrected time in its own column, where somebody can see both',
   finishers.includes('Corrected') && finishers.includes('30:36'));
 
@@ -239,7 +239,7 @@ ok('a variant row opens', open(`variant:${taken.course}/${taken.variant}`));
 await settle(600);
 const attempts = opened(`variant:${taken.course}/${taken.variant}`);
 ok('...into the attempts at one revision, quickest first',
-  /AUS 8[\s\S]*AUS 7/.test(attempts));
+  /AUS8[\s\S]*AUS7/.test(attempts));
 // THE REVISION HEADS ITS OWN TABLE rather than sitting in a column: two attempts under
 // different revisions are not two rows of one result.
 ok('...headed by the revision they stand against, which is what they are ranked within',
@@ -250,8 +250,8 @@ ok('...headed by the revision they stand against, which is what they are ranked 
 // fleet that started.
 const { table } = mod;
 const unfinished = table([
-  { sailNumber: 'AUS 1', elapsedSeconds: 1800, crossings: 3 },
-  { sailNumber: 'AUS 9', elapsedSeconds: null, crossings: 1 },
+  { sailNumber: 'AUS1', elapsedSeconds: 1800, crossings: 3 },
+  { sailNumber: 'AUS9', elapsedSeconds: null, crossings: 1 },
 ]);
 ok('a boat that did not finish is listed and is given no place', /did not finish/.test(unfinished)
   && (unfinished.match(/class="place">1</g) || []).length === 1

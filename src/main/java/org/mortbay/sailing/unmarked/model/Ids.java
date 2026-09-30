@@ -123,6 +123,21 @@ public final class Ids
     }
 
     /**
+     * A sail number as the club's other software keeps it: upper case, and nothing but letters
+     * and digits — {@code "aus 1234"}, {@code "AUS-1234"} and {@code "AUS1234"} are one boat. A
+     * country prefix is kept: stripping it is for matching two numbers, not for storing one.
+     * Null when nothing is left, which is a boat with no sail number rather than one called "".
+     * Mirrored by {@code sailNumber()} in {@code dialog.js}.
+     */
+    public static String sailNumber(String raw)
+    {
+        if (raw == null)
+            return null;
+        String out = raw.toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9]", "");
+        return out.isEmpty() ? null : out;
+    }
+
+    /**
      * The nearest legal id to what somebody typed.
      *
      * <p>The editor does this as you type, so a bad id is corrected in front of the person

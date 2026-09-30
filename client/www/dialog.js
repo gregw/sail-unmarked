@@ -45,6 +45,15 @@ const KEEP_FIXES = 1;
 /** How long without a successful exchange before the screens should say so. */
 export const QUIET_MS = 15000;
 
+/**
+ * A sail number as the club's other software keeps it: upper case, letters and digits only, so
+ * "aus 1234", "AUS-1234" and "AUS1234" are one boat. The country prefix stays. Empty when
+ * nothing is left. Mirrors `Ids.sailNumber`, which the server applies to whatever arrives.
+ */
+export function sailNumber(raw) {
+  return String(raw ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
 /** What a boat can say in one tap, because typing at a tiller is hostile (§9.2). */
 export const CANNED = {
   racing: ['Retiring', 'Protesting', 'OK'],

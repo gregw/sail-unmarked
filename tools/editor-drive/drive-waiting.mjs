@@ -92,6 +92,8 @@ await settle(2000);
 ok('joined, the boat waits: a zone around the start line and the word to wait',
   device().includes('class="waitzone"') && device().includes('wait for the course'));
 ok('...with the race\'s start row above it, and a way out', device().includes('id="leave"'));
+ok('...drawn over the chart, so the zone can be found on the water',
+  /class="waitzone"[\s\S]*class="basemap"[\s\S]*<circle/.test(device()) && device().includes('<image'));
 
 /* --------------------------------------------------- and the club publishes the course */
 

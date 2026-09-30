@@ -205,7 +205,7 @@ button.plain.on { border-color: var(--ok); color: var(--ok); }
 .waiting { padding: 10px 12px 0; }
 .waiting h2 { margin: 0 0 6px; font-size: 16px; color: var(--ink); }
 .waiting p { margin: 0 0 6px; font-size: 13px; }
-.waitzone { display: block; margin: 0 auto; color: var(--ink); }
+.waitzone { display: block; margin: 0 auto; color: var(--ink); background: var(--sea); }
 
 .start {
   display: flex; align-items: baseline; gap: 2cqi;

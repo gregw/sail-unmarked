@@ -29,7 +29,7 @@ import {
 import { RaceClient } from './raceclient.js';
 import { personalise } from './handicap.js';
 import { wheelZoomStep } from './geo.js';
-import { Dialog } from './dialog.js';
+import { Dialog, sailNumber } from './dialog.js';
 import { alertBanner, alertModal, chatPanel, placePanel, startRow, waitingPanel } from './screens.js';
 
 /**
@@ -908,7 +908,7 @@ export class Device {
         <h2>Your boat</h2>
         <div class="pair">
           <div><label for="j_sail">Sail no.</label>
-            <input id="j_sail" value="${esc(this.boat.sail)}" placeholder="AUS 1234"></div>
+            <input id="j_sail" value="${esc(this.boat.sail)}" placeholder="AUS1234"></div>
           <div><label for="j_name">Boat name</label>
             <input id="j_name" value="${esc(this.boat.name)}" placeholder="Bombora"></div>
         </div>
@@ -1053,6 +1053,13 @@ export class Device {
       if (held) remember(this.boat);
     });
     keep('j_sail', 'sail', true);
+    // Normalised when the field is left rather than as it is typed, so a space can still be
+    // typed on the way to "AUS 1234" and the field then says what the boat is known as.
+    this.el('j_sail')?.addEventListener('change', (ev) => {
+      this.boat.sail = sailNumber(ev.target.value);
+      ev.target.value = this.boat.sail;
+      remember(this.boat);
+    });
     keep('j_name', 'name', true);
     keep('j_tcf', 'tcf');
     keep('j_length', 'lengthM', true);
@@ -1126,6 +1133,7 @@ export class Device {
     // A race join may leave the variant to the server, which resolves a division's unsaid one
     // to the course's only design — there may be no publication here to read it from yet.
     if (!course || (!variant && !entered.race)) return;
+    this.boat.sail = sailNumber(this.boat.sail);
     const request = {
       sailNo: this.boat.sail, name: this.boat.name, club, series, course,
       ...(variant ? { variant } : {}),
@@ -1211,7 +1219,9 @@ export class Device {
   /** In the race, with no course yet: where the start is, and the boat, and the word to wait. */
   renderWaiting() {
     this.host.innerHTML = startRow(this.dialog, Date.now(), null)
-      + waitingPanel(this.waiting, this.waitingFix, { raceName: this.dialog.raceName })
+      + waitingPanel(this.waiting, this.waitingFix, {
+        raceName: this.dialog.raceName, basemap: this.basemap, basemapInk: this.basemapInk,
+      })
       + `<div class="deck"><button class="plain" id="leave">Leave race</button></div>`;
     this.el('leave')?.addEventListener('click', () => this.leave());
     return undefined;

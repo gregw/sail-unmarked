@@ -148,6 +148,7 @@ public record CourseRecord(
     {
         if (join == null)
             join = JoinMode.ANONYMOUS;
+        sailNumber = Ids.sailNumber(sailNumber);
         crossings = (crossings == null) ? List.of() : List.copyOf(crossings);
         fixes = (fixes == null) ? List.of() : List.copyOf(fixes);
     }
