@@ -160,7 +160,7 @@ export class Device {
       if (!this.client || ev.target?.closest?.('.plot')) return;
       this.pressing = true;
       const active = document.activeElement;
-      if (active && active !== ev.target && active.id === 'o_basemap') active.blur?.();
+      if (active && active !== ev.target && ['o_basemap', 'o_orient'].includes(active.id)) active.blur?.();
     }, true);
     const release = () => {
       if (!this.pressing) return;
@@ -375,8 +375,8 @@ export class Device {
      * flag of our own, so it cannot stick: the moment focus goes anywhere else the panel
      * resumes, and nothing has to remember to release it.
      */
-    const chooser = this.el('o_basemap');
-    if (chooser && document.activeElement === chooser) return undefined;
+    const chooser = document.activeElement;
+    if (chooser && ['o_basemap', 'o_orient'].includes(chooser.id)) return undefined;
 
     const now = Date.now();
     /*
@@ -744,12 +744,12 @@ export class Device {
    * comes up the way it was last read rather than the way the course happened to be.
    */
   wireOrientation() {
-    for (const button of this.host.querySelectorAll('[data-orient]')) {
-      button.addEventListener('click', () => {
-        this.orientations[this.shownScreen ?? 'overview'] = button.dataset.orient;
-        this.render();
-      });
-    }
+    this.el('o_orient')?.addEventListener('change', (ev) => {
+      this.orientations[this.shownScreen ?? 'overview'] = ev.target.value;
+      // Blurred first: a `<select>` keeps focus after it is used, and the render is held on it.
+      ev.target.blur?.();
+      this.render();
+    });
   }
 
   /* ================================================================= the join */

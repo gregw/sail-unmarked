@@ -54,6 +54,7 @@ import {
   OTHER_SIDE,
   rejectMark,
   signalLine,
+  timingRow,
   crossingNormal,
   distanceTo,
   hhmmss,
@@ -425,7 +426,7 @@ export function run(check) {
 
   check('the orientation selector offers all three', ['Leg up', 'North up', 'Line up']
     .every((label) => orientationBar('north').includes(label)));
-  check('...marking the one in force', orientationBar('perp').includes('data-orient="perp" class="on"'));
+  check('...marking the one in force', orientationBar('perp').includes('data-orient="perp" selected'));
   check('...offered North up, COG up, Leg up, then Line up',
     Object.keys(ORIENTATIONS).join() === 'north,cog,leg,perp');
 
@@ -476,7 +477,9 @@ export function run(check) {
     startedClient.accept({ latitude: p.latitude, longitude: p.longitude,
       time: new Date((ticking += 2000)), accuracyM: 5, satellites: 12, sogKn: 9.7, cogDeg: 0 });
   }
-  const started = overviewPanel(startedClient, { now: startedClient.startAt.getTime() + 95000 });
+  // Asked of the clock's row: this long after the last fix the overview puts the receiver's
+  // trouble there instead, which is checked below.
+  const started = timingRow(startedClient, startedClient.startAt.getTime() + 95000);
   check('once the start is crossed it says WHEN', started.includes('>Started<')
     && new RegExp(`>${hhmmss(startedClient.startAt)}<`).test(started));
   check('...and how long ago', started.includes('>1:35<'));
@@ -488,7 +491,7 @@ export function run(check) {
     startedClient.accept({ latitude: p.latitude, longitude: p.longitude,
       time: new Date((ticking += 2000)), accuracyM: 5, satellites: 12, sogKn: 9.7, cogDeg: 0 });
   }
-  const done = overviewPanel(startedClient, { now: ticking + 600000 });
+  const done = timingRow(startedClient, ticking + 600000);
   check('once the finish is crossed it says both instants',
     startedClient.complete() && done.includes('>Started<') && done.includes('>Finished<'));
   // Asked of the elapsed CELL, not of the whole panel: once a course is finished there is
@@ -506,6 +509,11 @@ export function run(check) {
     done.includes('class="readout done"'));
   check('...with the label still just the word, and no entity printed at it',
     done.includes('>Elapsed<') && !done.includes('&amp;') && !done.toLowerCase().includes('mdash'));
+
+  const troubled = overviewPanel(startedClient, { now: ticking + 600000 });
+  check('trouble with the fixes takes the clock\'s row, rather than adding a line that moves the rest',
+    troubled.includes('class="readout warned"') && !troubled.includes('>Elapsed<')
+    && (troubled.match(/class="signal warn"/g) ?? []).length === 1);
 
   const primary = overviewPanel(client, { now: t });
   check('the primary screen ALWAYS shows BTW, DTW and the line',
@@ -781,6 +789,11 @@ export function run(check) {
     /id="o_ink"[^>]*aria-label="Background lightness"/.test(chartBar({ basemap: 'none' })));
   check('...and with a chart, how strongly the chart is drawn',
     /id="o_ink"[^>]*aria-label="Chart brightness"/.test(chartBar({ basemap: 'chart' })));
+  check('the orientation is chosen in the chart bar, beside the background, not in a row of its own',
+    /id="o_orient"[\s\S]*id="o_basemap"/.test(chartBar({ basemap: 'chart', orientation: 'leg' }))
+    && chartBar({ orientation: 'leg' }).includes('data-orient="leg" selected'));
+  check('the slider is in from the edge and the background selector at it, where a slider is dragged off',
+    chartBar({ basemap: 'chart' }).indexOf('id="o_ink"') < chartBar({ basemap: 'chart' }).indexOf('id="o_basemap"'));
   check('turned all the way down the chart is not drawn at all — no tiles are asked for',
     imagesIn(courseOf(overClient, { basemap: 'chart', basemapInk: 0 })) === 0);
   check('...and all the way up it is drawn at full strength',

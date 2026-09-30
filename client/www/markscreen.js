@@ -88,6 +88,9 @@ export const VIEWS = {
  * the Mark screen has nothing to zoom — it is fitted to one line and holds still on purpose —
  * and nothing to draw behind it, being offline-first by a rule that is not up for trading.
  *
+ * <b>The slider is in from the edge and the selector is at it</b>: a finger dragging a slider at
+ * the edge of a touch screen slides off it, onto the bezel or into the system's edge gesture.
+ *
  * <b>Fit says what it does and is lit while the picture is the screen's own.</b> A reset
  * control that looks the same whether or not there is anything to reset leaves somebody
  * pressing it to find out.
@@ -99,9 +102,6 @@ export const chartBar = (options = {}) => {
     <button data-zoom="out" title="Zoom out">&minus;</button>
     <button data-zoom="in" title="Zoom in">+</button>
     <button data-zoom="fit" class="${held ? 'on' : ''}"${held ? '' : ' disabled'}>Fit</button>
-    <select id="o_basemap" title="What is drawn behind the course">${Object.entries(BASEMAPS)
-      .map(([key, spec]) => `<option value="${key}"${key === (options.basemap ?? 'none') ? ' selected' : ''}>${esc(spec.label)}</option>`)
-      .join('')}</select>
     ${(options.basemap ?? 'none') === 'none'
     ? `<input type="range" id="o_ink" min="0" max="100" step="5"
       value="${Math.round(100 * (options.backgroundLight ?? 0))}"
@@ -110,6 +110,10 @@ export const chartBar = (options = {}) => {
       value="${Math.round(100 * (options.basemapInk ?? BASEMAP_INK))}"
       title="How strongly the chart is drawn: from not at all to full brightness"
       aria-label="Chart brightness">`}
+    ${orientationBar(options.orientation ?? 'north')}
+    <select id="o_basemap" title="What is drawn behind the course">${Object.entries(BASEMAPS)
+      .map(([key, spec]) => `<option value="${key}"${key === (options.basemap ?? 'none') ? ' selected' : ''}>${esc(spec.label)}</option>`)
+      .join('')}</select>
   </div>`;
 };
 
@@ -131,10 +135,14 @@ export const viewBar = (mode, options = {}) =>
       + `${esc(spec.label)}${key === 'chat' && options.unread
         ? ` <span class="unread">${options.unread}</span>` : ''}</button>`).join('')}</div>`;
 
-/** The three-way selector, on every screen that can be turned — which is both of them. */
+/**
+ * The orientation selector, on every screen that can be turned — which is both of them. A
+ * `<select>` rather than a row of buttons, so it sits in a row that is already there: beside the
+ * background selector on the overview, and in the leg row on the Line screen.
+ */
 export const orientationBar = (orientation) =>
-  `<div class="orient">${Object.entries(ORIENTATIONS).map(([key, spec]) =>
-    `<button data-orient="${key}" class="${key === orientation ? 'on' : ''}">${esc(spec.label)}</button>`).join('')}</div>`;
+  `<select id="o_orient" title="Which way is up">${Object.entries(ORIENTATIONS).map(([key, spec]) =>
+    `<option value="${key}" data-orient="${key}"${key === orientation ? ' selected' : ''}>${esc(spec.label)}</option>`).join('')}</select>`;
 
 /** Compass bearing of a vector given in local metres, x east and y north. */
 export const bearingOf = (x, y) => (((Math.atan2(x, y) * 180) / Math.PI) + 360) % 360;
@@ -1615,11 +1623,11 @@ export function markScreen(state, options = {}) {
         : `${state.step.index + 1} / ${state.of}`}${state.lap > 1 ? ` &middot; lap ${state.lap}` : ''}</span>
     </div>
     ${viewBar(options.viewMode ?? 'auto', options)}
-    ${orientationBar(orientation)}
     <div class="leg ${arrow.cls}">
       <svg viewBox="0 0 22 22" width="22" height="22"><polygon points="11,2 19,20 11,15 3,20" fill="currentColor"/></svg>
       <span class="disp">${arrow.text}</span>
       <span class="mono">${state.legBearing == null ? 'FINISH' : `${deg(state.legBearing)}&deg;`}</span>
+      ${orientationBar(orientation)}
     </div>
     ${plot(state, { ...options, orientation })}
     ${timeToLine(state)}
@@ -2289,6 +2297,10 @@ export function overviewPanel(client, options = {}) {
   const waypoint = client.waypoint();
   const range = distanceTo(waypoint?.distanceM);
   const stale = client.stale(now);
+  // TROUBLE WITH THE FIXES TAKES THE CLOCK'S ROW rather than a row of its own: a line appearing
+  // and going pushes everything under it about, and while the fixes are bad the elapsed time is
+  // the one reading nobody needs — it is kept on the boat and comes back with the fixes.
+  const signal = signalLine(client, now);
   return `
     <div class="bar">
       <span class="mono">${esc(hhmmss(client.fix?.time))}</span>
@@ -2298,7 +2310,6 @@ export function overviewPanel(client, options = {}) {
       <span class="mono muted">${esc(client.snapshot.revision)}</span>
     </div>
     ${viewBar(options.viewMode ?? 'auto', options)}
-    ${orientationBar(options.orientation ?? 'north')}
     ${overview(client, options)}
     ${chartBar(options)}
     ${waypointRow(waypoint)}
@@ -2320,8 +2331,7 @@ export function overviewPanel(client, options = {}) {
       <div><div class="label">BTW</div><div class="value">${deg(waypoint?.bearingDeg)}&deg;</div></div>
       <div><div class="label">DTW</div><div class="value">${range.value}<span class="unit">${range.unit}</span></div></div>
     </div>
-    ${timingRow(client, now)}
-    ${signalLine(client, now)}
+    ${signal ? `<div class="readout warned">${signal}</div>` : timingRow(client, now)}
     <!--
       NO SENTENCE AND NO LOG UNDER IT. What the boat is sailing to is the waypoint row above, and
       what it has crossed is on the chart; the room they took is the chart's.

@@ -245,7 +245,28 @@ ok('...and no fixes are reported to nobody, which is what the absent fixSeconds 
 // pretend: a screen that quietly slept would look like the application crashing.
 ok('the screen is asked to stay awake on joining, and says honestly whether it will',
   device().includes('id="awake"')
-  && device().includes(mod.__boat.awake.held ? 'Screen stays on' : 'Let screen sleep'));
+  && device().includes(mod.__boat.awake.held ? 'Screen stays on' : 'Screen may sleep: not in this browser'));
+
+// A LOCK THAT COULD NOT BE HAD IS RETRIED, by a tap and by itself — and one the system takes
+// away is taken back — rather than the button quietly meaning "off".
+let released = null;
+const wakeLock = { request: async () => ({
+  addEventListener: (type, fn) => { if (type === 'release') released = fn; },
+  release: async () => {},
+}) };
+Object.defineProperty(globalThis.navigator, 'wakeLock', { value: wakeLock, configurable: true });
+H('awake:click')();
+await settle(300);
+ok('...and a tap on a lock that failed tries again, and says when it holds',
+  mod.__boat.awake.held && device().includes('Screen stays on'));
+globalThis.document.visibilityState = 'visible';
+released?.();
+await settle(300);
+ok('...and a lock the phone releases is taken back while the page is showing', mod.__boat.awake.held);
+H('awake:click')();
+await settle(300);
+ok('...while a tap on one that holds lets the screen sleep, on purpose',
+  !mod.__boat.awake.held && device().includes('Screen may sleep<'));
 
 /* ------------------------------------------------------- the back gesture, guarded */
 

@@ -83,7 +83,9 @@ while that holds, and it is the kind of thing that decays one convenient field a
   torn down: a position lost under a bridge comes back on the other side.
 - **The screen is kept awake, and says so when it cannot be.** Best effort by necessity — the Wake Lock
   API is missing on some browsers and *dropped* every time the page is hidden, so it is re-taken on
-  `visibilitychange`. Shown as a button because it is a promise the page cannot always keep.
+  `visibilitychange`; one the phone releases is taken back, and one that could not be had is retried.
+  Shown as a button because it is a promise the page cannot always keep: it says whether the screen
+  stays on and, when it cannot, why — and a tap then retries rather than turning it off.
 
 **The back gesture is guarded, because leaving costs the race.** Nothing is cached across a reload, so a
 boat that backs out mid-afternoon comes back to the join screen with the course, the crossings and the
@@ -353,6 +355,13 @@ in blues and greens and from the cyan COG.
   drawn at all — no tiles asked for — to full strength; with none it runs the background from dark to white,
   as a wash over the sea. Each keeps its own value, so the background starts dark whatever the chart was
   turned to. A drag changes the layer's opacity in place and a release renders.
+- **The chart bar is zoom, Fit, the slider, the orientation and the background, in that order.** The slider
+  sits in from the edge, because a finger dragging one at the edge of a touch screen slides off it into the
+  bezel or the system's edge gesture. The orientation is a selector in this row rather than a row of buttons
+  of its own; on the Line screen the same selector sits at the end of the leg row.
+- **Trouble with the fixes takes the clock's row** (`signalLine` in place of `timingRow`) rather than adding
+  a line, so nothing under it moves while it comes and goes. The elapsed time is kept on the boat and comes
+  back with the fixes.
 - **A turned chart gets a north pointer** (`northPointer`), drawn only when it is needed — which is also what
   makes it informative.
 

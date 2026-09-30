@@ -210,14 +210,26 @@ export class Receiver {
  * going to keep tapping it. Best effort by necessity: the Screen Wake Lock API is not
  * everywhere, it is refused when the page is not visible, and it is DROPPED whenever the page
  * is hidden — so it is re-taken on `visibilitychange` rather than assumed to have survived.
+ * The system can release it too (a battery saver, a call), so a released lock is re-taken while
+ * the page is visible, and `keep()` retries one that could not be had, no more often than
+ * `RETRY_MS`. Why it could not be had is kept in `why`, so the page can say so.
  * Nothing here is allowed to throw: a page that failed to open because it could not dim-proof
  * itself would be a poor trade.
  */
 export class Awake {
+  static RETRY_MS = 10000;
+
   constructor() {
     this.lock = null;
     this.wanted = false;
     this.listening = false;
+    this.why = null;
+    this.triedAt = 0;
+  }
+
+  /** Called often — on every redraw — and retries a lock that is wanted and not held. */
+  keep(now = Date.now()) {
+    if (this.wanted && !this.lock && now - this.triedAt >= Awake.RETRY_MS) this.take();
   }
 
   get held() {
@@ -242,13 +254,25 @@ export class Awake {
   }
 
   async take() {
-    if (this.lock || !globalThis.navigator?.wakeLock?.request) return false;
+    if (this.lock) return true;
+    this.triedAt = Date.now();
+    if (!globalThis.navigator?.wakeLock?.request) {
+      this.why = globalThis.isSecureContext === false ? 'needs https' : 'not in this browser';
+      return false;
+    }
     try {
-      this.lock = await navigator.wakeLock.request('screen');
-      this.lock.addEventListener?.('release', () => { this.lock = null; });
+      const lock = await navigator.wakeLock.request('screen');
+      this.lock = lock;
+      this.why = null;
+      lock.addEventListener?.('release', () => {
+        if (this.lock === lock) this.lock = null;
+        // Released by the system rather than by us: take it back while it is still wanted.
+        if (this.wanted && globalThis.document?.visibilityState === 'visible') this.take();
+      });
       return true;
-    } catch {
-      // Not supported, refused, or the page is hidden. All ordinary, none worth a message.
+    } catch (error) {
+      // Refused — the page is hidden, a battery saver, a policy. Ordinary, and said on the button.
+      this.why = error?.name === 'NotAllowedError' ? 'refused by the phone' : (error?.message ?? 'refused');
       return false;
     }
   }

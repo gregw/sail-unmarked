@@ -229,7 +229,9 @@ mod.__state.client.joinMode = 'ANONYMOUS';
 mod.__state.client.goto(mod.__state.client.steps.findIndex((step) => step.letter === first));
 mod.__device.render();
 ok('...always showing where the next mark is and how far', device().includes('BTW')
-  && device().includes('DTW') && device().includes('Elapsed'));
+  && device().includes('DTW')
+  // ...and the clock, or the receiver's trouble in the clock's row when there is no fix to go by.
+  && (device().includes('Elapsed') || device().includes('class="readout warned"')));
 ok('...and NAMING the line it is steering for, which is what an instruction talks about',
   new RegExp('class="name mono">[^<]+<').test(device()));
 ok('...and no Mark screen yet, because nothing is close', !device().includes('class="ttl'));
@@ -436,11 +438,13 @@ ok('unticking it puts the course back', st.hideCourse === false && drawnCourse()
 // AUTO is the design — the sailor never has to ask for the Mark screen — but never has to is
 // not cannot, and the selector is on both screens because either may be the one you want to
 // leave.
-const on = (attr, key) => new RegExp(`data-${attr}="${key}" class="on"`).test(device());
+const on = (attr, key) => new RegExp(`data-${attr}="${key}"${attr === 'orient' ? ' selected' : ' class="on"'}`).test(device());
 // Found through the SAME selector the page's own handler uses, so the click lands on the very
 // node the handler was wired to. (That selector is what caught the stub reading `[data-view]`
 // as a character class and answering with divs.)
 const press = (attr, key) => {
+  // The orientation is a selector: choosing is its `change`, which is what the page listens for.
+  if (attr === 'orient') return H('o_orient:change')({ target: { value: key } });
   const button = $('device').querySelectorAll(`[data-${attr}]`)
     .find((b) => b.dataset[attr] === key);
   if (!button) throw new Error(`no button with data-${attr}="${key}"`);

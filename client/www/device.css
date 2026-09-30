@@ -71,8 +71,8 @@
 }
 .chartbar button:disabled { opacity: 0.4; cursor: default; }
 .chartbar button.on { color: var(--ok); border-color: var(--ok); }
-.chartbar select {
-  margin-left: auto; background: var(--panel2); color: var(--ink); border: 1px solid var(--panel2);
+.chartbar select, .leg select {
+  min-width: 0; background: var(--panel2); color: var(--ink); border: 1px solid var(--panel2);
   font-family: var(--mono); font-size: 10.5px; padding: 3px 4px; cursor: pointer;
 }
 
@@ -91,6 +91,11 @@
    and the room is the chart's. */
 .device .readout .value { font-size: min(5.5cqi, 22px); line-height: 1.05; }
 .device .readout.done .value { font-size: min(3.5cqi, 14px); }
+/* The receiver's trouble, in the clock's row and at its height, so nothing under it moves. */
+.device .readout.warned { display: block; }
+.device .readout.warned .signal {
+  margin: 0; height: 2.6em; line-height: 1.3; overflow: hidden; box-sizing: content-box;
+}
 
 .steer {
   display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
@@ -315,7 +320,9 @@ button.plain.on { border-color: var(--ok); color: var(--ok); }
 .banner .after { font-size: 9px; color: var(--muted); }
 /* The chart's brightness, or with no chart the background's lightness. Last in the bar, after the
    chooser whose choice it qualifies. */
-.chartbar input[type="range"] { width: 84px; margin: 0; accent-color: var(--line); }
+.chartbar input[type="range"] { width: 84px; margin: 0 0 0 auto; accent-color: var(--line); }
+/* The orientation selector in the Line screen's leg row, after the bearing. */
+.leg select { flex: none; margin-left: 8px; letter-spacing: 0; }
 
 /* THE NEXT LINE OPENS THE COURSE LIST, so it looks like something to press. */
 .wpt[data-list], .device .bar [data-list] { cursor: pointer; }
@@ -329,7 +336,7 @@ button.plain.on { border-color: var(--ok); color: var(--ok); }
 .clist { margin: 8px 12px 0; padding: 0; }
 .clist li {
   display: flex; align-items: baseline; gap: 10px;
-  padding: 3px 10px; margin-bottom: 2px;
+  padding: 0 8px; margin-bottom: 1px; line-height: 1.2;
   border: 1px solid var(--panel2); border-radius: 4px;
 }
 .clist li[data-goto] { cursor: pointer; }

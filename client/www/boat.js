@@ -273,11 +273,19 @@ const device = new Device(el('device'), {
    * look like the app crashing. It is a button as well as an indicator, so somebody who wants
    * the phone to sleep in their pocket can say so.
    */
-  extras: () => `<button class="plain awake${awake.held ? ' on' : ''}" id="awake">`
-    + `${awake.held ? 'Screen stays on' : 'Let screen sleep'}</button>`,
+  extras: () => {
+    awake.keep();
+    // What is TRUE, and what a tap does: wanted and not held is a failure, said with its reason,
+    // and a tap then tries again — from a press, which some browsers want — rather than giving up.
+    const label = awake.held ? 'Screen stays on'
+      : awake.wanted ? `Screen may sleep: ${awake.why ?? 'trying'} — tap to retry` : 'Screen may sleep';
+    return `<button class="plain awake${awake.held ? ' on' : awake.wanted ? ' trouble' : ''}" id="awake"`
+      + ` title="${awake.held ? 'Tap to let the screen sleep' : 'Tap to keep the screen on'}">${label}</button>`;
+  },
   wireExtras: () => {
     el('awake')?.addEventListener('click', async () => {
-      await awake.want(!awake.wanted);
+      if (awake.wanted && !awake.held) await awake.take();
+      else await awake.want(!awake.wanted);
       device.render();
     });
   },
