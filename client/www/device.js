@@ -30,7 +30,7 @@ import { RaceClient } from './raceclient.js';
 import { personalise } from './handicap.js';
 import { wheelZoomStep } from './geo.js';
 import { Dialog } from './dialog.js';
-import { alertBanner, alertModal, chatPanel, placePanel, startRow } from './screens.js';
+import { alertBanner, alertModal, chatPanel, placePanel, startRow, waitingPanel } from './screens.js';
 
 /**
  * The plot's own coordinate space, which is not the panel's width in pixels.
@@ -190,7 +190,7 @@ export class Device {
     // off does not open by asking a tile server for anything.
     //
     // ONE ORIENTATION PER SCREEN, remembered apart: the course is read against the chart and
-    // opens North up, a line is read against its own crossing and opens Line perp, and turning
+    // opens North up, a line is read against its own crossing and opens Line up, and turning
     // one does not turn the other. The selector changes the one for the screen it is on.
     this.orientations = { overview: 'north', mark: 'perp' };
     this.basemap = 'none';
@@ -319,7 +319,15 @@ export class Device {
    */
   async loadRaces() {
     this.races = {};
-    const series = [...new Set(this.courses.map((c) => `${c.club}/${c.series}`))];
+    // EVERY SERIES, not only those with a public course: a public race is joined before its
+    // course is published, and its series may have nothing else to offer yet.
+    let programmes = [];
+    try {
+      programmes = (await (await fetch('/api/programmes')).json()).map((p) => `${p.club}/${p.series}`);
+    } catch {
+      // An older server, or none: the series of the public courses are still there to ask.
+    }
+    const series = [...new Set([...this.courses.map((c) => `${c.club}/${c.series}`), ...programmes])];
     await Promise.all(series.map(async (key) => {
       try {
         const held = await (await fetch(`/api/races/${key}`)).json();
@@ -343,6 +351,10 @@ export class Device {
 
   /** Draw whichever screen the client says the sailor should be looking at. */
   render() {
+    if (!this.client && this.waiting) {
+      if (!this.adoptPublished()) return this.renderWaiting();
+      return undefined;
+    }
     if (!this.client) return this.renderJoin();
     // Not under a finger: see the constructor. Drawn on release instead.
     if (this.pressing) {
@@ -498,6 +510,8 @@ export class Device {
   leave() {
     this.client = null;
     this.snapshot = null;
+    this.waiting = null;
+    this.waitingFix = null;
     // Goodbye on the wire as well, so the fleet list stops showing a boat that has gone home.
     // Not awaited: leaving is a thing that has happened, not a request.
     this.dialog.leave().catch(() => null);
@@ -783,13 +797,19 @@ export class Device {
       return this.boat[field];
     };
 
-    const clubs = [...new Set(this.courses.map((c) => c.club))];
+    // The series with a public race today, which is something to join whether or not any of
+    // their courses is public or published yet.
+    const racing = Object.entries(this.races ?? {})
+      .filter(([, races]) => races.some((r) => r.date === Device.today() && r.public !== false))
+      .map(([key]) => key.split('/'));
+    const clubs = [...new Set([...this.courses.map((c) => c.club), ...racing.map(([c]) => c)])];
     // Guarded on there BEING clubs: this screen is drawn before `/api/public` has answered, and
     // wiping a remembered club against an empty list would forget the boat for a moment.
     if (clubs.length && !clubs.includes(this.boat.club)) this.boat.club = null;
     const club = settle('club', clubs) ?? '';
     const series = club
-      ? [...new Set(this.courses.filter((c) => c.club === club).map((c) => c.series))] : [];
+      ? [...new Set([...this.courses.filter((c) => c.club === club).map((c) => c.series),
+        ...racing.filter(([c]) => c === club).map(([, s]) => s)])] : [];
     if (this.boat.series && !series.includes(this.boat.series)) this.boat.series = null;
     const chosenSeries = settle('series', series) ?? '';
     /*
@@ -865,8 +885,7 @@ export class Device {
     const allocatedAt = allocating ? allocatedToday(this.boat.allocated) : null;
 
     const ready = !!(club && chosenSeries && !blocked && (!allocating || allocatedAt != null)
-      && (courseOnly ? (chosenCourse && chosenVariant) : (chosenRace && chosenDivision
-        && racePublished)));
+      && (courseOnly ? (chosenCourse && chosenVariant) : (chosenRace && chosenDivision)));
 
     /**
      * A level's options, headed by the question itself.
@@ -895,7 +914,7 @@ export class Device {
         </div>
 
         <h2>What you are sailing</h2>
-        ${this.courses.length === 0 ? `<p class="muted" style="font-size:13px">
+        ${clubs.length === 0 ? `<p class="muted" style="font-size:13px">
           Nothing to join. A course appears here once it is ticked <strong>public</strong>
           and has a published snapshot &mdash; both, because what a boat is handed is a
           snapshot. Use the <a href="editor.html">editor</a>.</p>` : `
@@ -936,9 +955,9 @@ export class Device {
                 label: `${d.name} — ${d.course}${d.variant ? `/${d.variant}` : ''}`,
               })), chosenDivision?.name, 'Choose a division', 'This race has no divisions')}</select>
               ${chosenDivision && !racePublished ? `<p class="warn" style="font-size:11.5px">
-                Nothing is published for ${esc(chosenDivision.course)}${chosenDivision.variant
-                  ? `/${esc(chosenDivision.variant)}` : ''}, so this division has no course to
-                hand you yet. The club publishes it from the editor.</p>` : ''}
+                ${esc(chosenDivision.course)}${chosenDivision.variant
+                  ? `/${esc(chosenDivision.variant)}` : ''} is not published yet. Join, and wait
+                near the start: the course is handed to you when the club publishes it.</p>` : ''}
               ${racePublished ? `<p class="muted mono" style="font-size:11px; margin-top:6px">
                 ${esc(chosenDivision.course)}${chosenDivision.variant
                   ? `/${esc(chosenDivision.variant)}` : ''}
@@ -959,7 +978,10 @@ export class Device {
 
           ${allocating ? `<h2>Your start</h2>
           <label for="j_alloc">Your allocated start time</label>
-          <input id="j_alloc" type="time" value="${esc(this.boat.allocated ?? '')}">` : ''}
+          <input id="j_alloc" type="time" value="${esc(this.boat.allocated ?? '')}">
+          ${chosenDivision?.start && chosenDivision?.closes ? `<p class="muted" style="font-size:11px; margin-top:4px">
+            Starts run from ${esc(chosenDivision.start)} to ${esc(chosenDivision.closes)}, the club's
+            time: a start outside them is refused.</p>` : ''}` : ''}
           <h2>How you are sailing</h2>
           <!--
             A RACE IS RACED. Joining one leaves nothing to choose about how the run counts — it
@@ -1080,7 +1102,7 @@ export class Device {
         this.join(club, chosenSeries, chosenCourse.course, chosenVariant.variant);
       } else {
         this.join(club, chosenSeries, chosenDivision.course, chosenDivision.variant
-          ?? racePublished.variant, { race: chosenRace.id, division: chosenDivision.name, allocatedAt });
+          ?? racePublished?.variant ?? null, { race: chosenRace.id, division: chosenDivision.name, allocatedAt });
       }
     });
 
@@ -1101,9 +1123,12 @@ export class Device {
    */
   async join(club, series, course, variant, entered = {}) {
     this.message = null;
-    if (!course || !variant) return;
+    // A race join may leave the variant to the server, which resolves a division's unsaid one
+    // to the course's only design — there may be no publication here to read it from yet.
+    if (!course || (!variant && !entered.race)) return;
     const request = {
-      sailNo: this.boat.sail, name: this.boat.name, club, series, course, variant,
+      sailNo: this.boat.sail, name: this.boat.name, club, series, course,
+      ...(variant ? { variant } : {}),
       tcf: Number(this.boat.tcf) > 0 ? Number(this.boat.tcf) : null,
       lengthM: Number(this.boat.lengthM) > 0 ? Number(this.boat.lengthM) : null,
       // NAMED where the sailor named them, absent where they did not. The server still finds a
@@ -1122,6 +1147,13 @@ export class Device {
        */
       const joined = await this.dialog.join(request);
       this.dialog.allocatedAt = entered.allocatedAt ?? null;
+      if (!joined.course && joined.waiting) {
+        // IN THE RACE, WITH NO COURSE YET: waiting near the start until the club publishes one,
+        // which arrives as a `course` message (`adoptPublished`).
+        this.waiting = joined.waiting;
+        this.render();
+        return;
+      }
       this.snapshot = joined.course;
       this.dialog.revision = joined.revision ?? this.snapshot?.revision ?? null;
       this.start();
@@ -1130,7 +1162,7 @@ export class Device {
       this.message = `Could not join: ${error.message}`;
       // A course that cannot place a line for this TCF says so over the dialog and over REST
       // alike, so there is nothing to fall back to — only a TCF to correct.
-      if (error.code === 'handicap') {
+      if (error.code === 'handicap' || error.code === 'start') {
         this.message = error.message;
         this.renderJoin();
         return;
@@ -1158,6 +1190,31 @@ export class Device {
       this.message = `Could not join: ${error.message}`;
       this.renderJoin();
     }
+  }
+
+  /**
+   * THE COURSE HAS COME, for a boat that joined its race before it was published: the `course`
+   * message the server sends then carries the whole snapshot, and the boat begins on it exactly
+   * as it would have on the `joined` that carries one. True when it began.
+   */
+  adoptPublished() {
+    const body = this.dialog.held()?.course?.body;
+    if (!body?.course) return false;
+    this.waiting = null;
+    this.waitingFix = null;
+    this.snapshot = body.course;
+    this.dialog.revision = body.revision ?? body.course.revision ?? null;
+    this.start();
+    return true;
+  }
+
+  /** In the race, with no course yet: where the start is, and the boat, and the word to wait. */
+  renderWaiting() {
+    this.host.innerHTML = startRow(this.dialog, Date.now(), null)
+      + waitingPanel(this.waiting, this.waitingFix, { raceName: this.dialog.raceName })
+      + `<div class="deck"><button class="plain" id="leave">Leave race</button></div>`;
+    this.el('leave')?.addEventListener('click', () => this.leave());
+    return undefined;
   }
 
   /**
@@ -1198,7 +1255,14 @@ export class Device {
    * trail and the phone shows only the trouble.
    */
   feed(fix) {
-    if (!this.client) return null;
+    if (!this.client) {
+      // Waiting for the course, the boat is still drawn against the start it is waiting at.
+      if (this.waiting) {
+        this.waitingFix = fix;
+        this.render();
+      }
+      return null;
+    }
     const verdict = this.client.accept(fix);
 
     /*

@@ -196,6 +196,12 @@ button.plain.on { border-color: var(--ok); color: var(--ok); }
  * device that is about a moment rather than a place, and in the five minutes it matters it is
  * the only thing anybody is looking at — so it is not on a screen you have to choose.
  */
+/* In the race with no course yet: the start as the programme has it, and a zone to wait in. */
+.waiting { padding: 10px 12px 0; }
+.waiting h2 { margin: 0 0 6px; font-size: 16px; color: var(--ink); }
+.waiting p { margin: 0 0 6px; font-size: 13px; }
+.waitzone { display: block; margin: 0 auto; color: var(--ink); }
+
 .start {
   display: flex; align-items: baseline; gap: 2cqi;
   padding: 5px 3cqi; border-bottom: 1px solid var(--panel2);

@@ -147,15 +147,15 @@ ok('a race can have more than one division, each with its own course', divisions
 /* ----------------------------------------- what leaving the variant unsaid actually means */
 
 // It means "the course's only sailable design", which the server resolves at join time — and
-// that is an answer only where the course HAS one. The empty option therefore says which case
-// the chosen course is in, rather than the same four words either way.
+// that is an answer only where the course HAS one, so with one design the empty option names it.
 const sailable = (c) => Object.values(c.variants ?? {}).filter((v) => !v.template).length;
 const one = Object.entries((await file()).courses).find(([, c]) => sailable(c) === 1);
 $('raceForm').querySelectorAll('[data-dcourse]')[0]
   .fire('change', { target: { value: one[0] } });
 await settle(1200);
-ok('with one design, the empty option NAMES it rather than saying "the only one"',
-  form().includes('its only design'));
+const onlyDesign = Object.entries(one[1].variants).find(([, v]) => !v.template)[0];
+ok('with one design, the empty option names it and says nothing more',
+  form().includes(`<option value="" selected>${onlyDesign}</option>`));
 
 // THE SITUATION IS MADE RATHER THAN LOOKED FOR. The fixture happens to have no course with two
 // sailable designs, and a driver that shrugs at that asserts nothing — so it goes and adds one,
@@ -175,12 +175,18 @@ await settle(900);
 $('raceForm').querySelectorAll('[data-dcourse]')[0]
   .fire('change', { target: { value: one[0] } });
 await settle(1400);
-ok('with several, the empty option says how many there are to pick from',
-  /pick one of \d/.test(form()));
+ok('with several, the empty option is a bare dash, with no commentary',
+  form().includes('<option value="" selected>&mdash;</option>'));
 // AND THE SERVER SAYS SO TOO, because a division naming no variant of a course with two hands a
 // boat nothing — and without this it would say so only when somebody tried to join, on the water.
 ok('...and the file reports it rather than waiting for a boat to find out',
   JSON.stringify((await file()).problems ?? []).includes('must say which variant'));
+// ...which saying one settles; a race is made public only once it has.
+const aDesign = Object.entries((await file()).courses[one[0]].variants).find(([, v]) => !v.template)[0];
+for (const select of $('raceForm').querySelectorAll('[data-dvariant]')) {
+  if (!select.value) select.fire('change', { target: { value: aDesign } });
+  await settle(900);
+}
 
 /* ------------------------------------------- how it starts, whether it is offered, its limit */
 
@@ -203,9 +209,10 @@ ok('a division\'s time limit reaches the file, in minutes',
   Object.values((await file()).races[FIRST].divisions)[0].timeLimitMinutes === 90);
 
 // THE START IS SET HERE, field by field for the race's start type. An allocated start has no
-// common time to set; a scratch start does.
-ok('an allocated start asks for no common start time, only the signals and the open period',
-  !form().includes('data-dstart=') && form().includes('data-dwarn=') && form().includes('data-dopen='));
+// common time, but it is BOUNDED: the first and the last start a boat may give.
+ok('an allocated start asks for its first and last start, the signals and the open period',
+  form().includes('data-dstart=') && form().includes('data-dcloses=') && form().includes('>first<')
+  && form().includes('>last<') && form().includes('data-dwarn=') && form().includes('data-dopen='));
 H('r_start:change')({ target: { value: 'scratch' } });
 await settle(1400);
 const startField = $('raceForm').querySelectorAll('[data-dstart]')[0];
@@ -220,6 +227,43 @@ H('r_start:change')({ target: { value: 'open' } });
 await settle(1400);
 ok('an open start asks when its line closes, and not how long it stays open',
   form().includes('data-dcloses=') && !form().includes('data-dopen='));
+
+/* ------------------------------------------------ a clone, and another division */
+
+// A CLONE IS SET UP BEFORE IT IS OFFERED: whatever the original was, the copy starts not public.
+choose('race', FIRST);
+await settle(900);
+const racesBefore = new Set(optionsOf('race'));
+H('cmd_race_clone:click')?.();
+await settle(1400);
+const CLONE = optionsOf('race').find((id) => !racesBefore.has(id));
+ok('a cloned race starts not public, even when the original is', !!CLONE
+  && (await file()).races[FIRST].public === true && (await file()).races[CLONE].public === false);
+
+// A NEW DIVISION SAILS WHAT THE OTHERS DO, rather than the first course in the file.
+const firstDivision = Object.values((await file()).races[CLONE].divisions)[0];
+H('r_add_div:click')();
+await settle(1400);
+const added = Object.values((await file()).races[CLONE].divisions);
+ok('a division added to a race sails the same course as the ones already there',
+  added.at(-1).course === firstDivision.course && added.at(-1).variant === firstDivision.variant);
+
+// NOT PUBLIC UNTIL IT HAS A COURSE: a division naming a course of several designs and none of
+// them is a race no boat could be handed anything for, and the box to offer it stays shut.
+$('raceForm').querySelectorAll('[data-dcourse]')[0].fire('change', { target: { value: one[0] } });
+await settle(1400);
+const publicShut = () => /id="r_public"[^>]*disabled/.test(form());
+ok('a race with a division that sails no one design cannot be made public',
+  publicShut() && form().includes('It can be made public once'));
+H('r_public:change')?.({ target: { checked: true } });
+await settle(1400);
+ok('...and ticking it anyway leaves it not public', (await file()).races[CLONE].public === false);
+const designs = Object.entries((await file()).courses[one[0]].variants).filter(([, v]) => !v.template);
+for (const select of $('raceForm').querySelectorAll('[data-dvariant]')) {
+  select.fire('change', { target: { value: designs[0][0] } });
+  await settle(900);
+}
+ok('once every division says what it sails, it can be', !publicShut());
 
 /* ------------------------------------------------------------------ deleting, and the chain */
 

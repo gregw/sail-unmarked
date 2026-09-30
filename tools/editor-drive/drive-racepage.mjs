@@ -132,11 +132,14 @@ const chart = () => $('chart').innerHTML || '';
 ok('the page finds the races defined in the series file',
   mod.__state.races.some((row) => row.id === 'page-race'));
 ok('...and opens on one that is running', !!mod.__state.chosen);
+ok('...and draws the chart, not the sea chart, until asked', mod.__state.basemap === 'chart');
 ok('...and reads its conduct', !!mod.__state.conduct);
 ok('the pane names the race and its divisions',
   pane().includes('Page race') && pane().includes('div-1'));
-// EVERY RACE RUNNING, one tab each; a race still being set up is not running.
-ok('each race running today has a tab', pane().includes('data-race="') && pane().includes('Second race'));
+// EVERY RACE RUNNING, picked by series and then race; a race still being set up is not running.
+ok('a race running is picked by its series, then by its name',
+  pane().includes('data-pick="series"') && pane().includes(`>${KEY}</option>`)
+  && pane().includes('data-pick="race"') && pane().includes('Second race'));
 ok('...and a race that is not public is not among them', !pane().includes('Hidden race'));
 
 /* ------------------------------------------- the chart: colour is division, texture is progress */
@@ -292,11 +295,11 @@ ok('...on the same channel the boats are on', (await speak(boat.session))
 ok('there is no DNF button: a boat that does not finish in its time limit is not finished',
   !pane().includes('data-dnf='));
 
-/* ----------------------------------------------------------- the other race, by its tab */
+/* ------------------------------------------------------ the other race, by its selector */
 
-press('race', `${KEY}/page-race-2`);
+$('pane').querySelector('[data-pick="race"]').fire('change', { target: { value: `${KEY}/page-race-2` } });
 await settle(400);
-ok('the tab of another running race puts it in the pane', mod.__state.chosen === `${KEY}/page-race-2`
+ok('picking another running race puts it in the pane', mod.__state.chosen === `${KEY}/page-race-2`
   && pane().includes('Second race'));
 
 report();

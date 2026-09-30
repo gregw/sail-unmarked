@@ -1213,7 +1213,7 @@ export class RaceClient {
   /**
    * A gate's own AXIS: its two crossings' centres, and the leg that leads into them.
    *
-   * <b>What Line perp squares up at a gate, because neither side's own normal is the answer
+   * <b>What Line up squares up at a gate, because neither side's own normal is the answer
    * there.</b> The two shapes a gate takes pull in different directions. Where the sides are
    * collinear — two lines end to end with a gap between them — each side's crossing normal
    * already points the way the fleet comes through, and the join between the centres runs
@@ -1638,7 +1638,7 @@ export class RaceClient {
         })),
       // The gate's own axis, for the orientation that squares up to a line. See `gateOf`.
       // A cycle's start choice is NOT a gate — its lines are scattered round a circuit rather
-      // than set either side of one leg — so there is no axis for Line perp to square up to,
+      // than set either side of one leg — so there is no axis for Line up to square up to,
       // and asking for one would point the display at the mean of four marks nobody is sailing
       // between. It falls back to the watched line's own normal, which is the right answer for
       // a boat about to cross that line.

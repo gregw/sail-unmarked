@@ -4,8 +4,8 @@
  *
  * <h2>What this page is for, and what it deliberately is not</h2>
  * It watches every race RUNNING — public, today, and not yet over — on one chart, and acts on one
- * of them at a time, chosen by its tab: it can DELAY a start, POSTPONE one (AP), ABANDON a race and
- * talk on the channel. Everything else about a race — its divisions, its courses and its starts —
+ * of them at a time, chosen by series and then race: it can DELAY a start, POSTPONE one (AP),
+ * ABANDON a race and talk on the channel. Everything else about a race — its divisions, its courses and its starts —
  * is set in the editor's Races tab, and while a race is public the server hands its boats the
  * starts defined there (`Dialog.sync`). It does not score, it does not measure, and it has <b>no
  * GO button</b> — which is not an omission but §1.2: the server keeps no clock, so a start cannot be
@@ -78,7 +78,9 @@ const STALE_MS = 30000;
 
 const state = {
   view: new MapView(),
-  basemap: 'sea',
+  // THE CHART, NOT THE SEA CHART: the committee is watching boats and lines, and every light and
+  // buoy on top of the bathymetry is ink competing with them. The sea chart is one choice away.
+  basemap: 'chart',
   programmes: [],
   races: [],            // {club, series, id, race}: every race defined
   chosen: null,         // the race the pane is acting on: one of those running
@@ -149,7 +151,8 @@ function over(row, now = Date.now()) {
     const body = standing?.timer?.body ?? standing?.derived;
     const limit = Number(body?.timeLimitSeconds);
     if (!body || !(limit > 0)) return false;
-    const opens = Date.parse(body.startAt ?? '');
+    // An allocated start is over once its LAST start's line has closed and its limit has run.
+    const opens = Date.parse(body.kind === 'allocated' ? body.lastStartAt ?? '' : body.startAt ?? '');
     if (!Number.isFinite(opens)) return false;
     const closes = body.closesAt ? Date.parse(body.closesAt) : opens + Number(body.openSeconds ?? 600) * 1000;
     return now > closes + limit * 1000;
@@ -415,9 +418,17 @@ function render() {
   const rows = running();
   const row = chosen();
   const now = Date.now();
-  // ONE TAB PER RACE RUNNING: the chart shows them all, and the controls act on the one chosen.
-  const tabs = rows.length > 1 ? `<div class="tabs">${rows.map((r) => `<button class="act${key(r) === state.chosen
-    ? ' on' : ''}" data-race="${esc(key(r))}">${esc(r.race.name ?? r.id)}</button>`).join('')}</div>` : '';
+  // A SERIES, THEN A RACE: race names repeat from one series to the next ("Race 3"), so a race
+  // is picked within its series. The chart shows every race running; the controls act on this one.
+  const seriesOf = (r) => `${r.club}/${r.series}`;
+  const series = [...new Set(rows.map(seriesOf))];
+  const inSeries = row ? rows.filter((r) => seriesOf(r) === seriesOf(row)) : [];
+  const tabs = row ? `<div class="pick">
+      <select data-pick="series" title="series">${series.map((s) => `<option value="${esc(s)}"${s
+        === seriesOf(row) ? ' selected' : ''}>${esc(s)}</option>`).join('')}</select>
+      <select data-pick="race" title="race">${inSeries.map((r) => `<option value="${esc(key(r))}"${key(r)
+        === state.chosen ? ' selected' : ''}>${esc(r.race.name ?? r.id)}</option>`).join('')}</select>
+    </div>` : '';
   if (!row) {
     el('pane').innerHTML = `${state.message ? `<p class="warn" style="font-size:12px">${esc(state.message)}</p>` : ''}
       <p class="hint">No race is running. A race is DEFINED — its divisions, courses and starts — in the
@@ -629,14 +640,18 @@ function arm(what, then) {
 }
 
 function wirePane() {
-  for (const button of el('pane').querySelectorAll('[data-race]')) {
-    button.addEventListener('click', () => {
-      state.chosen = button.dataset.race;
-      state.conduct = state.conducts.get(state.chosen) ?? null;
-      state.arming = null;
-      render();
-    });
-  }
+  const pick = (chosenKey) => {
+    state.chosen = chosenKey;
+    state.conduct = state.conducts.get(state.chosen) ?? null;
+    state.arming = null;
+    el('pane').querySelector('[data-pick]:focus')?.blur?.();
+    render();
+  };
+  el('pane').querySelector('[data-pick="series"]')?.addEventListener('change', (ev) => {
+    const first = running().find((r) => `${r.club}/${r.series}` === ev.target.value);
+    if (first) pick(key(first));
+  });
+  el('pane').querySelector('[data-pick="race"]')?.addEventListener('change', (ev) => pick(ev.target.value));
 
   // DELAY: a new start, the whole sequence moved with it — see `delayed`.
   const delay = (name, minutes) => {

@@ -2879,6 +2879,25 @@ function addRace() {
   render();
 }
 
+/**
+ * WHY A RACE CANNOT BE MADE PUBLIC YET, or null when it can: a public race is joined, and a boat
+ * joining one is handed its division's course — or waits at that course's start line for it to
+ * be published. Either way the division has to name a course, and one design of it.
+ */
+function courseless(race) {
+  const divisions = Object.values(race.divisions ?? {});
+  if (divisions.length === 0) return 'it has a division';
+  for (const division of divisions) {
+    const course = state.courses.get(division.course);
+    if (!course) return `division ${division.name} names a course`;
+    const sailable = [...course.variants.values()].filter((v) => !v.template);
+    if (division.variant ? !course.variants.has(division.variant) : sailable.length !== 1) {
+      return `division ${division.name} says which design of ${division.course} it sails`;
+    }
+  }
+  return null;
+}
+
 function cloneRace() {
   const race = currentRace();
   if (!race) return;
@@ -2892,6 +2911,9 @@ function cloneRace() {
     // A CLONE IS NOT THE NEXT RACE. Copying the chain would enter every boat that finished the
     // copy into the original's successor, which is somebody else's race.
     next: null,
+    // NOR IS IT PUBLIC YET: a copy is a race being set up — its date and its starts still to be
+    // made its own — and offering it to boats is the deliberate act that follows.
+    public: false,
     divisions: Object.fromEntries(Object.entries(race.divisions).map(([name, d]) =>
       [name, { ...d }])),
   });
@@ -2998,8 +3020,11 @@ function renderRaceFields() {
       ['allocated', 'Allocated — each boat gives its own start time when it joins'],
     ].map(([value, label]) => `<option value="${value}"${(race.startType ?? 'scratch') === value
       ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select>
-    <label class="cb"><input type="checkbox" id="r_public"${race.public === false ? '' : ' checked'}>
+    <label class="cb"><input type="checkbox" id="r_public"${race.public === false ? '' : ' checked'}${
+      race.public === false && courseless(race) ? ' disabled' : ''}>
       public &mdash; boats are offered this race; untick while it is being set up</label>
+    ${race.public === false && courseless(race) ? `<p class="hint">It can be made public once
+      ${esc(courseless(race))}.</p>` : ''}
     <!--
       A RACE KNOWS ITS NEXT RACE — that is the model, and it is the whole answer to several races
       in a day: a boat that stops racing one is entered for the next, provided it is the same day
@@ -3044,18 +3069,12 @@ function renderRaceFields() {
             ? ' selected' : ''}>${esc(c.id)}</option>`).join('')}
         </select>
         <!--
-          LEAVING THE VARIANT UNSAID MEANS "the course's only sailable design", which the server
-          resolves at join time — and that is an answer only when the course HAS one. The empty
-          option therefore says which case this course is in rather than the same four words
-          either way: with one design it names it, with several it says how many and that one of
-          them has to be picked, because a division that names no variant of a course with three
-          hands a boat nothing and says so only when somebody tries to join.
+          LEAVING THE VARIANT UNSAID MEANS "the course's only sailable design", resolved at join
+          time, so with one design the empty option shows its name.
         -->
         <select data-dvariant="${esc(name)}">
           <option value=""${division.variant ? '' : ' selected'}>${variants.length === 1
-            ? `&mdash; ${esc(variants[0].id)} (its only design)`
-            : variants.length === 0 ? '&mdash; this course has no design to sail'
-              : `&mdash; pick one of ${variants.length}`}</option>
+            ? esc(variants[0].id) : '&mdash;'}</option>
           ${variants.map((v) => `<option value="${esc(v.id)}"${v.id === division.variant
             ? ' selected' : ''}>${esc(v.id)}</option>`).join('')}
         </select>
@@ -3090,10 +3109,12 @@ function startRowFor(race, name, division) {
     <input data-${attr}="${esc(name)}" value="${esc(value ?? '')}" placeholder="${fallback}"
       inputmode="numeric" style="flex:0 0 34px; min-width:0">`;
   const soon = countingDown(race, division);
+  // AN ALLOCATED START IS BOUNDED: each boat gives its own time, and it has to fall between the
+  // first start and the last — which are the same two fields an open start's line uses.
   return `<div class="steprow alt" data-divstart="${esc(name)}">
-      ${kind === 'allocated' ? '<span class="small muted">each boat\'s own time</span>'
-    : time('dstart', division.start, kind === 'open' ? 'opens' : 'start')}
-      ${kind === 'open' ? time('dcloses', division.closes, 'closes') : ''}
+      ${time('dstart', division.start, kind === 'open' ? 'opens' : kind === 'allocated' ? 'first' : 'start')}
+      ${kind === 'open' ? time('dcloses', division.closes, 'closes')
+    : kind === 'allocated' ? time('dcloses', division.closes, 'last') : ''}
       ${minutes('dwarn', division.warningMinutes, 5, 'warn')}
       ${minutes('dprep', division.prepMinutes, 4, 'prep')}
       ${kind === 'open' ? '' : minutes('dopen', division.openMinutes, 10, 'open')}
@@ -3125,6 +3146,10 @@ function wireRaceFields(race) {
   text('r_format', 'format');
   text('r_start', 'startType');
   el('r_public')?.addEventListener('change', (ev) => {
+    if (ev.target.checked && courseless(state.races.get(race.id))) {
+      ev.target.checked = false;
+      return;
+    }
     beginEdit();
     state.races.get(race.id).public = ev.target.checked;
     endEdit();
@@ -3266,8 +3291,12 @@ function wireRaceFields(race) {
     let n = Object.keys(held.divisions).length + 1;
     while (held.divisions[`div-${n}`]) n++;
     beginEdit();
+    // THE SAME COURSE AS THE DIVISIONS ALREADY THERE: a second division is usually a second group
+    // of boats on the same water, and the first course in the file is a guess nobody made.
+    const like = Object.values(held.divisions)[0] ?? null;
     held.divisions[`div-${n}`] = {
-      name: `div-${n}`, course: [...state.courses.keys()][0] ?? null, variant: null, start: null,
+      name: `div-${n}`, course: like?.course ?? [...state.courses.keys()][0] ?? null,
+      variant: like?.variant ?? null, start: null,
     };
     endEdit();
     formsChanged();

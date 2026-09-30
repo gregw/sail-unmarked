@@ -329,7 +329,7 @@ Direction is **C→S** (client to server) or **S→C**. The schemas are the exac
 | `rejected` | S→C | `code`, `text` | any refusal, including version and schema |
 
 **`rejected` carries BOTH a code and a sentence.** The `code` is what a client branches on —
-`version`, `course`, `variant`, `unpublished`, `handicap`, `schema`, `record`, `internal`; the `text` is what a
+`version`, `course`, `variant`, `unpublished`, `handicap`, `start`, `schema`, `record`, `internal`; the `text` is what a
 sailor reads. Neither is sufficient alone: a code cannot be shown to somebody and a sentence cannot
 be acted on. **An unknown code falls back to the text**, which the versioning rules require anyway.
 
@@ -342,7 +342,7 @@ there is a session, and putting them on the conversation would buy nothing.
 | `type` | Dir | Body | Notes |
 |---|---|---|---|
 | `join` | C→S | `sailNo`, `name`, `club`, `series`, `course`, `variant`, `race`, `division`, `tcf`, `lengthM`, `revision`, `answers{}` | `race` and `division` where the sailor named them |
-| `joined` | S→C | `session`, `boatId`, `race`, `raceName`, `tags[]`, `fixSeconds`, `revision`, `course`, `reason` | the parameters the client is to run on |
+| `joined` | S→C | `session`, `boatId`, `race`, `raceName`, `tags[]`, `fixSeconds`, `revision`, `course` or `waiting`, `reason` | the parameters the client is to run on |
 | `ask` | S→C | `questions[]` | **not built** — every join answers itself |
 | `leave` | C→S | `session`, `reason` | |
 | `left` | S→C | `session` | |
@@ -358,7 +358,16 @@ obeyed.
 **`joined` carries the course, not a reference to it** — the whole published snapshot. A boat that
 has to fetch before it can sail is a boat that cannot join on a flaky connection. It hands over
 what was **published**, never what the editor currently holds, and a course with nothing published
-cannot be joined.
+cannot be joined on its own.
+
+**A public race is joined before its course is published.** The committee opens the race and sets
+the course once it has seen the wind, and the boats are entered meanwhile, whether or not the course
+is public. Such a `joined` carries `waiting` instead of `course`: a sentence, and the `startLine` as
+the course's first line stands in the programme now — somewhere to wait, not geometry to sail. The
+boat shows a zone around it (`waitingPanel`) and the race's start row. When the club publishes, every
+boat waiting in that division is sent a `course` message carrying the whole snapshot
+(`Dialog.coursePublished`), and begins on it as it would have on a `joined` that carried one. A
+handicapped course's TCF range is not checked for a boat that joined waiting.
 
 **A course handicapped by distance needs the boat's TCF**, because the TCF places the boat's own
 line at each handicapped step. A join with no TCF, or one outside the snapshot's `tcfMin` to
@@ -458,7 +467,8 @@ definition, every division alike) and says what else goes with it:
 | `allocated` | from this boat's own start time for `openSeconds` | that time | a countdown to its own start |
 
 An allocated start has no common `startAt`: each boat gives its own time when it joins
-(`allocatedStart` on `join`). `warningSeconds` and `startSeconds` say when the warning and
+(`allocatedStart` on `join`), between the division's `firstStartAt` and `lastStartAt`; a join with no
+time, or one outside them, is `rejected` with code `start`. `warningSeconds` and `startSeconds` say when the warning and
 preparatory signals fall before the line opens, in every kind; `timeLimitSeconds` is the division's
 time limit from the instant a boat's elapsed runs from, after which its finish is closed to it.
 **Every countdown is run by the boat**, against the boat's own clock — the server sends this once
@@ -767,7 +777,7 @@ straight; the editor's `coursedraw.track` arcs them, which this screen does not 
 
 The chart shows **every race running** — public, today, and not over (every boat finished or
 retired, or every division's line closed and time limit run) — and the panel acts on **one**, chosen
-by its tab.
+by series and then by race, since race names repeat from one series to the next.
 
 - **Race**: name, date, how it starts, club and series, and the race that follows.
 - **Starts**: per division, the start as it stands, with what can be done to it here and nothing

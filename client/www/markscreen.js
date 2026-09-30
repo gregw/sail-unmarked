@@ -53,7 +53,10 @@ export const ORIENTATIONS = {
   north: { label: 'North up' },
   cog: { label: 'COG up' },
   leg: { label: 'Leg up' },
-  perp: { label: 'Line perp' },
+  // "Line up": the line laid square across the screen, so every part of it is equally up. Not
+  // exact — "up" is not defined for a line — but it says what the picture does, where "perp" was
+  // the geometry's word for it. The key stays `perp`.
+  perp: { label: 'Line up' },
 };
 
 /**
@@ -156,7 +159,7 @@ export function crossingNormal(prepared, required) {
 /**
  * Which compass bearing is drawn at the top of the plot.
  *
- * Leg up and Line perp both turn the whole display when the boat crosses onto the next
+ * Leg up and Line up both turn the whole display when the boat crosses onto the next
  * leg; North up never turns. Leg up falls back to the boat's COG when there is no next leg
  * to point at — at the finish of an open course — because a display that snapped to north
  * at the last mark would turn under the helm at the worst possible moment.
@@ -175,7 +178,7 @@ export function upBearing(state, orientation) {
 }
 
 /**
- * What Line perp puts at the top: the crossing squared across the screen.
+ * What Line up puts at the top: the crossing squared across the screen.
  *
  * <b>At a gate that is the perpendicular to the join between the two centres, not one side's
  * own normal</b> — which is `RaceClient.gateOf`'s whole subject, and the reasoning is there.
@@ -517,7 +520,7 @@ export const HOLD = {
 /**
  * How fast the display swings round onto a new leg, in degrees per second.
  *
- * Slowly, and the slowness is the point. In Leg up and Line perp the whole world turns when a
+ * Slowly, and the slowness is the point. In Leg up and Line up the whole world turns when a
  * boat crosses onto the next leg, and snapping it through ninety degrees between one frame and
  * the next destroys the one thing an oriented display is for — knowing, without thinking,
  * which way things are. A turn that is watched happening is a turn that is followed. Fifty

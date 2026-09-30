@@ -384,7 +384,15 @@ public class Dialog
         }
         String revision = ledger.read(club).publishedRevision(series, courseId, variant).orElse(null);
         CourseSnapshot snapshot = revision == null ? null : store.course(revision).orElse(null);
-        if (snapshot == null)
+        Race race = raceFor(programme, message.text("race"), courseId, variant);
+        /*
+         * A PUBLIC RACE IS JOINED BEFORE ITS COURSE IS PUBLISHED. The committee opens the race
+         * and sets the course when it has seen the wind, and the boats are entered and waiting at
+         * the start meanwhile: they are handed the course in a `course` message when it is
+         * published ({@link #coursePublished}). With no race behind the join there is nothing to
+         * wait for, and nothing to hand over.
+         */
+        if (snapshot == null && race == null)
         {
             out.add(reject("unpublished", "Nothing is published for " + courseId + "/" + variant
                 + ", so there is nothing to hand you."));
@@ -393,14 +401,13 @@ public class Dialog
 
         // A handicapped course places each boat's line by its TCF, so one it cannot place is
         // refused here rather than discovered on the water (§8.2).
-        String handicap = Handicap.refusal(snapshot, message.number("tcf"));
+        String handicap = snapshot == null ? null : Handicap.refusal(snapshot, message.number("tcf"));
         if (handicap != null)
         {
             out.add(reject("handicap", handicap));
             return null;
         }
 
-        Race race = raceFor(programme, message.text("race"), courseId, variant);
         /*
          * THE BOAT'S OWN ANSWER FIRST, and the guess only where it did not give one.
          *
@@ -415,13 +422,23 @@ public class Dialog
             : (named != null && race.divisions().containsKey(named)
                 ? named : divisionFor(race, courseId, variant));
 
+        // AN ALLOCATED START IS THE BOAT'S OWN TIME, within the race's range of starts: refused
+        // here when it is missing or outside it, rather than discovered at the boat's own gun.
+        String refusedStart = allocatedRefusal(race, division, message.text("allocatedStart"),
+            ZoneId.of(programme.timezone()));
+        if (refusedStart != null)
+        {
+            out.add(reject("start", refusedStart));
+            return null;
+        }
+
         Session session = new Session("s" + Long.toHexString(counter.incrementAndGet()));
         session.sailNo = message.text("sailNo");
         session.name = message.text("name");
         session.boatId = session.sailNo == null || session.sailNo.isBlank()
             ? session.id : session.sailNo;
         session.tcf = message.number("tcf");
-        session.distanceCorrected = snapshot.tcfMin() != null;
+        session.distanceCorrected = snapshot != null && snapshot.tcfMin() != null;
         session.revision = revision;
         session.club = club;
         session.series = series;
@@ -447,7 +464,10 @@ public class Dialog
         body.put("revision", revision);
         // JOINED CARRIES THE COURSE, NOT A REFERENCE TO IT (§8.2). A boat that has to fetch
         // before it can sail is a boat that cannot join on a flaky connection.
-        body.put("course", snapshot);
+        if (snapshot != null)
+            body.put("course", snapshot);
+        else
+            body.put("waiting", waiting(programme, course, variant));
         // FIXES STOP WHEN THERE IS NO FLEET, and this absence is how the boat is told. On a
         // phone in a bracket for four hours, reporting to nobody is battery and data spent for
         // nothing (§8.2).
@@ -465,6 +485,69 @@ public class Dialog
                 + " joined" + (division == null ? "" : " in division " + division), List.of());
         }
         return session;
+    }
+
+    /**
+     * WHAT A BOAT WAITING FOR ITS COURSE IS SHOWN: where the start is, as the course's first line
+     * stands in the programme now. Not a snapshot and not sailed — only somewhere to wait — so
+     * it is read from the definition, where a published course would come from the ledger.
+     */
+    static Map<String, Object> waiting(Programme programme, Course course, String variant)
+    {
+        Map<String, Object> body = Envelope.fields();
+        body.put("text", "Wait near the start for the course details.");
+        CourseSnapshot current = CourseSnapshot.of(programme, course, variant);
+        CourseSnapshot.Crossing start = current == null || current.steps().isEmpty()
+            || current.steps().get(0).crossings().isEmpty() ? null
+            : current.steps().get(0).crossings().get(0);
+        if (start != null && start.port().latitude() != null && start.starboard().latitude() != null)
+            body.put("startLine", Map.of("port", start.port(), "starboard", start.starboard()));
+        return body;
+    }
+
+    /**
+     * THE CLUB HAS PUBLISHED: hand the course to every boat that joined one of this series' races
+     * before there was one to hand it. Sent as a {@code course} message to the division, which is
+     * what a course change is on the wire (§12.4) — acknowledged, and re-stated to a boat that
+     * comes back — and it is sent only where somebody is waiting, so a boat that joined with its
+     * course in hand is not told it again.
+     */
+    public synchronized void coursePublished(Programme programme)
+    {
+        String prefix = programme.club() + "/" + programme.series() + "/";
+        CourseLedger.Ledger ledgered = ledger.read(programme.club());
+        rooms.forEach((key, room) ->
+        {
+            if (!key.startsWith(prefix))
+                return;
+            room.race.divisions().forEach((name, division) ->
+            {
+                List<Session> waiting = room.boats().stream()
+                    .filter(b -> b.revision == null && name.equals(b.division)).toList();
+                Course course = programme.courses().get(division.course());
+                if (waiting.isEmpty() || course == null)
+                    return;
+                String variant = division.variant() == null || division.variant().isBlank()
+                    ? soleVariant(course) : division.variant();
+                String revision = variant == null ? null
+                    : ledgered.publishedRevision(programme.series(), course.id(), variant).orElse(null);
+                CourseSnapshot snapshot = revision == null ? null : store.course(revision).orElse(null);
+                if (snapshot == null)
+                    return;
+                for (Session session : waiting)
+                {
+                    session.revision = revision;
+                    session.distanceCorrected = snapshot.tcfMin() != null;
+                }
+                Map<String, Object> body = Envelope.fields();
+                body.put("revision", revision);
+                body.put("course", snapshot);
+                body.put("reason", "published");
+                body.put("text", "The course is published: "
+                    + (course.name() == null ? course.id() : course.name()) + ".");
+                publish(room, Envelope.of("course", List.of(Race.tagFor(name)), body));
+            });
+        });
     }
 
     private static Envelope reject(String code, String text)
@@ -666,6 +749,42 @@ public class Dialog
     }
 
     /**
+     * Why a boat giving {@code given} as its own start cannot join this race's division, or null
+     * when it can: a race with an allocated start needs a time, between the division's first start
+     * ({@code start}) and its last ({@code closes}).
+     */
+    static String allocatedRefusal(Race race, String division, String given, ZoneId zone)
+    {
+        if (race == null || race.start() != Race.StartType.ALLOCATED)
+            return null;
+        Instant at;
+        try
+        {
+            at = given == null ? null : Instant.parse(given);
+        }
+        catch (Exception e)
+        {
+            at = null;
+        }
+        if (at == null)
+            return "This race has allocated starts: give your own start time to join it.";
+        Race.Division d = division == null ? null : race.divisions().get(division);
+        if (d == null)
+            return null;
+        Instant first = Race.Division.at(d.start(), race.date(), zone);
+        Instant last = Race.Division.at(d.closes(), race.date(), zone);
+        java.time.format.DateTimeFormatter hhmm = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
+            .withZone(zone);
+        if ((first != null && at.isBefore(first)) || (last != null && at.isAfter(last)))
+        {
+            return "Your start time, " + hhmm.format(at) + ", is outside this race's starts"
+                + (first != null && last != null ? ", " + hhmm.format(first) + " to " + hhmm.format(last) : "")
+                + ": give a time within them.";
+        }
+        return null;
+    }
+
+    /**
      * THE START A DIVISION'S DEFINITION WORKS OUT TO, as the body of a {@code timer} — or null when
      * it does not define one yet (a scratch or open start with no time).
      */
@@ -684,6 +803,13 @@ public class Dialog
         if (kind == Race.StartType.ALLOCATED)
         {
             body.put("openSeconds", division.open() * 60);
+            // The range a boat's own start must fall in: its first and its last.
+            java.time.Instant first = Race.Division.at(division.start(), race.date(), zone);
+            java.time.Instant last = Race.Division.at(division.closes(), race.date(), zone);
+            if (first != null)
+                body.put("firstStartAt", first.toString());
+            if (last != null)
+                body.put("lastStartAt", last.toString());
             body.put("text", name + ": allocated starts — warning " + division.warning() + " and preparatory "
                 + division.prep() + " min before each boat's own time; line open " + division.open()
                 + " min after it");

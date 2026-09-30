@@ -264,7 +264,7 @@ ok('...with the distances written on the lines of the plot that measure them, no
   !device().includes('Perp dist') && !device().includes('Dist on COG')
   && /<text[^>]*>\d+ m<\/text>/.test(device()));
 ok('...the state in the arrow rather than in a chip', device().includes('NEXT LEG'));
-ok('...the three orientations', device().includes('Line perp'));
+ok('...the three orientations', device().includes('Line up'));
 ok('...and a plot of the line it is watching', device().includes('<svg class="plot"'));
 
 // The frame is held so the boat is SEEN to move across it. A plot that re-fits every frame
@@ -477,7 +477,7 @@ press('orient', 'perp');
 press('view', 'overview');
 ok('...which in turn leaves the Course screen as IT was left', on('orient', 'cog'));
 press('orient', 'north');
-ok('the orientations are offered North, COG, Leg, then Line perp',
+ok('the orientations are offered North, COG, Leg, then Line up',
   /data-orient="north"[\s\S]*data-orient="cog"[\s\S]*data-orient="leg"[\s\S]*data-orient="perp"/.test(device()));
 press('view', 'auto');
 

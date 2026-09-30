@@ -266,8 +266,8 @@ derivations; these are the rules that outlive any of them.
 
 ## Orientation
 
-Four, offered in this order: **North up**, **COG up**, **Leg up**, **Line perp**. **Each screen keeps its
-own** (`Device.orientations`): the Course screen opens North up and the Line screen Line perp, the selector
+Four, offered in this order: **North up**, **COG up**, **Leg up**, **Line up**. **Each screen keeps its
+own** (`Device.orientations`): the Course screen opens North up and the Line screen Line up, the selector
 on a screen sets that screen's, and changing one leaves the other as it was last left — so the Line screen
 that comes up by itself on an approach comes up the way it was last read.
 
@@ -289,7 +289,7 @@ in blues and greens and from the cyan COG.
 - **COG up** is the one every plotter has, and its cost is that it swings on the boat rather than on the
   course; what makes it usable is that nothing here snaps. With no COG it falls back to the leg, never to
   north.
-- **Line perp squares up to a GATE's axis, not to one side's own normal** (`gateOf`, `gateUp`). Collinear
+- **Line up squares up to a GATE's axis, not to one side's own normal** (`gateOf`, `gateUp`). Collinear
   sides and parallel sides pull in different directions, and the perpendicular to the join between the two
   centres is the one bearing both shapes agree on. **The sign comes from the leg INTO the gate**, never from
   where the boat is, or it would flip through half a turn as the boat drew level — at the latch, the one
@@ -488,6 +488,13 @@ the start for a scratch start, from the boat's own allocated time for an allocat
 crossing for an open start or a run with no race. The start row says it the traditional way for scratch
 and allocated starts — a countdown — and for an open start says when the line opens, for how long, and
 then when it closes.
+
+**A public race is joined whether or not its course is published.** The join screen offers every
+series with a public race today, not only those with a public course, and a division whose course is
+not published yet says so and can still be joined. The boat then waits: a zone around the start line
+as the programme has it, the boat on it, and the race's start row (`renderWaiting`). The course
+arrives in a `course` message when the club publishes it, and the boat begins sailing without joining
+again (`adoptPublished`).
 
 **A race is raced.** With a race chosen there is no "how you are sailing" selector — the run counts as a
 race and goes to the club; with no race it offers practice or a record attempt, and never a race there is

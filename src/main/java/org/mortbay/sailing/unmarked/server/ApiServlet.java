@@ -967,6 +967,9 @@ public class ApiServlet extends HttpServlet
             CourseLedger.Ledger updated = ledger.publish(club, publications, withdrawals, events);
             LOG.info("Published {} and withdrew {} for {} — {} public event(s)",
                 publications.size(), withdrawals.size(), club, events.size());
+            // Boats already in a public race of this series may be waiting for exactly this.
+            if (!publications.isEmpty())
+                dialog.coursePublished(programme);
             send(resp, Map.of("published", updated.published(), "logged", events.size()));
         }
         catch (IllegalArgumentException e)

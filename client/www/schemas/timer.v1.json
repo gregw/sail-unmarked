@@ -44,6 +44,16 @@
       "description": "The division's time limit, from the instant a boat's elapsed time runs from; its finish line is closed to it after that.",
       "type": "integer",
       "minimum": 0
+    },
+    "firstStartAt": {
+      "description": "An allocated start's earliest start time: no boat may give one before it.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "lastStartAt": {
+      "description": "An allocated start's latest start time: no boat may give one after it.",
+      "type": "string",
+      "format": "date-time"
     }
   },
   "required": [

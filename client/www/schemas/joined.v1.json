@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "joined",
-  "description": "S→C. The parameters the client is to run on. Carries the COURSE, not a reference to it. `fixSeconds` is ABSENT when there is no race behind the join, which is how the boat is told to report no fixes (§8.2).",
+  "description": "S→C. The parameters the client is to run on. Carries the COURSE, not a reference to it — or, joining a public race whose course is not yet published, `waiting` instead: where the start is, until a `course` message hands the geometry over. `fixSeconds` is ABSENT when there is no race behind the join, which is how the boat is told to report no fixes (§8.2).",
   "type": "object",
   "properties": {
     "session": {
@@ -34,6 +34,9 @@
     },
     "reason": {
       "type": "string"
+    },
+    "waiting": {
+      "type": "object"
     }
   },
   "required": [

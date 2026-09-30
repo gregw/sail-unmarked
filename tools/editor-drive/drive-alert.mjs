@@ -66,7 +66,8 @@ const races = {
     name: 'Allocated race',
     date: new Date().toLocaleDateString('en-CA'),
     startType: 'allocated',
-    divisions: { open: { course: taken.course, variant: taken.variant } },
+    // Boats may start from ten past midnight until twenty to midnight, the club's time.
+    divisions: { open: { course: taken.course, variant: taken.variant, start: '00:10', closes: '23:40' } },
   },
 };
 await fetch(`/api/programmes/${KEY}`, {
@@ -100,9 +101,32 @@ pick('race', 'allocated-race');
 pick('division', 'open');
 ok('a race with an allocated start asks for this boat\'s start time',
   device().includes('id="j_alloc"') && /id="j_go" disabled>Give your start time</.test(device()));
+ok('...saying the range the starts run over', device().includes('Starts run from 00:10 to 23:40'));
 H('j_alloc:input')({ target: { value: '23:59' } });
 H('j_alloc:change')({ target: { value: '23:59' } });
 ok('...and once it is given, the boat may join', /id="j_go">Join and sail</.test(device()));
+
+// THE SERVER HOLDS THE RANGE: a start outside it is refused, whatever the screen allowed.
+const joinAllocated = async (at) => (await post('/api/dialog', { envelopes: [
+  { v: 1, type: 'hello', body: { versions: [1] } },
+  { v: 1, type: 'join', body: { sailNo: 'AUS 9', club: programme.club, series: programme.series,
+    course: taken.course, variant: taken.variant, race: 'allocated-race', division: 'open',
+    ...(at ? { allocatedStart: at } : {}) } },
+] })).envelopes;
+const zoneOf = file.timezone ?? 'Australia/Sydney';
+const clubTime = (hhmm) => {
+  // An instant for HH:MM today, in the series' timezone.
+  const [h, m] = hhmm.split(':').map(Number);
+  const guess = new Date(`${new Date().toLocaleDateString('en-CA')}T${hhmm}:00Z`);
+  const shown = new Intl.DateTimeFormat('en-GB', { timeZone: zoneOf, hour: '2-digit', minute: '2-digit',
+    hour12: false }).format(guess).split(':').map(Number);
+  return new Date(guess.getTime() - ((shown[0] - h) * 60 + (shown[1] - m)) * 60000).toISOString();
+};
+const refused = (await joinAllocated(clubTime('00:05'))).find((m) => m.type === 'rejected');
+ok('a join giving a start before the first is refused, saying the range', refused?.body?.code === 'start'
+  && /00:10 to 23:40/.test(refused.body.text));
+ok('...and one giving no start at all', (await joinAllocated(null)).find((m) => m.type === 'rejected')?.body?.code === 'start');
+ok('...while one within the range joins', (await joinAllocated(clubTime('12:00'))).some((m) => m.type === 'joined'));
 
 // A BOAT JOINS A RACE WHERE THERE IS ONE, and the course follows from the division rather than
 // being picked again: a boat does not choose the geometry it was entered for.

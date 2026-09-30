@@ -180,7 +180,22 @@ public record Race(
                     + division.timeLimitMinutes() + " minutes; give it a positive one, or none");
             // A START THAT CANNOT BE WORKED OUT IS SAID HERE, not found on a start line: a public
             // race whose division has no start time hands its boats nothing to count down to.
-            if (start() != StartType.ALLOCATED)
+            if (start() == StartType.ALLOCATED)
+            {
+                // AN ALLOCATED START IS BOUNDED: each boat gives its own time, between the first
+                // start and the last, and a join outside them is refused.
+                java.time.ZoneId anyZone = java.time.ZoneOffset.UTC;
+                java.time.Instant first = Division.at(division.start(), date, anyZone);
+                java.time.Instant last = Division.at(division.closes(), date, anyZone);
+                if (first == null || last == null)
+                    problems.add("race '" + id + "' division '" + key + "' has allocated starts with no"
+                        + (first == null ? " first" : " last") + " start time; give the first and the"
+                        + " last a boat may start at, as HH:MM");
+                else if (last.isBefore(first))
+                    problems.add("race '" + id + "' division '" + key + "' has its last start before"
+                        + " its first");
+            }
+            else
             {
                 java.time.ZoneId anyZone = java.time.ZoneOffset.UTC;
                 java.time.Instant opens = Division.at(division.start(), date, anyZone);

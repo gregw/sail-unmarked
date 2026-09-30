@@ -167,6 +167,32 @@ class DialogTest
     }
 
     @Test
+    void anAllocatedStartIsTheBoatsOwnTimeWithinTheRacesRange()
+    {
+        java.time.ZoneId sydney = java.time.ZoneId.of("Australia/Sydney");
+        LocalDate day = LocalDate.of(2026, 10, 3);
+        // First start 14:00, last 15:00, in Sydney: 04:00 and 05:00 UTC.
+        Race.Division open = new Race.Division("open", "c", null, "14:00", null, "15:00", null, null, null);
+        Race race = new Race("r", null, day, null, Map.of("open", open), null, null,
+            Race.StartType.ALLOCATED, true);
+        assertTrue(Dialog.allocatedRefusal(race, "open", null, sydney).contains("give your own start time"));
+        assertTrue(Dialog.allocatedRefusal(race, "open", "2026-10-03T03:59:00Z", sydney).contains("outside"),
+            "a start before the first is refused");
+        assertTrue(Dialog.allocatedRefusal(race, "open", "2026-10-03T05:01:00Z", sydney).contains("14:00 to 15:00"),
+            "...and one after the last, saying the range in the club's own time");
+        assertNull(Dialog.allocatedRefusal(race, "open", "2026-10-03T04:30:00Z", sydney), "within it, the boat joins");
+        assertEquals("2026-10-03T05:00:00Z",
+            Dialog.definedStart(race, "open", open, sydney).get("lastStartAt"));
+        assertNull(Dialog.allocatedRefusal(new Race("r", null, day, null, Map.of("open", open), null, null),
+            "open", null, sydney), "a scratch race asks no boat for its own time");
+
+        Race unbounded = new Race("r", null, day, null,
+            Map.of("open", new Race.Division("open", "c", null, "14:00")), null, null, Race.StartType.ALLOCATED, true);
+        assertTrue(unbounded.problems(Map.of()).stream().anyMatch(p -> p.contains("no last start")),
+            "an allocated start with no last start is reported");
+    }
+
+    @Test
     void theDivisionTagIsSpeltInOnePlace()
     {
         // The map key is the division's plain id and the tag is derived from it, because a YAML

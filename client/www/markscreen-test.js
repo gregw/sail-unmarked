@@ -129,7 +129,7 @@ export function run(check) {
   check('North up never turns', upBearing(state, 'north') === 0);
   check('Leg up puts the leg being SAILED at the top, not the one after it',
     upBearing(state, 'leg') === 60 && upBearing(state, 'leg') !== state.legBearing);
-  check('Line perp squares the line across, so the crossing is always straight up',
+  check('Line up squares the line across, so the crossing is always straight up',
     near(upBearing(state, 'perp'), 0));
   check('COG up puts the boat\'s own heading at the top, which is not the leg it is sailing',
     upBearing(state, 'cog') === 30 && upBearing(state, 'cog') !== upBearing(state, 'leg'));
@@ -399,7 +399,7 @@ export function run(check) {
     Math.abs(overviewUp(client, 'leg') - (client.waypoint().bearingDeg)) < 1);
   check('...and both screens read the current leg from ONE definition',
     overviewUp(client, 'leg') === (client.legInto(client.live()) ?? client.waypoint().bearingDeg));
-  check('Line perp stands the live line square across',
+  check('Line up stands the live line square across',
     Math.abs(overviewUp(client, 'perp')) < 1);
 
   const overviewSvg = (orientation) => overview(client, { orientation, turner: new Turner() });
@@ -423,10 +423,10 @@ export function run(check) {
   check('a north pointer appears only when north is not up',
     northPointer(0, 340) === '' && northPointer(90, 340).includes('>N<'));
 
-  check('the orientation selector offers all three', ['Leg up', 'North up', 'Line perp']
+  check('the orientation selector offers all three', ['Leg up', 'North up', 'Line up']
     .every((label) => orientationBar('north').includes(label)));
   check('...marking the one in force', orientationBar('perp').includes('data-orient="perp" class="on"'));
-  check('...offered North up, COG up, Leg up, then Line perp',
+  check('...offered North up, COG up, Leg up, then Line up',
     Object.keys(ORIENTATIONS).join() === 'north,cog,leg,perp');
 
   /* -------------------------------------------------- what to look at, and who decides */
@@ -594,7 +594,7 @@ export function run(check) {
     ['sailing straight at it', 0, 'north'],
     ['crabbing forty degrees off', 40, 'north'],
     ['leg up', 20, 'leg'],
-    ['line perp', 20, 'perp'],
+    ['line up', 20, 'perp'],
   ]) {
     const swept = sweep(cogDeg, orientation);
     check(`over a whole approach, ${label}: the crossing triangle stays well clear of the border`,
@@ -1243,7 +1243,7 @@ export function run(check) {
   check('...and a segment that misses the box entirely is handed back unchanged rather than '
     + 'silently moved', clipToView({ x: -50, y: -50 }, { x: -20, y: -60 }, 400, 330, 18).to.x === -20);
 
-  /* ------------------------------------- Line perp at a gate: the join, not one side's normal */
+  /* ------------------------------------- Line up at a gate: the join, not one side's normal */
 
   // THE SHAPE THAT MAKES THE DIFFERENCE. A gate whose two lines are PARALLEL either side of a
   // centreline has its crossing normals pointing outward in opposite directions, so squaring
@@ -1276,7 +1276,7 @@ export function run(check) {
    * Up the middle of the parallel gate and then out towards one side of it.
    *
    * `reach` is how far out to the side, in metres: short of 75 the boat has committed to a
-   * side without crossing it yet, which is the state Line perp has to be right about.
+   * side without crossing it yet, which is the state Line up has to be right about.
    */
   const throughParallel = (west, reach = 60) => {
     const boat = new RaceClient(PARALLEL);
@@ -1299,7 +1299,7 @@ export function run(check) {
   const ownNormal = bearingOf(...Object.values(
     crossingNormal(pstate.watched.prepared, pstate.watched.required)));
   check('...and its own crossing normal points WEST, out through the line', near(ownNormal, 270));
-  check('...while Line perp squares up to the gate\'s AXIS — the perpendicular to the join '
+  check('...while Line up squares up to the gate\'s AXIS — the perpendicular to the join '
     + 'between the two centres, which is the approach', near(upBearing(pstate, 'perp'), 0));
   check('...so the two disagree by a right angle on this shape, which is the whole reason '
     + 'for the rule', near(Math.abs(turnBetween(upBearing(pstate, 'perp'), ownNormal)), 90));
@@ -1334,7 +1334,7 @@ export function run(check) {
     seen.crossedWhileSeen = crossedWhileSeen;
     return seen;
   })();
-  check('Line perp holds the same bearing all the way through the gate and past it, '
+  check('Line up holds the same bearing all the way through the gate and past it, '
     + 'the crossing included',
     latchedUp.length > 10 && latchedUp.crossedWhileSeen && latchedUp.every((b) => near(b, latchedUp[0], 1e-9)));
 
@@ -1465,7 +1465,7 @@ export function run(check) {
   const screen = markScreen(mark, { orientation: 'north' });
   check('the screen carries the state in the arrow rather than in a chip',
     screen.includes('NEXT LEG') && !screen.includes('state-chip'));
-  check('...offers all three orientations', ['Leg up', 'North up', 'Line perp']
+  check('...offers all three orientations', ['Leg up', 'North up', 'Line up']
     .every((label) => screen.includes(label)));
   /* ------------------------------------------- the numbers moved onto the picture */
 
