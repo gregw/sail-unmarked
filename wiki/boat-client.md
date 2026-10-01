@@ -346,7 +346,10 @@ in blues and greens and from the cyan COG.
 - **It re-fits every frame until somebody takes hold of it**, then anchors; **Fit** gives it back. The pan is
   held in screen pixels and applied in rotated space, and followed on the **document**, because the panel is
   rebuilt on every fix. Bounded to a quarter and sixteen times the fit.
-- **A new orientation turns the picture about the boat**, not about the anchor. The pan is an offset made at
+- **Choosing a new orientation fits the picture first** (`OverviewView.reset`), so a zoomed picture is
+  never turned onto empty water; the turn then runs from the fit.
+- **A bearing that moves under a zoomed picture turns it about the boat** — COG up and Leg up, which drift
+  with the fixes — not about the anchor. The pan is an offset made at
   one bearing and cancels the boat's distance from the anchor only at that bearing, so when the bearing
   aimed at moves the pan is re-made to keep the boat where it was on the screen — brought inside the frame
   (`OVERVIEW_BOAT_INSET`) if it had strayed — and the glide then turns the world round it.

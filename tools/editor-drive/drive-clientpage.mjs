@@ -474,7 +474,10 @@ press('orient', 'north');
 // screen does not turn it back, nor the other way round.
 press('view', 'overview');
 ok('the Course screen opens North up', on('orient', 'north'));
+// A NEW "UP" STARTS FROM THE FIT, so a zoomed picture cannot be turned onto empty water.
+mod.__device.overview.zoomBy(4).panByPx(300, -200);
 press('orient', 'cog');
+ok('choosing a new orientation on the Course screen fits the picture first', !mod.__device.overview.manual);
 press('view', 'mark');
 ok('...and turning it leaves the Line screen as it was left', on('orient', 'north'));
 press('orient', 'perp');

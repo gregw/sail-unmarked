@@ -746,6 +746,9 @@ export class Device {
   wireOrientation() {
     this.el('o_orient')?.addEventListener('change', (ev) => {
       this.orientations[this.shownScreen ?? 'overview'] = ev.target.value;
+      // A NEW "UP" STARTS FROM THE FIT: a zoomed picture turned to a new bearing can land on empty
+      // water, and the fit is the one frame that always has the boat and the course in it.
+      if ((this.shownScreen ?? 'overview') === 'overview') this.overview.reset();
       // Blurred first: a `<select>` keeps focus after it is used, and the render is held on it.
       ev.target.blur?.();
       this.render();
