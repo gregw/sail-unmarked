@@ -1801,12 +1801,15 @@ export function northPointer(up, width) {
  * How far the overview may be zoomed by hand, as a multiple of the fit.
  *
  * The fit is the picture the screen exists to give — the whole course — so the range is about
- * being able to look INTO it and back out a little, not about replacing it. Out to a quarter
- * because seeing the course small against its surroundings is a real thing to want with a
- * basemap behind; in to sixteen because past that the overview is a Mark screen without the
- * detail a Mark screen has.
+ * being able to look INTO it and back out, not about replacing it. In to sixteen because past
+ * that the overview is a Mark screen without the detail a Mark screen has.
+ *
+ * <b>Out to a quarter of the fit, or to `outM` across, whichever is further.</b> A multiple of
+ * the fit alone is no reach at all on a small course: a start line in its waiting zone fits in
+ * a few hundred metres, and a quarter of that does not reach the harbour the boat is coming
+ * from. Ten nautical miles across is enough to see where the course is from where the boat is.
  */
-export const OVERVIEW_ZOOM = { min: 0.25, max: 16, step: 1.5 };
+export const OVERVIEW_ZOOM = { min: 0.25, max: 16, step: 1.5, outM: 10 * 1852 };
 
 /**
  * How much of the basemap is let through BY DEFAULT — see `basemapArt` for why it is so little.
@@ -1913,6 +1916,12 @@ export class OverviewView {
     this.anchor = null;
     // The bearing the pan was made at: see `overview`, which turns the picture about the boat.
     this.panUp = null;
+    // The furthest out, as a multiple of the fit: `OVERVIEW_ZOOM.min` until a fit has been drawn
+    // and the reach of `outM` can be worked out from it. See `overview`.
+    this.floor = OVERVIEW_ZOOM.min;
+    // A span asked for before there is a fit to measure it against, in metres across the
+    // picture's narrower side: taken on the next draw (`spanTo`).
+    this.spanM = null;
   }
 
   /** True once the picture is the sailor's rather than the fit's. */
@@ -1921,7 +1930,14 @@ export class OverviewView {
   }
 
   zoomBy(factor) {
-    this.zoom = Math.max(OVERVIEW_ZOOM.min, Math.min(OVERVIEW_ZOOM.max, this.zoom * factor));
+    this.zoom = Math.max(this.floor, Math.min(OVERVIEW_ZOOM.max, this.zoom * factor));
+    return this;
+  }
+
+  /** Open on a picture `metres` across, about the fit's centre, on the next draw. */
+  spanTo(metres) {
+    this.reset();
+    this.spanM = metres;
     return this;
   }
 
@@ -2069,6 +2085,12 @@ export function overview(client, options = {}) {
   // WHAT THE SAILOR HAS DONE TO THE PICTURE, on top of the fit. Untouched, this is the fit
   // exactly; see `OverviewView`.
   const view = options.view ?? new OverviewView();
+  const narrow = Math.min(width, height);
+  view.floor = Math.min(OVERVIEW_ZOOM.min, narrow / OVERVIEW_ZOOM.outM / fitScale);
+  if (view.spanM) {
+    view.zoom = Math.max(view.floor, Math.min(OVERVIEW_ZOOM.max, narrow / view.spanM / fitScale));
+    view.spanM = null;
+  }
   const held = view.base(fitCentre, fitScale);
   const scale = held.scale * view.zoom;
   // The pan is in screen pixels, so it is applied in ROTATED space and taken back out again —

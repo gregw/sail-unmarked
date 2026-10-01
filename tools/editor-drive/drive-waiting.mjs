@@ -92,12 +92,13 @@ await settle(2000);
 ok('joined, the boat waits on the course screen: the start line in a zone, and the word to wait',
   device().includes('<svg class="plot"') && device().includes('class="waitzone"')
   && device().includes('wait for the course'));
+const zoneR = Number(/class="waitzone"[^>]*\sr="([\d.]+)"/.exec(device())?.[1]);
+ok('...opened wide, five miles across, with the zone a small ring in it rather than the fit',
+  zoneR > 0 && zoneR < 25 && /data-zoom="fit" class="on"/.test(device()));
 ok('...with the chart\'s controls and the orientations live', device().includes('id="o_basemap"')
   && device().includes('id="o_orient"') && device().includes('data-zoom="in"'));
 ok('...with the race\'s start row above it, and a way out', device().includes('id="leave"'));
-H('o_basemap:change')({ target: { value: 'chart', blur() {} } });
-await settle(300);
-ok('...and a chart can be put under it, so the zone can be found on the water',
+ok('...on the chart, chosen for it, so the zone can be found on the water',
   /class="basemap"[\s\S]*class="waitzone"/.test(device()) && device().includes('<image'));
 
 /* --------------------------------------------------- and the club publishes the course */

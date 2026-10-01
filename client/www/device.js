@@ -27,6 +27,9 @@ import {
   overviewPanel, viewBar,
 } from './markscreen.js';
 import { RaceClient } from './raceclient.js';
+
+/** How wide the course screen opens on a boat waiting for its course: five nautical miles. */
+const WAIT_VIEW_M = 5 * 1852;
 import { personalise } from './handicap.js';
 import { wheelZoomStep } from './geo.js';
 import { Dialog, sailNumber } from './dialog.js';
@@ -1233,6 +1236,10 @@ export class Device {
       return;
     }
     this.waitZone = course.zone;
+    // ON A CHART, AND WIDE: a zone on an empty sea says nothing about where it is, and the land
+    // and the harbour around it are what do — five miles across, to find it from the boat.
+    if (this.basemap === 'none') this.basemap = 'chart';
+    this.overview.spanTo(WAIT_VIEW_M);
     this.start(course.snapshot);
   }
 

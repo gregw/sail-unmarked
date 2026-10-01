@@ -833,8 +833,17 @@ export function run(check) {
   const wayIn = new OverviewView();
   for (let i = 0; i < 20; i += 1) wayIn.zoomBy(1 / OVERVIEW_ZOOM.step);
   check('the zoom is bounded at both ends — the fit is the picture this screen is for, and '
-    + 'these are for looking into it and back out a little',
+    + 'these are for looking into it and back out',
     wayOut.zoom === OVERVIEW_ZOOM.max && wayIn.zoom === OVERVIEW_ZOOM.min);
+  const farOut = new OverviewView();
+  courseOf(overClient, { view: farOut });
+  for (let i = 0; i < 40; i += 1) farOut.zoomBy(1 / OVERVIEW_ZOOM.step);
+  check('...but out to ten nautical miles across however small the course, and no further',
+    farOut.zoom < OVERVIEW_ZOOM.min && farOut.zoom === farOut.floor);
+  const opened = new OverviewView().spanTo(5 * 1852);
+  courseOf(overClient, { view: opened });
+  check('a picture can be opened at a span in metres, which is a zoom the sailor can undo',
+    opened.manual && opened.spanM == null && opened.zoom >= opened.floor);
 
   // The bar under the chart, which is where the controls for it live.
   check('the chart bar offers zoom, fit and a background, under the chart they act on',
