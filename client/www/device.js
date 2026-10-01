@@ -30,7 +30,7 @@ import { RaceClient } from './raceclient.js';
 import { personalise } from './handicap.js';
 import { wheelZoomStep } from './geo.js';
 import { Dialog, sailNumber } from './dialog.js';
-import { alertBanner, alertModal, chatPanel, placePanel, startRow, waitingPanel } from './screens.js';
+import { alertBanner, alertModal, chatPanel, placePanel, startRow, waitingCourse, waitingPanel } from './screens.js';
 
 /**
  * The plot's own coordinate space, which is not the panel's width in pixels.
@@ -351,9 +351,9 @@ export class Device {
 
   /** Draw whichever screen the client says the sailor should be looking at. */
   render() {
-    if (!this.client && this.waiting) {
-      if (!this.adoptPublished()) return this.renderWaiting();
-      return undefined;
+    if (this.waiting) {
+      if (this.adoptPublished()) return undefined;
+      if (!this.client) return this.renderWaiting();
     }
     if (!this.client) return this.renderJoin();
     // Not under a finger: see the constructor. Drawn on release instead.
@@ -437,9 +437,11 @@ export class Device {
       ...shared, ...OVERVIEW_PLOT, orientation: this.orientations.overview,
       turner: this.courseTurn, view: this.overview, basemap: this.basemap,
       basemapInk: this.basemapInk, backgroundLight: this.backgroundLight,
+      zone: this.waitZone,
     });
 
     this.host.innerHTML = startRow(this.dialog, now, this.client)
+      + (this.waiting ? waitingPanel(this.waiting, { raceName: this.dialog.raceName }) : '')
       + screen
       + this.bottomRow()
       + (alert && !approaching ? alertModal(alert) : '');
@@ -511,7 +513,7 @@ export class Device {
     this.client = null;
     this.snapshot = null;
     this.waiting = null;
-    this.waitingFix = null;
+    this.waitZone = null;
     // Goodbye on the wire as well, so the fleet list stops showing a boat that has gone home.
     // Not awaited: leaving is a thing that has happened, not a request.
     this.dialog.leave().catch(() => null);
@@ -1162,7 +1164,7 @@ export class Device {
         // IN THE RACE, WITH NO COURSE YET: waiting near the start until the club publishes one,
         // which arrives as a `course` message (`adoptPublished`).
         this.waiting = joined.waiting;
-        this.render();
+        this.startWaiting();
         return;
       }
       this.snapshot = joined.course;
@@ -1212,19 +1214,32 @@ export class Device {
     const body = this.dialog.held()?.course?.body;
     if (!body?.course) return false;
     this.waiting = null;
-    this.waitingFix = null;
+    this.waitZone = null;
     this.snapshot = body.course;
     this.dialog.revision = body.revision ?? body.course.revision ?? null;
     this.start();
     return true;
   }
 
-  /** In the race, with no course yet: where the start is, and the boat, and the word to wait. */
+  /**
+   * In the race, with no course yet: the screens it will sail on, over the start line as the
+   * programme has it now and a zone around it (`waitingCourse`). The same client and the same
+   * render as sailing, so the chart, the views and the orientations all work while it waits.
+   */
+  startWaiting() {
+    const course = waitingCourse(this.waiting);
+    if (!course) {
+      this.render();
+      return;
+    }
+    this.waitZone = course.zone;
+    this.start(course.snapshot);
+  }
+
+  /** In the race, with no start line to draw either: only the word to wait. */
   renderWaiting() {
     this.host.innerHTML = startRow(this.dialog, Date.now(), null)
-      + waitingPanel(this.waiting, this.waitingFix, {
-        raceName: this.dialog.raceName, basemap: this.basemap, basemapInk: this.basemapInk,
-      })
+      + waitingPanel(this.waiting, { raceName: this.dialog.raceName })
       + `<div class="deck"><button class="plain" id="leave">Leave race</button></div>`;
     this.el('leave')?.addEventListener('click', () => this.leave());
     return undefined;
@@ -1236,14 +1251,16 @@ export class Device {
    * Every attempt gets a NEW client, because the detectors latch and stand by design, so the
    * only way to be sure nothing was left over from the last one is not to keep any of it.
    */
-  start() {
+  start(snapshot = null) {
     /*
      * A COURSE HANDICAPPED BY DISTANCE IS SAILED AS THIS BOAT'S OWN COURSE: each handicapped
      * step's track replaced by the line placed for its TCF (`handicap.js`). Worked out here, on
      * the boat, from the published snapshot — the server has already refused a TCF it could not
      * place, and has nothing more to say about where this boat's lines are.
      */
-    const sailed = personalise(this.snapshot, Number(this.boat.tcf) > 0 ? Number(this.boat.tcf) : null);
+    // Begun again while waiting, it is the start line again: there is no snapshot yet.
+    const sailed = snapshot ?? (this.waiting ? waitingCourse(this.waiting)?.snapshot : null)
+      ?? personalise(this.snapshot, Number(this.boat.tcf) > 0 ? Number(this.boat.tcf) : null);
     this.client = new RaceClient(sailed, {
       boat: { ...this.boat }, joinMode: this.boat.mode,
       // THE RACE'S START, from what the committee published and this boat's allocated time; none
@@ -1268,14 +1285,7 @@ export class Device {
    * trail and the phone shows only the trouble.
    */
   feed(fix) {
-    if (!this.client) {
-      // Waiting for the course, the boat is still drawn against the start it is waiting at.
-      if (this.waiting) {
-        this.waitingFix = fix;
-        this.render();
-      }
-      return null;
-    }
+    if (!this.client) return null;
     const verdict = this.client.accept(fix);
 
     /*
@@ -1288,7 +1298,17 @@ export class Device {
      * putting one on a fleet screen would draw a boat where it never was.
      */
     if (verdict.accepted && !verdict.relocated) this.dialog.report(fix);
-    if (verdict.latched) {
+    if (verdict.latched && this.waiting) {
+      // A CROSSING OF A LINE THAT IS NOT YET A COURSE is no crossing at all: not told, not
+      // recorded, and the line put back to be crossed again — the course has not been given.
+      const { viewMode } = this.client;
+      this.client = new RaceClient(this.client.snapshot, {
+        boat: { ...this.boat }, joinMode: this.boat.mode,
+        startPlan: () => (this.dialog.live ? this.dialog.startPlan() : null),
+      });
+      this.client.setViewMode(viewMode);
+      this.client.accept(fix);
+    } else if (verdict.latched) {
       const step = verdict.step;
       this.dialog.crossing(verdict.latched, {
         step: step?.index,

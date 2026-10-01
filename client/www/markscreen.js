@@ -29,7 +29,7 @@
 
 import { LABEL, ROLE_COLOUR, TRIANGLE, arrowHead, forwardNormal, seats, stripes, track, triangle } from './coursedraw.js';
 import { BASEMAPS, MapView, mercX, mercY } from './geo.js';
-import { fromLocal } from './crossing.js';
+import { fromLocal, toLocal } from './crossing.js';
 import { TRAIL_IN_VIEW, bearingLocal, clock } from './raceclient.js';
 
 /**
@@ -2028,6 +2028,14 @@ export function overview(client, options = {}) {
     for (const crossing of step.crossings)
       points.push(crossing.prepared.port, crossing.prepared.starboard);
   if (client.point) points.push(client.point);
+  // A WAITING ZONE is fitted in whole, round its rim, so the picture opens on all of it.
+  const zone = options.zone ? { at: toLocal(client.origin, options.zone.centre), r: options.zone.radiusM } : null;
+  if (zone) {
+    for (let i = 0; i < 16; i++) {
+      const a = (i * Math.PI) / 8;
+      points.push({ x: zone.at.x + zone.r * Math.cos(a), y: zone.at.y + zone.r * Math.sin(a) });
+    }
+  }
   if (!points.length) return '<svg class="plot" viewBox="0 0 340 300"></svg>';
 
   // The whole course is ALWAYS fitted here — that is what an overview is for, and holding a
@@ -2151,6 +2159,11 @@ export function overview(client, options = {}) {
   }
 
   let out = background;
+  if (zone) {
+    const c = to(zone.at);
+    out += `<circle class="waitzone" cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="${(zone.r * drawnScale).toFixed(1)}"`
+      + ' fill="rgba(80,160,255,0.12)" stroke="#50a0ff" stroke-width="2" stroke-dasharray="8 6"/>';
+  }
   // Each handicapped step's zone under everything else: this boat's own line is drawn
   // over it, and the stripes say that the other boats' lines are somewhere in there too.
   for (const step of client.steps) {

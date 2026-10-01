@@ -89,18 +89,24 @@ ok('the screen says the course is not published yet, and that the boat can join 
 
 H('j_go:click')();
 await settle(2000);
-ok('joined, the boat waits: a zone around the start line and the word to wait',
-  device().includes('class="waitzone"') && device().includes('wait for the course'));
+ok('joined, the boat waits on the course screen: the start line in a zone, and the word to wait',
+  device().includes('<svg class="plot"') && device().includes('class="waitzone"')
+  && device().includes('wait for the course'));
+ok('...with the chart\'s controls and the orientations live', device().includes('id="o_basemap"')
+  && device().includes('id="o_orient"') && device().includes('data-zoom="in"'));
 ok('...with the race\'s start row above it, and a way out', device().includes('id="leave"'));
-ok('...drawn over the chart, so the zone can be found on the water',
-  /class="waitzone"[\s\S]*class="basemap"[\s\S]*<circle/.test(device()) && device().includes('<image'));
+H('o_basemap:change')({ target: { value: 'chart', blur() {} } });
+await settle(300);
+ok('...and a chart can be put under it, so the zone can be found on the water',
+  /class="basemap"[\s\S]*class="waitzone"/.test(device()) && device().includes('<image'));
 
 /* --------------------------------------------------- and the club publishes the course */
 
 await post(`/api/lifecycle/${KEY}/publications`, { publish: [taken] });
-const started = await until(() => device().includes('<svg class="plot"') || device().includes('class="overview'));
-ok('publishing hands the waiting boat its course, and it sails without joining again', started);
-ok('...the waiting zone gone', !device().includes('class="waitzone"'));
+const started = await until(() => !device().includes('class="waitzone"'));
+ok('publishing hands the waiting boat its course, and it sails without joining again',
+  started && device().includes('<svg class="plot"'));
+ok('...the zone and the word to wait gone', !device().includes('wait for the course'));
 
 report();
 

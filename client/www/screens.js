@@ -14,7 +14,7 @@
  */
 
 import { CANNED, ladder } from './dialog.js';
-import { BASEMAP_INK, basemapArt, esc, hhmmss, LINE_STATE_COLOUR } from './markscreen.js';
+import { esc, hhmmss } from './markscreen.js';
 import { toLocal } from './crossing.js';
 
 /** mm:ss, or -mm:ss once a start has gone. A countdown is the one clock read as a duration. */
@@ -273,62 +273,40 @@ export function alertBanner(entry) {
 export const WAIT_ZONE_M = 100;
 
 /**
- * IN THE RACE, WITH NO COURSE YET: the start line as the programme has it now, a zone around it
- * to wait in, the boat, and the word to wait. North up and fitted to the zone and the boat —
- * the course overview needs a course, and there is none until it is published.
+ * IN THE RACE, WITH NO COURSE YET: something to sail on while the club publishes one.
  *
- * <b>Over a chart</b>, the course screen's own when one is chosen and the plain chart when not:
- * a circle on an empty sea says nothing about where to go, and the land and the harbour under it
- * are what say where it is. Tiles as on the overview, so a dead network costs the background only.
+ * <b>Not a course.</b> One step, the start line as the programme has it now — not a snapshot,
+ * and liable to move before one is taken — with a zone around it to wait in. It is handed to an
+ * ordinary `RaceClient` so the waiting boat has the screens it will sail on: the overview with
+ * its chart, zoom and orientations, and the Line screen on the approach. Nothing that client
+ * latches is reported or recorded; the course, when it comes, gets a client of its own.
+ *
+ * Null when the line has no two ends to draw, and the panel then says only the word to wait.
  *
  * @param waiting the `joined` body's `waiting`: `text`, and `startLine` with its two ends
- * @param fix the latest fix, or null
  */
-export function waitingPanel(waiting, fix = null, options = {}) {
+export function waitingCourse(waiting) {
   const line = waiting?.startLine;
-  const text = `<div class="waiting">
-      <h2>${esc(options.raceName ?? 'The race')}: wait for the course</h2>
-      <p>${esc(waiting?.text ?? 'Wait for the course details.')}</p>
-    </div>`;
-  if (!line?.port || !line?.starboard) return text;
-  const origin = {
+  const placed = (end) => end && Number.isFinite(end.latitude) && Number.isFinite(end.longitude);
+  if (!placed(line?.port) || !placed(line?.starboard)) return null;
+  const centre = {
     latitude: (line.port.latitude + line.starboard.latitude) / 2,
     longitude: (line.port.longitude + line.starboard.longitude) / 2,
   };
-  // Metres east and north of the line's middle, the way the rest of the boat measures.
-  const local = (p) => toLocal(origin, p);
-  const a = local(line.port);
-  const b = local(line.starboard);
-  const radius = Math.hypot(a.x - b.x, a.y - b.y) / 2 + WAIT_ZONE_M;
-  const boat = fix && Number.isFinite(fix.latitude) && Number.isFinite(fix.longitude)
-    ? local(fix) : null;
-  const reach = Math.max(radius, boat ? Math.hypot(boat.x, boat.y) : 0) * 1.15;
-  const size = 320;
-  const scale = size / 2 / reach;
-  const px = (p) => ({ x: size / 2 + p.x * scale, y: size / 2 - p.y * scale });
-  const pa = px(a);
-  const pb = px(b);
-  // In `style`, not attributes: the colour is a CSS variable, which a presentation attribute
-  // does not resolve.
-  const colour = LINE_STATE_COLOUR.closed;
-  const at = boat ? px(boat) : null;
-  const basemap = options.basemap && options.basemap !== 'none' ? options.basemap : 'chart';
-  const chart = basemapArt(basemap, { x: 0, y: 0 }, origin, scale, size, size, 0,
-    options.basemapInk ?? BASEMAP_INK);
-  const away = boat ? Math.round(Math.hypot(boat.x, boat.y)) : null;
-  return `${text}
-    <svg class="waitzone" viewBox="0 0 ${size} ${size}" width="100%" style="max-height:60vh">
-      ${chart}
-      <circle cx="${size / 2}" cy="${size / 2}" r="${(radius * scale).toFixed(1)}"
-        fill="rgba(80,160,255,0.12)" stroke="#50a0ff" stroke-width="2" stroke-dasharray="8 6"/>
-      <line x1="${pa.x.toFixed(1)}" y1="${pa.y.toFixed(1)}" x2="${pb.x.toFixed(1)}" y2="${pb.y.toFixed(1)}"
-        style="stroke:${colour}" stroke-width="4" stroke-linecap="round"/>
-      <circle cx="${pa.x.toFixed(1)}" cy="${pa.y.toFixed(1)}" r="5" style="fill:${colour}"/>
-      <circle cx="${pb.x.toFixed(1)}" cy="${pb.y.toFixed(1)}" r="5" style="fill:${colour}"/>
-      ${at ? `<circle cx="${at.x.toFixed(1)}" cy="${at.y.toFixed(1)}" r="7" fill="#fff" stroke="#000"
-        stroke-width="2"/>` : ''}
-      <text x="8" y="20" font-size="14" fill="currentColor">N &uarr;</text>
-    </svg>
-    <p class="muted" style="font-size:12px">${away == null ? 'No position yet.'
-    : away <= radius ? 'You are in the waiting zone.' : `${away} m from the start line.`}</p>`;
+  const half = toLocal(line.port, line.starboard);
+  return {
+    snapshot: {
+      course: 'waiting', name: 'Wait for the course', revision: '',
+      steps: [{ letter: 'S', crossings: [{ line: 'start', port: line.port, starboard: line.starboard }] }],
+    },
+    zone: { centre, radiusM: Math.hypot(half.x, half.y) / 2 + WAIT_ZONE_M },
+  };
+}
+
+/** The word to wait, over the screens a waiting boat sails on (`waitingCourse`). */
+export function waitingPanel(waiting, options = {}) {
+  return `<div class="waiting">
+      <h2>${esc(options.raceName ?? 'The race')}: wait for the course</h2>
+      <p>${esc(waiting?.text ?? 'Wait for the course details.')}</p>
+    </div>`;
 }
