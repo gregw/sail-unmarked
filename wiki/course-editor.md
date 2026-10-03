@@ -98,10 +98,11 @@ pixels, and is a control nobody has to be taught. The rules that hold it togethe
 - **A handicap width is set on the LINE** — the Lines tab's form, or a grip halfway along one side of
   the line's striped zone (`coursedraw.stripes`), every stripe one of the lines a boat could be given.
   A line with a width is a track wherever it is named, and its zone is striped wherever the line is
-  drawn, on every tab and whether or not a course names it yet. A step naming one shows `hcp`, and the
-  Courses tab offers no grip, since the line belongs to other courses too and changing it from one is
-  the question the tab rule asks. The header gives the TCFs a variant can take beside its
-  length, as the server works them out; the rest of what makes a track acceptable — that it is not a
+  drawn, on every tab and whether or not a course names it yet. The Courses tab offers no grip, since
+  the line belongs to other courses too and changing it from one is the question the tab rule asks.
+  Once a step names one, the variant form asks for its **midpoint TCF**, empty for 1.000. The header
+  gives the TCFs a variant can take beside its length, as the server works them out, and moves them
+  with the midpoint as it is typed; the rest of what makes a track acceptable — that it is not a
   start or finish, the turn, the way it runs — is the server's to say, in the variant's problems. The
   step's triangle lies along a boat's line and points out along the track, because the track is where
   the lines' centres slide and nobody crosses it. See
@@ -223,6 +224,9 @@ pointing up the screen.**
   may begin, red where a lap may end, neutral blue between. A leg that is both draws as a gradient. On a
   cycle there is no sequence to be far through, and the useful question is *does a lap start here*.
 - **A cycle's track closes.** Drawing a loop open leaves the one gap a boat never sails.
+- **A cycle's entry lines are gold** (`ENTRY_COLOUR`), in the editor and on every overview — the boat's
+  and the front page's. Every one of them is a start and a finish, which green or red alone would say
+  half of; on the boat the live one stays green.
 - **Turns have a radius.** A boat leaving a triangle's apex is still on the crossing heading, so every leg
   arcs out of the apex, runs straight, and arcs back in. `tangentPath` iterates, because the departure arc
   has to aim at where the arrival arc begins and vice versa; the radius shrinks on a short leg rather than
@@ -239,7 +243,9 @@ pointing up the screen.**
   direction, the letter only says which step.
 - **Course labels are sized to be read, and double under the pointer.** Hover sets an SVG `transform`
   directly rather than re-rendering, and scales about the label's own anchor — for a triangle its **base**,
-  so a grown triangle stays on its line.
+  so a grown triangle stays on its line. **Raised within the course's own layer and no further**: the
+  points and the grips on the lines' ends and middles are drawn after it, so a grown triangle never
+  covers one and a line can always be taken hold of.
 - **A hover lights the whole STEP, not the one shape under the pointer** (`data-group="step-N"`, keyed by
   the step a leg *leads to*). They all carry the same letter; lighting one and not the others invites the
   reader to wonder which of them the letter belonged to.

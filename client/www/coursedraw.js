@@ -139,6 +139,13 @@ export const ROLE_COLOUR = {
 };
 
 /**
+ * A CYCLE'S ENTRY LINES, drawn in this wherever the course is: the lines a lap may begin and end
+ * at. Gold, because they are every one of them a start and a finish and green or red alone would
+ * say half of it — and because it is neither the line blue nor any colour a line's state wears.
+ */
+export const ENTRY_COLOUR = 'rgb(255,200,60)';
+
+/**
  * The colour for a leg or a crossing, or null when it is both a start and a finish and
  * therefore needs a gradient from one to the other.
  *

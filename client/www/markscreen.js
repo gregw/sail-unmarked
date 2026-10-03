@@ -27,7 +27,7 @@
  * exercised without a screen.
  */
 
-import { LABEL, ROLE_COLOUR, TRIANGLE, arrowHead, forwardNormal, seats, stripes, track, triangle } from './coursedraw.js';
+import { ENTRY_COLOUR, LABEL, ROLE_COLOUR, TRIANGLE, arrowHead, forwardNormal, seats, stripes, track, triangle } from './coursedraw.js';
 import { BASEMAPS, MapView, mercX, mercY } from './geo.js';
 import { fromLocal, toLocal } from './crossing.js';
 import { TRAIL_IN_VIEW, bearingLocal, clock } from './raceclient.js';
@@ -2207,6 +2207,9 @@ export function overview(client, options = {}) {
     // orange from it, green while open; a finish closed by the time limit, red (`lineState`).
     const stated = uses.map(({ step }) => client.lineState?.(step.index, options.now ?? Date.now()))
       .find(Boolean);
+    // A CYCLE'S ENTRY LINES in their own colour, under the live green and a line's state: where a
+    // lap may begin and end is the first thing to read off a cycle, and none of them is the start.
+    const entry = !!client.snapshot.closed && uses.some(({ step }) => step.entry);
     // AN INFINITE END RUNS ON, thin and faint, to the edge of the picture: the line is real out
     // there — a boat crossing it a mile off has crossed it — but nobody chose where it goes, so
     // it is drawn as the bearing it is rather than as more of the line. The editor's notation.
@@ -2221,8 +2224,8 @@ export function overview(client, options = {}) {
     if (prepared.portInfinite) out += faint(a.x, a.y, a.x - ux * run, a.y - uy * run);
     if (prepared.starboardInfinite) out += faint(b.x, b.y, b.x + ux * run, b.y + uy * run);
     out += `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}"`
-      + ` stroke="${LINE_STATE_COLOUR[stated] ?? (live ? ROLE_COLOUR.start : 'var(--line)')}"`
-      + ` stroke-width="${live || stated ? 3.5 : 2}" opacity="${live || stated ? 1 : OVERVIEW_INK.ahead}"/>`;
+      + ` stroke="${LINE_STATE_COLOUR[stated] ?? (live ? ROLE_COLOUR.start : entry ? ENTRY_COLOUR : 'var(--line)')}"`
+      + ` stroke-width="${live || stated || entry ? 3.5 : 2}" opacity="${live || stated || entry ? 1 : OVERVIEW_INK.ahead}"/>`;
   }
 
   const steps = client.steps.map((step) => ({

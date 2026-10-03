@@ -1039,6 +1039,9 @@ public class ApiServlet extends HttpServlet
                 // The TCFs a handicapped variant can take, as a snapshot of it now would say.
                 row.put("tcfMin", now == null ? null : now.tcfMin());
                 row.put("tcfMax", now == null ? null : now.tcfMax());
+                // And the midpoint they were worked out about, so the editor can move them with
+                // the field while it is being typed in, before the save that recomputes them.
+                row.put("tcfMid", Handicap.midpoint(variant));
                 row.put("state", state(variant.template(), problems, now, latest));
                 row.put("latest", latest);
                 row.put("published", publishedRevision);

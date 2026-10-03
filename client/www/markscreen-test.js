@@ -19,7 +19,7 @@
 
 import { prepareLine } from './crossing.js';
 import { BASEMAPS } from './geo.js';
-import { ROLE_COLOUR } from './coursedraw.js';
+import { ENTRY_COLOUR, ROLE_COLOUR } from './coursedraw.js';
 import { clock } from './raceclient.js';
 import {
   crossingArt,
@@ -188,6 +188,14 @@ export function run(check) {
     overview(runOn).includes(`stroke-width="1" stroke-opacity="${OVERVIEW_INK.infinite}"`));
   check('...and a course with none has no run-on', !overview(new RaceClient(snapshot))
     .includes(`stroke-opacity="${OVERVIEW_INK.infinite}"`));
+  // A CYCLE'S ENTRY LINES are drawn in their own colour: the same three lines as a loop, with a and c
+  // the lines a lap may begin and end at.
+  const cycle = new RaceClient({ ...snapshot, closed: true,
+    steps: snapshot.steps.map((step, i) => ({ ...step, entry: i !== 1 })) });
+  const entryLines = (svg) => (svg.match(new RegExp(`<line [^>]*stroke="${ENTRY_COLOUR.replace(/[()]/g, '\\$&')}"`, 'g')) ?? []).length;
+  check('a cycle\'s entry lines are highlighted on the overview, but the one that is live',
+    entryLines(overview(cycle)) === 1);
+  check('...and an open course has none', entryLines(overview(new RaceClient(snapshot))) === 0);
   check('the overview carries no sentence and no log of crossings: that room is the chart\'s',
     !/Sailing to|class="crossings/.test(overviewPanel(new RaceClient(snapshot))));
 

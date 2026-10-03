@@ -28,7 +28,7 @@
  * is git's job, not this page's.
  */
 
-import { ROLE_COLOUR, roleColour } from './coursedraw.js';
+import { ENTRY_COLOUR, ROLE_COLOUR, roleColour } from './coursedraw.js';
 import { ARROW_CENTROID, LABEL, TRIANGLE, arrowHead, darken, forwardNormal, seats, stripes, track, triangle } from './coursedraw.js';
 import { geometry, outward, widthHandle, widthThrough, zone } from './handicap.js';
 import {
@@ -892,9 +892,14 @@ function renderLines() {
   const used = inUse();
   HANDLES = '';
   let out = '';
+  // On a cycle in the Courses tab, the lines a lap may begin and end at, highlighted.
+  const cycle = state.tab === 'courses' ? currentVariant() : null;
+  const entries = new Set(cycle?.closed
+    ? cycle.sequence.filter((step) => step.entry).flatMap(alts).map((a) => a.line) : []);
   for (const [id, line] of GEO.lines) {
     if (used && !used.lines.has(id)) continue;
     const on = id === state.selectedLine && state.tab === 'lines';
+    const entry = entries.has(id);
     const port = endPosition(line.port);
     const starboard = endPosition(line.starboard);
     if (!port || !starboard) continue;
@@ -917,7 +922,7 @@ function renderLines() {
     if (line.port?.infinite) out += faint(ax, ay, ax - ux * reach, ay - uy * reach);
     if (line.starboard?.infinite) out += faint(bx, by, bx + ux * reach, by + uy * reach);
 
-    out += `<line x1="${ax.toFixed(1)}" y1="${ay.toFixed(1)}" x2="${bx.toFixed(1)}" y2="${by.toFixed(1)}" stroke="${on ? 'var(--ok)' : 'var(--line)'}" stroke-width="${on ? 4 : 2.5}" opacity="0.9"/>`;
+    out += `<line x1="${ax.toFixed(1)}" y1="${ay.toFixed(1)}" x2="${bx.toFixed(1)}" y2="${by.toFixed(1)}" stroke="${on ? 'var(--ok)' : entry ? ENTRY_COLOUR : 'var(--line)'}" stroke-width="${on || entry ? 4 : 2.5}" opacity="0.9"/>`;
     // A WIDE, INVISIBLE STROKE ALONG IT to click, on the Lines tab: two and a half pixels is a
     // line to see, not one to hit. Under the ends and the middle, which are drawn last.
     if (state.tab === 'lines') {
@@ -1456,7 +1461,10 @@ function render() {
     state.view.tileLayer(state.basemap) +
     lines +
     renderHandicaps() +
-    renderCourse() +
+    // In a layer of its own, so a mark raised on hover is raised within it and no further:
+    // everything drawn after it — the points, and the grips on the lines' ends and middles —
+    // stays above even a grown triangle, so a line can always be taken hold of.
+    `<g class="courselayer">${renderCourse()}</g>` +
     renderBearings() +
     renderPoints() +
     renderTransform() +
@@ -1483,8 +1491,8 @@ function render() {
         // on its line rather than lifting off it.
         member.setAttribute('transform',
           `translate(${ox} ${oy}) scale(${LABEL.hoverScale}) translate(${-ox} ${-oy})`);
-        // Last in the document is topmost in SVG. The hovered shape is moved last so it
-        // ends up above the rest of its own group as well as above everything else.
+        // Last in the document is topmost in SVG. The hovered shape is moved last in the course
+        // layer, so it ends up above the rest of the course but never above the grips.
         if (member !== g) member.parentNode.appendChild(member);
       }
       g.parentNode.appendChild(g);
@@ -2759,11 +2767,17 @@ function dirtyDot(course) {
 /**
  * The TCFs a handicapped variant can take, as the server works them out — beside the length,
  * because it is the length that sets them. Nothing for a course nobody handicapped.
+ *
+ * <b>Moved with the midpoint as it is typed</b>: the range is a proportion of the midpoint, so
+ * the server's figures are scaled from the midpoint they were worked out about to the one in
+ * the field. The save that follows replaces them with the server's own.
  */
 function tcfRange(courseId, variantId) {
   const life = lifeOf(courseId, variantId);
   if (life.tcfMin == null || life.tcfMax == null) return '';
-  return ` &middot; TCF ${Number(life.tcfMin).toFixed(3)}&ndash;${Number(life.tcfMax).toFixed(3)}`;
+  const typed = state.courses.get(courseId)?.variants.get(variantId)?.tcfMid;
+  const k = (typed > 0 ? typed : 1) / (life.tcfMid > 0 ? life.tcfMid : 1);
+  return ` &middot; TCF ${(life.tcfMin * k).toFixed(3)}&ndash;${(life.tcfMax * k).toFixed(3)}`;
 }
 
 function nm(courseId, variantId) {
@@ -3503,11 +3517,16 @@ function wireVariantFields(course, variant) {
   for (const field of ['v_id', 'v_name', 'v_notes']) el(field).addEventListener('focus', beginEdit);
   // EMPTY IS 1.000, and so is anything that is not a positive number: the field never leaves a
   // value the server would have to refuse. Written as typed, to three places at most.
+  // SAVED ON ENTER as well as on leaving the field, so the range beside the length — which the
+  // field moves as it is typed in — is put right by the server without having to click away.
   el('v_tcfmid')?.addEventListener('focus', beginEdit);
   el('v_tcfmid')?.addEventListener('input', (ev) => {
+    beginEdit();
     const value = Number(ev.target.value.trim());
     variant.tcfMid = ev.target.value.trim() && value > 0 ? Math.round(value * 1000) / 1000 : null;
+    syncCourseForm();
   });
+  el('v_tcfmid')?.addEventListener('change', endEdit);
   el('v_tcfmid')?.addEventListener('blur', endEdit);
   el('v_id').addEventListener('change', (ev) => renameVariant(course, variant, ev.target.value.trim()));
   el('v_id').addEventListener('blur', endEdit);
@@ -4301,9 +4320,6 @@ function renderSteps(variant) {
             <button data-step="${i}" data-alt="${j}" class="s_dir" title="crossing sense">${senseOf(entry) === 'reverse' ? 'rev' : 'fwd'}</button>
             ${variant.closed && j === 0
               ? `<button data-step="${i}" class="s_entry${step.entry ? ' on' : ''}" title="a boat may begin and end a lap here">&#8635;</button>`
-              : ''}
-            ${!gate && trackWidth(entry.line) != null
-              ? `<span class="s_hcap mono small" title="a handicap line: each boat is given its own line, ${trackWidth(entry.line)} m wide, placed along this one by its TCF — its width is set on the Lines tab">hcp</span>`
               : ''}
             ${j === 0
               ? `<button data-step="${i}" class="s_up" title="earlier">&uarr;</button>

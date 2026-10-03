@@ -80,9 +80,7 @@ choose('course', 'handicap');
 await settle(700);
 if (!chosenIn('variant')) choose('variant', optionsOf('variant')[0]);
 await settle(900);
-const steps = () => $('c_steps').innerHTML;
 
-ok('the step naming the track says it is handicapped', (steps().match(/class="s_hcap/g) ?? []).length === 1);
 ok('the course stripes the zone too', map().includes('handicap-stripes'));
 ok('...but offers no grip: the width is the line\'s, changed where the line is', !map().includes('class="hgrip"'));
 ok('the header gives the TCFs the course takes, beside its length', /TCF \d\.\d{3}&ndash;\d\.\d{3}/.test($('c_len').innerHTML));
@@ -95,9 +93,12 @@ ok('a course with a handicap line asks for its midpoint TCF, empty for 1.000',
 const [lowAt1, highAt1] = range();
 H('v_tcfmid:focus')();
 H('v_tcfmid:input')({ target: { value: '1.4' } });
-H('v_tcfmid:blur')();
+const [lowTyped, highTyped] = range();
+ok('the range moves as the midpoint is typed, before anything is saved',
+  Math.abs(lowTyped - 1.4 * lowAt1) < 0.003 && Math.abs(highTyped - 1.4 * highAt1) < 0.003);
+H('v_tcfmid:change')();
 await settle(1500);
-ok('typing one writes it into the file', /\n {6,8}tcfMid: 1\.4\n/.test(handicapBlock()));
+ok('Enter writes it into the file, without leaving the field', /\n {6,8}tcfMid: 1\.4\n/.test(handicapBlock()));
 const [lowAt14, highAt14] = range();
 ok('...and the range moves to be the same proportion of it',
   Math.abs(lowAt14 - 1.4 * lowAt1) < 0.003 && Math.abs(highAt14 - 1.4 * highAt1) < 0.003);

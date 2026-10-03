@@ -35,6 +35,42 @@
             margin: 2px 0 0;
         }
 
+        /* Competitors and administrators side by side, and one above the other on a phone. */
+        .columns {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 0 16px;
+        }
+
+        /* Club, series and course on one line, sharing it. */
+        .pick {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .pick select {
+            flex: 1 1 140px;
+            min-width: 0;
+            background: var(--panel2);
+            color: var(--ink);
+            border: 1px solid var(--muted);
+            border-radius: 4px;
+            padding: 4px 6px;
+            font: inherit;
+        }
+
+        #h_chart {
+            margin-top: 10px;
+        }
+
+        #h_chart svg {
+            display: block;
+            width: 100%;
+            height: auto;
+            border-radius: 4px;
+        }
+
         .series .label {
             font-family: var(--mono);
             font-size: 10px;
@@ -76,20 +112,38 @@
     </ul>
 </div>
 
-<h2>Competitors</h2>
-<div class="panel links">
-    <a href="boat.html">Boat client</a><span>open on the boat's phone to join a course and sail it</span>
-    <a href="client.html">Test client</a><span>the same client, sailed by a simulated boat on a desk</span>
-    <a href="results.html">Results</a><span>each race's finishing order, and record attempts</span>
-    <a href="log.html">Event log</a><span>when each course was published or withdrawn</span>
-</div>
-<h2>Administrators</h2>
-<div class="panel">
-    <p class="muted" style="margin:0 0 8px">For whoever runs the club's racing &mdash; these need a sign-in.</p>
-    <div class="links">
-        <a href="editor.html">Course editor</a><span>marks, lines, courses and races, and publishing them</span>
-        <a href="race.html">Race screen</a><span>running a race: starts, the fleet, the channel</span>
+<div class="columns">
+    <div>
+        <h2>Competitors</h2>
+        <div class="panel links">
+            <a href="boat.html">Boat client</a><span>open on the boat's phone to join a course and sail it</span>
+            <a href="client.html">Test client</a><span>the same client, sailed by a simulated boat on a desk</span>
+            <a href="results.html">Results</a><span>each race's finishing order, and record attempts</span>
+            <a href="log.html">Event log</a><span>when each course was published or withdrawn</span>
+        </div>
+    </div>
+    <div>
+        <h2>Administrators</h2>
+        <div class="panel">
+            <p class="muted" style="margin:0 0 8px">For whoever runs the club's racing &mdash; these need a sign-in.</p>
+            <div class="links">
+                <a href="editor.html">Course editor</a><span>marks, lines, courses and races, and publishing them</span>
+                <a href="race.html">Race screen</a><span>running a race: starts, the fleet, the channel</span>
+            </div>
+        </div>
     </div>
 </div>
+
+<!-- Every public course with something published, as a boat joining it would be handed it. -->
+<h2>Courses</h2>
+<div class="panel">
+    <div class="pick">
+        <select id="h_club" aria-label="Club"></select>
+        <select id="h_series" aria-label="Series"></select>
+        <select id="h_course" aria-label="Course"></select>
+    </div>
+    <div id="h_chart"><p class="muted">Reading&hellip;</p></div>
+</div>
+<script type="module" src="home.js"></script>
 </body>
 </html>

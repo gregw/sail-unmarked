@@ -88,7 +88,8 @@ unmarked/
     editor.html / editor.js             the course editor
     race.html / race.js                 running a race: the committee's screen
     results.html / results.js           what the boats sent in
-    index.html, whoami.js, style.css    the front page, the signed-in account, shared style
+    index.html / home.js                the front page, and its display of the public courses
+    whoami.js, style.css                the signed-in account, shared style
     *-test.js / *-test.html             executable specs, in a browser and in mvn test
   tools/run-js-tests.mjs                the JS specs in the Maven build
   tools/editor-drive/                   the pages driven headlessly: dom.mjs is the DOM stub,
