@@ -86,6 +86,7 @@ public record Course(
         @JsonProperty("public") boolean isPublic,
         @JsonProperty("template") boolean template,
         @JsonProperty("closed") boolean closed,
+        @JsonProperty("tcfMid") Double tcfMid,
         @JsonProperty("points") Map<String, NamedPoint> points,
         @JsonProperty("lines") Map<String, Line> lines,
         @JsonProperty("sequence") List<CourseStep> sequence,
@@ -107,7 +108,7 @@ public record Course(
                 keyed.put(key, variant.id() == null || variant.id().isBlank()
                     ? new CourseVariant(key, variant.name(), variant.template(),
                         variant.closed(), variant.points(), variant.lines(),
-                        variant.sequence(), variant.notes())
+                        variant.sequence(), variant.notes(), variant.tcfMid())
                     : variant);
             });
         }
@@ -115,7 +116,7 @@ public record Course(
         else if (sequence != null || points != null || lines != null)
         {
             keyed.put(CourseVariant.MAIN, new CourseVariant(CourseVariant.MAIN, null,
-                template, closed, points, lines, sequence, null));
+                template, closed, points, lines, sequence, null, tcfMid));
         }
         return new Course(id, name, notes, isPublic, keyed);
     }

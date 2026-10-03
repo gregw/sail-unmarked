@@ -420,6 +420,9 @@ public final class ProgrammeWriter
         // is noise.
         if (variant.closed())
             out.append(pad).append("closed: true\n");
+        // Only when chosen: without it the midpoint boat is 1.000.
+        if (variant.tcfMid() != null)
+            out.append(pad).append("tcfMid: ").append(trim(variant.tcfMid())).append('\n');
         // Ad-hoc geometry, which exists only inside this variant. Written before the
         // sequence, because the sequence refers to it.
         if (!variant.points().isEmpty())

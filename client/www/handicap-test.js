@@ -8,7 +8,7 @@
 
 import { fromLocal, toLocal, prepareLine, signedDistanceM } from './crossing.js';
 import {
-  envelope, fractionFor, geometry, handicapped, outward, personalise, place, tcfAt, widthThrough, zone,
+  deltaM, envelope, fractionFor, geometry, handicapped, outward, personalise, place, tcfAt, widthThrough, zone,
 } from './handicap.js';
 import { RaceClient } from './raceclient.js';
 import { overview } from './markscreen.js';
@@ -55,6 +55,18 @@ export function run(check) {
   check('a TCF half way to the top of the range is placed half way along',
     near(fractionFor(g, 1 + 100 / 2200), 0.5, 1e-4));
   check('a TCF past the range is clamped to the end of the track', fractionFor(g, 2) === 1);
+
+  // ------------------------------------------------------------ a midpoint other than 1.000
+  const offshore = geometry({ ...HAIRPIN, tcfMid: 1.4 });
+  check('a snapshot\'s midpoint TCF is the boat placed at the middle of the track',
+    near(tcfAt(offshore, 0), 1.4, 1e-9) && near(fractionFor(offshore, 1.4), 0, 1e-6));
+  check('...and the range is the same proportion of it, so a fast fleet fits without the course '
+    + 'shrinking to nothing', near(tcfAt(offshore, -1), 1.4 * (1 - 200 / 2200), 1e-4)
+    && near(tcfAt(offshore, 1), 1.4 * (1 + 200 / 2200), 1e-4));
+  check('...each boat\'s course in proportion to its TCF: a 1.000 boat at 1.4 sails 1/1.4 of it',
+    near(1 + deltaM(offshore, fractionFor(offshore, 1.4 * (1 - 100 / 2200))) / offshore.nominalM,
+      1 - 100 / 2200, 1e-4));
+  check('no midpoint is 1.000', geometry(HAIRPIN).tcfMid === 1);
 
   // ------------------------------------------------------------ which way the line runs
   const out = outward(g, 1);

@@ -74,6 +74,7 @@ await settle(900);
 ok('a handicap line\'s zone is drawn wherever the line is, in a course that does not name it too',
   !/>windward-track</.test(map()) || map().includes('handicap-stripes'));
 ok('...and the line is on the chart, so that says something', />windward-track</.test(map()));
+ok('a course with no handicap line is not asked for a midpoint TCF', !$('variantForm').innerHTML.includes('id="v_tcfmid"'));
 
 choose('course', 'handicap');
 await settle(700);
@@ -85,6 +86,26 @@ ok('the step naming the track says it is handicapped', (steps().match(/class="s_
 ok('the course stripes the zone too', map().includes('handicap-stripes'));
 ok('...but offers no grip: the width is the line\'s, changed where the line is', !map().includes('class="hgrip"'));
 ok('the header gives the TCFs the course takes, beside its length', /TCF \d\.\d{3}&ndash;\d\.\d{3}/.test($('c_len').innerHTML));
+
+// ------------------------------------------------------------ the midpoint TCF
+const handicapBlock = () => (/\n  handicap:\n(?: {4}.*\n)+/.exec(onDisk()) ?? [''])[0];
+const range = () => (/TCF (\d\.\d{3})&ndash;(\d\.\d{3})/.exec($('c_len').innerHTML) ?? []).slice(1).map(Number);
+ok('a course with a handicap line asks for its midpoint TCF, empty for 1.000',
+  /id="v_tcfmid"[^>]*value=""/.test($('variantForm').innerHTML));
+const [lowAt1, highAt1] = range();
+H('v_tcfmid:focus')();
+H('v_tcfmid:input')({ target: { value: '1.4' } });
+H('v_tcfmid:blur')();
+await settle(1500);
+ok('typing one writes it into the file', /\n {6,8}tcfMid: 1\.4\n/.test(handicapBlock()));
+const [lowAt14, highAt14] = range();
+ok('...and the range moves to be the same proportion of it',
+  Math.abs(lowAt14 - 1.4 * lowAt1) < 0.003 && Math.abs(highAt14 - 1.4 * highAt1) < 0.003);
+H('v_tcfmid:focus')();
+H('v_tcfmid:input')({ target: { value: '' } });
+H('v_tcfmid:blur')();
+await settle(1500);
+ok('emptying it is 1.000 again, and the file says nothing', !handicapBlock().includes('tcfMid'));
 
 // The track runs north–south up the course, and a boat's line lies square to it: so the step's
 // triangle has its base east–west and points north, the way a boat crosses its own line — not

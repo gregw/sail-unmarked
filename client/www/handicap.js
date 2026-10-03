@@ -2,15 +2,16 @@
  * DISTANCE-CORRECTED HANDICAPPING: each boat given its own line, placed by its TCF.
  *
  * A line with a `handicapWidthM` is a TRACK, and a step naming it does not ask a boat to cross
- * it: each boat's own line is centred on it. The midpoint is where a 1.000 boat's line sits, the
- * near end (`handicapNear`, decided by the server) is the lowest TCF the course can take and the
+ * it: each boat's own line is centred on it. The midpoint is where the midpoint TCF's line sits
+ * (`tcfMid`, 1.000 when the snapshot does not say), the near end (`handicapNear`, decided by the server) is the lowest TCF the course can take and the
  * far end the highest. A boat's line is `handicapWidthM` wide and SQUARE TO THE TRACK, crossed
  * forward going from the near end towards the far — so every boat's line on a track is
  * parallel, and together they sweep the rectangle the editor stripes on the line itself.
  *
  * ONE SLIDE FOR THE WHOLE COURSE. Every handicapped step is placed at the same fraction `u` of
  * its track, −1 at the near end and +1 at the far end, and a boat of TCF t is given the `u` at
- * which the course is t times its nominal length. Every leg runs between two points moving in
+ * which the course is t / tcfMid times its nominal length — every boat's distance in proportion
+ * to its TCF, and the midpoint boat sailing the course as drawn. Every leg runs between two points moving in
  * straight lines, so the length is convex in `u`, the server has refused any course on which it
  * is not also increasing (`Handicap.java`), and one bisection finds it.
  *
@@ -104,6 +105,7 @@ export function geometry(snapshot) {
   return {
     origin, base, slide, ends, closed, legs,
     nominalM: (snapshot.lengthNm ?? 0) * M_PER_NM,
+    tcfMid: snapshot.tcfMid > 0 ? snapshot.tcfMid : 1,
     at: (i, u) => add(base[i], scale(slide[i], u)),
     slides: (i) => slide[i].x !== 0 || slide[i].y !== 0,
     prev,
@@ -122,7 +124,7 @@ export function deltaM(g, u) {
 }
 
 /** The TCF a boat placed at `u` is handicapped to. */
-export const tcfAt = (g, u) => 1 + deltaM(g, u) / g.nominalM;
+export const tcfAt = (g, u) => g.tcfMid * (1 + deltaM(g, u) / g.nominalM);
 
 /**
  * The fraction along every track at which a boat of this TCF is placed: −1 at the near ends,
@@ -193,7 +195,7 @@ export const placedId = (track, index) => `${track}@${index}`;
 
 /**
  * WHAT A SAILOR IS SHOWN for their own line: the track's name, and how far out along it their line
- * sits from the 1.000 boat's — `reef @ +86 m`. The `@` says the line is placed for this boat; the
+ * sits from the midpoint boat's — `reef @ +86 m`. The `@` says the line is placed for this boat; the
  * number is the one thing about it only this boat needs to know. The step is already in the
  * letter beside it, so it is not repeated.
  */
@@ -213,7 +215,7 @@ export function place(snapshot, tcf) {
     if (!g.ends[i]) return;
     const track = step.crossings[0].line;
     const { port, starboard } = lineAt(g, i, u, step.handicapWidthM);
-    // How far out along the track this boat's line is from where a 1.000 boat's sits, in metres:
+    // How far out along the track this boat's line is from where the midpoint boat's sits, in metres:
     // positive further out, negative further in. What the screens show beside the track's name.
     const offsetM = Math.round(u * norm(g.slide[i]));
     lines.push({

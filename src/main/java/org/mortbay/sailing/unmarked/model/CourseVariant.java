@@ -51,7 +51,8 @@ public record CourseVariant(
     @JsonProperty("points") Map<String, NamedPoint> points,
     @JsonProperty("lines") Map<String, Line> lines,
     @JsonProperty("sequence") List<CourseStep> sequence,
-    @JsonProperty("notes") String notes)
+    @JsonProperty("notes") String notes,
+    @JsonProperty("tcfMid") Double tcfMid)
 {
     /**
      * The id of the variant a course has when nobody has thought about variants.
@@ -61,6 +62,14 @@ public record CourseVariant(
      * the file only when it is actually being used for something.
      */
     public static final String MAIN = "main";
+
+    /** A variant with no handicap midpoint of its own: the midpoint boat is 1.000. */
+    public CourseVariant(String id, String name, boolean template, boolean closed,
+        Map<String, NamedPoint> points, Map<String, Line> lines, List<CourseStep> sequence,
+        String notes)
+    {
+        this(id, name, template, closed, points, lines, sequence, notes, null);
+    }
 
     public CourseVariant
     {
@@ -271,6 +280,9 @@ public record CourseVariant(
             else if (legs[i] <= 0 && !(closed && i == 0))
                 problems.add(at + " measures zero; two steps share a reference point");
         }
+        if (tcfMid != null && !(tcfMid > 0))
+            problems.add(where + " has a handicap midpoint TCF of " + tcfMid
+                + "; give it a positive TCF, or leave it out for 1.000");
         problems.addAll(Handicap.problems(this, where, all, allPoints));
         return problems;
     }

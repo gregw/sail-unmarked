@@ -237,6 +237,7 @@ function variantIn(id, v) {
     name: v.name ?? null,
     template: !!v.template,
     closed: !!v.closed,
+    tcfMid: v.tcfMid ?? null,
     // Ad-hoc geometry: no id in the club's list, alive only inside this variant, so
     // moving one affects exactly one variant by construction.
     points: new Map(Object.entries(v.points ?? {}).map(([pid, p]) => [pid, { ...p, id: pid }])),
@@ -365,7 +366,7 @@ function variantFromSnapshot(snap) {
   });
   return {
     id: snap.revision, name: snap.label, template: false, closed: !!snap.closed,
-    points: new Map(), lines, sequence, notes: null,
+    tcfMid: snap.tcfMid ?? null, points: new Map(), lines, sequence, notes: null,
   };
 }
 
@@ -1647,6 +1648,11 @@ const INFO = {
     + 'it. An <b>infinite</b> end is a bearing rather than a place: the line runs out '
     + 'through that point and keeps going, drawn thin and faint, and only a finite end '
     + 'can be missed.',
+  tcfMid: '<b>The midpoint TCF</b> is the handicap whose line sits at the middle of every '
+    + 'handicap line, and the TCFs the course can take are a proportion either side of it: a '
+    + 'line that takes 0.700 to 1.300 about 1.000 takes 0.980 to 1.820 about 1.400. Empty is '
+    + '1.000, which suits most inshore fleets; an offshore fleet with 1.8 and 2.0 boats in it '
+    + 'wants it higher, rather than a course that shrinks towards nothing at the bottom.',
   snapshots: '<b>A snapshot</b> is an immutable, fully inlined capture of this variant, '
     + 'named <b>course/variant/datetime</b> by the tool and identified by a content hash '
     + 'over its geometry. <b>Publishing</b> is a separate step: it chooses which snapshot '
@@ -2660,7 +2666,7 @@ function cloneSnapshot() {
   const id = freeId(course.variants, base);
   const from = shown.variant;
   course.variants.set(id, {
-    id, name: null, template: false, closed: from.closed,
+    id, name: null, template: false, closed: from.closed, tcfMid: from.tcfMid ?? null,
     points: new Map(),
     // Everything a snapshot holds is inlined, so the new variant owns all of it outright
     // and can be moved without asking anybody.
@@ -2801,7 +2807,9 @@ function renderVariantFields() {
   // The fold is part of the key, not just of the markup: the guard exists to keep the caret in
   // whatever somebody is typing, and without this a folded sequence would be recognised as the
   // same form and never redrawn.
-  const key = `${course.id}/${variant.id}/${isOpen('sequence') ? 'seq' : 'fold'}`;
+  // And whether it is asked for a midpoint TCF, which it is from the moment a step names a
+  // handicap line: the field has to appear then, not on the next visit.
+  const key = `${course.id}/${variant.id}/${isOpen('sequence') ? 'seq' : 'fold'}/${handicaps(variant)}`;
   if (state.variantFieldsFor === key) { syncCourseForm(); return; }
   state.variantFieldsFor = key;
   into.innerHTML = variantFields(course, variant);
@@ -3442,6 +3450,17 @@ function variantFields(course, variant) {
         cycle &mdash; a loop with no start or finish of its own</label>
       <label class="cb" style="margin-bottom:8px"><input type="checkbox" id="v_template"${variant.template ? ' checked' : ''}>
         template &mdash; editable, but never snapshotted and so never sailed</label>
+      ${handicaps(variant) ? `
+        <!--
+          ASKED FOR ONCE THERE IS A HANDICAP LINE, and not before: it means nothing on a course
+          every boat sails the same way round.
+        -->
+        <div style="margin:0 0 8px">
+          <label class="label" for="v_tcfmid">Midpoint TCF</label>
+          <span class="info" data-info="${esc(INFO.tcfMid)}">?</span>
+          <input id="v_tcfmid" inputmode="decimal" placeholder="1.000" spellcheck="false"
+            style="width:7em" value="${variant.tcfMid == null ? '' : esc(variant.tcfMid)}">
+        </div>` : ''}
       ${variant.template ? `<p class="small muted" style="margin:0 0 8px">
         Editing this changes only what FUTURE clones start from. Courses already cloned from
         it are independent copies and are not affected.</p>` : ''}
@@ -3482,6 +3501,14 @@ function variantFields(course, variant) {
 
 function wireVariantFields(course, variant) {
   for (const field of ['v_id', 'v_name', 'v_notes']) el(field).addEventListener('focus', beginEdit);
+  // EMPTY IS 1.000, and so is anything that is not a positive number: the field never leaves a
+  // value the server would have to refuse. Written as typed, to three places at most.
+  el('v_tcfmid')?.addEventListener('focus', beginEdit);
+  el('v_tcfmid')?.addEventListener('input', (ev) => {
+    const value = Number(ev.target.value.trim());
+    variant.tcfMid = ev.target.value.trim() && value > 0 ? Math.round(value * 1000) / 1000 : null;
+  });
+  el('v_tcfmid')?.addEventListener('blur', endEdit);
   el('v_id').addEventListener('change', (ev) => renameVariant(course, variant, ev.target.value.trim()));
   el('v_id').addEventListener('blur', endEdit);
   el('v_name').addEventListener('input', (ev) => { variant.name = ev.target.value; });
@@ -3953,7 +3980,8 @@ async function expandTemplate(course, template) {
   const id = raceId(course.variants);
   const made = {
     id, name: from.name === from.id ? null : from.name, template: false,
-    closed: from.closed, points: new Map(), lines: new Map(), sequence: [], notes: from.notes,
+    closed: from.closed, tcfMid: from.tcfMid ?? null, points: new Map(), lines: new Map(), sequence: [],
+    notes: from.notes,
   };
 
   // ONE crossing of each name, however many times the sequence names it. A leeward line
@@ -4323,6 +4351,11 @@ function renderSteps(variant) {
   on('s_down', (i) => {
     if (i < variant.sequence.length - 1) variant.sequence.splice(i + 1, 0, variant.sequence.splice(i, 1)[0]);
   });
+}
+
+/** True when some step of this variant, not a gate's side, names a handicap track. */
+function handicaps(variant) {
+  return variant.sequence.some((step) => !step.gate?.length && trackWidth(step.line) != null);
 }
 
 /** A line's handicap width where it is a handicap track, or null. */
@@ -4719,6 +4752,7 @@ function coursesPayload() {
         name: v.name ?? null,
         template: !!v.template,
         closed: !!v.closed,
+        tcfMid: v.tcfMid ?? null,
         points: Object.fromEntries([...v.points].map(([pid, p]) => [pid, {
           name: p.name ?? null,
           latitude: p.latitude ?? null,

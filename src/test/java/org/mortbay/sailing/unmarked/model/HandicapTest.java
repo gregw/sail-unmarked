@@ -109,6 +109,35 @@ public class HandicapTest
     }
 
     @Test
+    public void aMidpointTcfCentresTheRangeOnIt()
+    {
+        // The same hairpin about 1.400: the track still stretches the course by ±200/2200, now of
+        // 1.4, so an offshore fleet fits without the bottom of the range reaching towards zero.
+        List<CourseStep> sequence = List.of(step("start"), step("top"), step("start"));
+        hairpin();
+        CourseVariant offshore = new CourseVariant("v", null, false, false, null, null, sequence, null, 1.4);
+        assertThat(problems(offshore), is(empty()));
+        Handicap.Plan plan = Handicap.plan(offshore, lines, Map.of());
+        assertThat(plan.range().tcfMin(), closeTo(1.273, 1e-9));
+        assertThat(plan.range().tcfMax(), closeTo(1.527, 1e-9));
+        CourseSnapshot snapshot = snapshot(offshore);
+        assertThat(snapshot.tcfMid(), is(1.4));
+        // It moves every boat's line but the midpoint boat's, so it is in the revision.
+        assertThat(snapshot.revision(), not(is(snapshot(open(step("start"), step("top"), step("start"))).revision())));
+        // And a course at 1.000 says nothing, so it keeps the snapshot it always had.
+        assertThat(snapshot(open(step("start"), step("top"), step("start"))).tcfMid(), is(nullValue()));
+    }
+
+    @Test
+    public void aMidpointTcfMustBePositive()
+    {
+        hairpin();
+        CourseVariant zero = new CourseVariant("v", null, false, false, null, null,
+            List.of(step("start"), step("top"), step("start")), null, 0.0);
+        assertThat(problems(zero), hasItem(containsString("midpoint TCF")));
+    }
+
+    @Test
     public void aCourseNobodyHandicappedCarriesNoHandicap()
     {
         line("start", -50, 0, 50, 0).line("top", 0, 1200, 0, 1000);

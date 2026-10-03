@@ -12,8 +12,8 @@ import java.util.Set;
  *
  * <h2>The model</h2>
  * A line with a {@code handicapWidthM} is a <b>track</b>, and a step naming it does not ask a
- * boat to cross it. Each boat's own line is centred on the track: the midpoint is where a 1.000
- * boat's line sits, the <b>near</b> end — the one that makes the legs either side shortest — is
+ * boat to cross it. Each boat's own line is centred on the track: the midpoint is where the variant's
+ * midpoint TCF ({@code tcfMid}, 1.000 unless it says otherwise) has its line, the <b>near</b> end — the one that makes the legs either side shortest — is
  * the lowest TCF the course can take, and the far end the highest. Each boat's line is
  * {@code handicapWidthM} wide and square to the track, so together they sweep a rectangle that
  * belongs to the line, which the designer sees on the line itself and checks once. The width is
@@ -22,8 +22,14 @@ import java.util.Set;
  *
  * <p><b>One slide for the whole course.</b> Every handicapped step is placed at the same
  * fraction {@code u} of its track, −1 at the near end, 0 at the midpoint and +1 at the far end.
- * A boat of TCF {@code t} is given the {@code u} at which the course is {@code t} times its
- * nominal length. One number rather than a share per line is what makes a line passed twice,
+ * A boat of TCF {@code t} is given the {@code u} at which the course is {@code t / tcfMid}
+ * times its nominal length, so every boat's distance is in proportion to its TCF and the
+ * midpoint boat sails the course as drawn.
+ *
+ * <p><b>The midpoint is the variant's to choose</b> because the range is a proportion of it: a
+ * track that stretches the course by ±30% takes 0.700 to 1.300 about 1.000, which suits an
+ * inshore fleet, but an offshore fleet with 1.8 and 2.0 boats in it would need the course to
+ * shrink towards nothing at the bottom. About 1.400 the same track takes 0.980 to 1.820. One number rather than a share per line is what makes a line passed twice,
  * and two handicapped steps in a row, need no special case: every leg is between two points
  * moving in straight lines, so the course length is a convex function of {@code u} and one
  * bisection finds it.
@@ -48,11 +54,18 @@ public final class Handicap
     }
 
     /**
-     * A course's handicapped steps worked out: which end of each track is near, and the
-     * range. {@code near} is indexed by step, null where the step is not handicapped.
+     * A course's handicapped steps worked out: which end of each track is near, the range, and
+     * the TCF the midpoints are placed for. {@code near} is indexed by step, null where the step
+     * is not handicapped.
      */
-    public record Plan(String[] near, Range range)
+    public record Plan(String[] near, Range range, double tcfMid)
     {
+    }
+
+    /** The TCF a variant's track midpoints are placed for: its own, or 1.000. */
+    public static double midpoint(CourseVariant variant)
+    {
+        return variant.tcfMid() != null && variant.tcfMid() > 0 ? variant.tcfMid() : 1.0;
     }
 
     private Handicap()
@@ -116,11 +129,12 @@ public final class Handicap
         if (g == null || Double.isNaN(lengthNm) || lengthNm <= 0)
             return null;
         double nominalM = lengthNm * Geo.METRES_PER_NM;
-        double min = 1 + g.delta(-1) / nominalM;
-        double max = 1 + g.delta(1) / nominalM;
+        double mid = midpoint(variant);
+        double min = mid * (1 + g.delta(-1) / nominalM);
+        double max = mid * (1 + g.delta(1) / nominalM);
         // Inward to the third place, so every TCF the range admits can be given a line.
         Range range = new Range(Math.ceil(min * 1000 - 1e-9) / 1000, Math.floor(max * 1000 + 1e-9) / 1000);
-        return new Plan(g.near, range);
+        return new Plan(g.near, range, mid);
     }
 
     /**
@@ -219,7 +233,7 @@ public final class Handicap
             }
             /*
              * THE TURN MUST BE A RIGHT ANGLE OR SHARPER, at every boat's line and not only the
-             * 1.000 boat's. Past 90° the legs are nearly a straight run: the step is a passage,
+             * midpoint boat's. Past 90° the legs are nearly a straight run: the step is a passage,
              * and a track pushed out from a passage lengthens it by next to nothing.
              */
             for (double u : new double[]{-1, 0, 1})

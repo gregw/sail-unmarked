@@ -48,7 +48,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * A step naming a handicap line carries that line — its TRACK — as its one crossing, with the
  * line's {@code handicapWidthM} beside it, and {@code handicapNear} says which end of it the
  * lowest TCF gets. {@code tcfMin} and {@code tcfMax} are the TCFs the course can take, and a join
- * outside them is refused. What any one boat must cross is worked out on the boat, from these,
+ * outside them is refused; {@code tcfMid} is the TCF the tracks' midpoints are placed for, absent
+ * for 1.000. What any one boat must cross is worked out on the boat, from these,
  * by {@code client/www/handicap.js}; see {@link Handicap}.
  */
 public record CourseSnapshot(
@@ -65,7 +66,8 @@ public record CourseSnapshot(
     @JsonProperty("defaults") Programme.Detection defaults,
     @JsonProperty("archivedAt") Instant archivedAt,
     @JsonProperty("tcfMin") Double tcfMin,
-    @JsonProperty("tcfMax") Double tcfMax)
+    @JsonProperty("tcfMax") Double tcfMax,
+    @JsonProperty("tcfMid") Double tcfMid)
 {
     /** A snapshot of a course with no handicapped step. */
     public CourseSnapshot(String revision, String club, String series, String course,
@@ -73,7 +75,7 @@ public record CourseSnapshot(
         Double lengthNm, Programme.Detection defaults, Instant archivedAt)
     {
         this(revision, club, series, course, variant, label, name, closed, steps, lengthNm,
-            defaults, archivedAt, null, null);
+            defaults, archivedAt, null, null, null);
     }
 
     public CourseSnapshot
@@ -169,7 +171,9 @@ public record CourseSnapshot(
             course.id(), variantId, null, course.name(), variant.closed(), steps,
             Double.isNaN(length) ? null : length, programme.defaults(), null,
             plan == null ? null : plan.range().tcfMin(),
-            plan == null ? null : plan.range().tcfMax());
+            plan == null ? null : plan.range().tcfMax(),
+            // Absent at 1.000, so a snapshot that never chose a midpoint reads as it always has.
+            plan == null || plan.tcfMid() == 1.0 ? null : plan.tcfMid());
         return unhashed.withRevision(unhashed.hash());
     }
 
@@ -189,7 +193,7 @@ public record CourseSnapshot(
             ? course + "/" + stamp
             : course + "/" + variant + "/" + stamp;
         return new CourseSnapshot(revision, club, series, course, variant, named, name,
-            closed, steps, lengthNm, defaults, at, tcfMin, tcfMax);
+            closed, steps, lengthNm, defaults, at, tcfMin, tcfMax, tcfMid);
     }
 
     private static End end(LineEnd from, Map<String, NamedPoint> points)
@@ -202,7 +206,7 @@ public record CourseSnapshot(
     private CourseSnapshot withRevision(String revision)
     {
         return new CourseSnapshot(revision, club, series, course, variant, label, name, closed,
-            steps, lengthNm, defaults, archivedAt, tcfMin, tcfMax);
+            steps, lengthNm, defaults, archivedAt, tcfMin, tcfMax, tcfMid);
     }
 
     /**
@@ -225,6 +229,10 @@ public record CourseSnapshot(
         StringBuilder canonical = new StringBuilder();
         canonical.append(club).append('|').append(series).append('|').append(course)
             .append('|').append(closed);
+        // The midpoint moves every boat's line but the midpoint boat's, so it is geometry. Only
+        // when present, so a course at 1.000 keeps the revision it had.
+        if (tcfMid != null)
+            canonical.append("|M").append(tcfMid);
         for (Step step : steps)
         {
             canonical.append("|S").append(step.entry());

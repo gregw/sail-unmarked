@@ -475,6 +475,24 @@ public class ProgrammeWriterTest
     }
 
     @Test
+    public void aMidpointTcfIsWrittenOnlyWhenChosenAndReadsBack() throws Exception
+    {
+        assertThat(ProgrammeWriter.emitCourses(courses()), not(containsString("tcfMid:")));
+        Map<String, Course> offshore = new LinkedHashMap<>();
+        offshore.put("c", new Course("c", null, null, false, Map.of(CourseVariant.MAIN,
+            new CourseVariant(CourseVariant.MAIN, null, false, false, null, null,
+                java.util.List.of(new CourseStep("a", Direction.FORWARD, null, null, false, null)), null, 1.4))));
+        String out = ProgrammeWriter.emitCourses(offshore);
+        assertThat(out, containsString("    tcfMid: 1.4\n"));
+        // Read back in the flat shape it was written in.
+        com.fasterxml.jackson.databind.ObjectMapper yaml =
+            new com.fasterxml.jackson.databind.ObjectMapper(new com.fasterxml.jackson.dataformat.yaml.YAMLFactory());
+        Map<String, Course> read = yaml.readValue(out.replaceAll("(?m)^  ", ""),
+            new com.fasterxml.jackson.core.type.TypeReference<Map<String, Course>>() {});
+        assertThat(read.get("c").variant(CourseVariant.MAIN).tcfMid(), is(1.4));
+    }
+
+    @Test
     public void allThreeBlocksSurviveTogether(@TempDir Path dir) throws Exception
     {
         Path file = dir.resolve("fixture.yaml");
