@@ -489,8 +489,10 @@ the **published** one is refused: publish another or withdraw it first.
 chooses, and public decides whether anybody outside the club may see either. `GET /api/public` lists
 public courses and, under each, the snapshot currently published for every variant. Both gates are
 required: a public course with nothing published shows with nothing under it, and an unpublished variant
-does not appear at all. **Templates cannot reach it by construction** — no snapshot ⇒ no publication ⇒
-no live revision.
+does not appear at all. **Templates cannot be joined by construction** — no snapshot ⇒ no publication ⇒
+no live revision — but a public course's complete templates are listed beside what is published, as
+designs to look at, and `GET /api/public/{club}/{series}/{course}/{variant}` resolves one as a snapshot
+of it would be, without taking one. The front page draws both.
 
 On the course and not the variant, because a course is the thing a boat joins — publishing Div 1 while
 hiding Div 2 would offer half a fleet a race. Default false because a club's file is full of half-built

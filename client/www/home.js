@@ -1,18 +1,21 @@
 /*
- * THE FRONT PAGE'S COURSE DISPLAY: every public course that has something published, chosen by
- * club, series and course, and drawn north up on the plain chart, fitted to the course.
+ * THE FRONT PAGE'S COURSE DISPLAY: every public course that has something published, and every
+ * public template, chosen by club, series and course, and drawn north up on the plain chart,
+ * fitted to the course.
  *
  * What is drawn is the PUBLISHED SNAPSHOT — what a boat joining it is handed — and not the file,
- * which may have moved on. A snapshot holds only the lines its course crosses, so there are no
- * unused lines to hide. Drawn by the overview the boat itself uses (`markscreen.overview`), with
- * no boat on it: one drawing of a course.
+ * which may have moved on; a template, which is never published, is drawn as the file has it now.
+ * Either holds only the lines its course crosses, so there are no unused lines to hide. Drawn by
+ * the overview the boat itself uses (`markscreen.overview`), with no boat on it: one drawing of a
+ * course.
  */
 
 import { overview } from './markscreen.js';
 import { RaceClient } from './raceclient.js';
+import { personalise } from './handicap.js';
 
-/** How strongly the chart is drawn here: brighter than on the water, where it sits under a boat. */
-const HOME_INK = 0.6;
+/** The chart at full strength: here it is the picture, not something under a boat's screen. */
+const HOME_INK = 1;
 
 const el = (id) => document.getElementById(id);
 const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' };
@@ -26,19 +29,32 @@ const state = {
   snapshot: null,
 };
 
-/** Each published variant of each public course, flattened: what the third selector lists. */
+/**
+ * Each published variant and each template of each public course, flattened: what the third
+ * selector lists, with where its geometry is read from.
+ */
 function flatten(courses) {
   const out = [];
   for (const course of courses) {
-    for (const variant of course.published ?? []) {
+    const published = course.published ?? [];
+    const templates = course.templates ?? [];
+    const named = course.name ?? course.course;
+    // The variant named only where the course has more than one: a course with a single design
+    // is just the course. A template always says so, being a design nobody can join.
+    const many = published.length + templates.length > 1;
+    for (const variant of published) {
       out.push({
         club: course.club, series: course.series, course: course.course, variant: variant.variant,
-        revision: variant.revision,
-        // The variant named only where the course has more than one: a course with a single
-        // design is just the course.
-        label: (course.published.length > 1
-          ? `${course.name ?? course.course} — ${variant.name ?? variant.variant}`
-          : (course.name ?? course.course)),
+        url: `/api/courses/${encodeURIComponent(variant.revision)}`,
+        label: many ? `${named} \u2014 ${variant.name ?? variant.variant}` : named,
+      });
+    }
+    for (const variant of templates) {
+      out.push({
+        club: course.club, series: course.series, course: course.course, variant: variant.variant,
+        url: ['/api/public', course.club, course.series, course.course, variant.variant]
+          .map((part, i) => (i ? encodeURIComponent(part) : part)).join('/'),
+        label: `${many ? `${named} \u2014 ${variant.name ?? variant.variant}` : named} (template)`,
       });
     }
   }
@@ -82,7 +98,7 @@ async function show() {
     return;
   }
   try {
-    const response = await fetch(`/api/courses/${encodeURIComponent(offer.revision)}`);
+    const response = await fetch(offer.url);
     if (!response.ok) throw new Error(`${response.status}`);
     const snapshot = await response.json();
     // A later choice may have overtaken this read.
@@ -99,7 +115,13 @@ function draw() {
   const host = el('h_chart');
   let client;
   try {
-    client = new RaceClient(state.snapshot);
+    /*
+     * A HANDICAP LINE AS THE EDITOR SHOWS IT: the striped rectangle every boat's line may lie in,
+     * with the midpoint boat's line across it. Placed for the midpoint TCF, which is the one TCF
+     * every handicapped course can take.
+     */
+    const mid = state.snapshot.tcfMid > 0 ? state.snapshot.tcfMid : 1;
+    client = new RaceClient(personalise(state.snapshot, mid));
   } catch (error) {
     host.innerHTML = `<p class="warn">${esc(error.message)}</p>`;
     return;

@@ -6,11 +6,38 @@
     <title>Unmarked Racing</title>
     <link rel="stylesheet" href="style.css">
     <style>
+        /* Tighter than the shared style: half the space between lines, and before a heading. */
+        body {
+            line-height: 1.25;
+        }
+
+        h2 {
+            margin-top: 12px;
+        }
+
+        /* The name large and the line under it small, on one line, the sign-in at the far end. */
+        .masthead {
+            display: flex;
+            align-items: baseline;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .masthead h1 {
+            font-size: 30px;
+        }
+
+        .masthead .sub {
+            font-family: var(--disp);
+            font-size: 16px;
+            color: var(--muted);
+        }
+
         /* The links as a short list: a name to press and a line saying what it is. */
         .links {
             display: grid;
             grid-template-columns: max-content 1fr;
-            gap: 6px 14px;
+            gap: 3px 14px;
             align-items: baseline;
         }
 
@@ -83,24 +110,21 @@
 </head>
 <body>
 
-<p class="kicker" style="display:flex; gap:12px">Unmarked Racing
+<div class="masthead">
+    <h1>Unmarked Racing</h1>
+    <span class="sub">Virtual marks, real racing!</span>
     <!-- Signing in, or out, or as somebody else. Empty on a server with no login. -->
-    <span id="whoami" class="mono" style="margin-left:auto; text-transform:none; letter-spacing:0"></span></p>
-<h1>Sail racing around virtual marks</h1>
+    <span id="whoami" class="mono kicker" style="margin-left:auto; text-transform:none; letter-spacing:0"></span>
+</div>
 
 <!--
-  WHAT IT IS, and the race formats it makes possible, then the way in for a sailor, then the way in
-  for the club, then what there is to race. The event log is a page of its own (log.html), and the
+  WHAT IT MAKES POSSIBLE, then the way in for a sailor beside the way in for the club, then the
+  courses there are to race. The event log is a page of its own (log.html), and the
   server's own state is in the API, for the few people who ask for it.
 -->
 <div class="panel">
-    <p style="margin:0">
-        Sail racing with virtual marks that are <strong>lines created and checked by an app</strong> rather
-        than buoys laid by hand and checked by eyeball. This avoids the need for complex mark rounding rules
-        and enables alternative race formats:
-    </p>
     <!-- Bulleted here, though the site's lists are not: these are points, the lists below are data. -->
-    <ul style="list-style: disc; padding-left: 1.4em; margin: 6px 0 0">
+    <ul style="list-style: disc; padding-left: 1.4em; margin: 0">
         <li>Virtual courses with no race committee on the water or marks to lay</li>
         <li>Courses are always available for practice or record attempts</li>
         <li>Circuit courses that can be started/finished at one of many lines. Boats from different clubs can race the same

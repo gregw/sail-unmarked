@@ -40,6 +40,21 @@ if (!shown) {
   report();
 }
 
+/* ----------------------------- a public template, and a public course handicapped by distance */
+
+const [template] = await json('/api/templates');
+const HKEY = 'myc.org.au/2026-windward-leeward';
+const hfile = await json(`/api/programmes/${HKEY}`);
+for (const id of ['handicap', ...(template && `${template.club}/${template.series}` === HKEY ? [template.course] : [])])
+  hfile.courses[id].public = true;
+await fetch(`/api/programmes/${HKEY}`, {
+  method: 'PUT',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ points: hfile.points, lines: hfile.lines, courses: hfile.courses, races: hfile.races ?? {} }),
+});
+await post(`/api/lifecycle/${HKEY}/snapshots`, { course: 'handicap', variant: 'one-lap' });
+await post(`/api/lifecycle/${HKEY}/publications`, { publish: [{ course: 'handicap', variant: 'one-lap' }] });
+
 /* ------------------------------------------------------------------------- the page */
 
 await import('../../client/www/home.js');
@@ -67,5 +82,22 @@ ok('...on the plain chart', chart.includes('class="basemap"') && chart.includes(
 ok('...north up, so there is no north pointer', !chart.includes('>N</text>'));
 const lines = new Set(shown.snapshot.steps.flatMap((s) => s.crossings.map((c) => c.line))).size;
 ok('...with only the lines the course crosses', (chart.match(/<line [^>]*stroke-width="(2|3\.5)"/g) ?? []).length === lines);
+
+ok('...on the chart at full strength', /class="basemap"[^>]*opacity="1"/.test(chart));
+
+await pick('h_club', 'myc.org.au');
+await pick('h_series', '2026-windward-leeward');
+await pick('h_course', 'handicap/one-lap');
+ok('a handicap line is drawn as the striped rectangle its boats\' lines may lie in',
+  html('h_chart').includes('handicap-stripes'));
+if (template && `${template.club}/${template.series}` === HKEY) {
+  const key = `${template.course}/${template.variant}`;
+  ok('a public template is offered as a course, and says it is a template',
+    new RegExp(`value="${key}"[^>]*>[^<]*\\(template\\)`).test(html('h_course')));
+  await pick('h_course', key);
+  ok('...and is drawn', html('h_chart').includes('<svg class="plot"'));
+} else {
+  ok('the fixture holds a template in the handicap series', false);
+}
 
 report();

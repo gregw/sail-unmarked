@@ -179,6 +179,19 @@ public class ApiServlet extends HttpServlet
                 send(resp, publicIndex());
                 return;
             }
+            // A PUBLIC TEMPLATE'S GEOMETRY, resolved as a snapshot of it would be but never taken:
+            // a template is a design to look at and clone, and is never handed to a boat.
+            if (path.length == 5 && path[0].equals("public"))
+            {
+                CourseSnapshot shown = publicTemplate(path[1], path[2], path[3], path[4]);
+                if (shown == null)
+                {
+                    resp.sendError(404, "No such public template");
+                    return;
+                }
+                send(resp, shown);
+                return;
+            }
             if (path.length == 1 && path[0].equals("log"))
             {
                 send(resp, publicLog(limit(req, 200)));
@@ -1267,6 +1280,18 @@ public class ApiServlet extends HttpServlet
      * never be snapshotted, so it can never be published, so it can never have a live
      * revision. The one flag does all of it.
      */
+    /** A complete template variant of a public course, resolved; null for anything else. */
+    private CourseSnapshot publicTemplate(String club, String series, String courseId, String variantId)
+    {
+        Programme programme = programmes.programme(club, series).orElse(null);
+        Course course = programme == null ? null : programme.courses().get(courseId);
+        CourseVariant variant = course == null ? null : course.variant(variantId);
+        if (variant == null || !course.isPublic() || !variant.template()
+            || !variant.problems(course.where(variantId), programme.lines(), programme.points()).isEmpty())
+            return null;
+        return CourseSnapshot.of(programme, course, variantId);
+    }
+
     private List<Map<String, Object>> publicIndex()
     {
         List<Map<String, Object>> out = new ArrayList<>();
@@ -1314,6 +1339,20 @@ public class ApiServlet extends HttpServlet
                     });
                     offers.add(offer);
                 });
+                // A public course's TEMPLATES, which can be looked at but never joined: listed
+                // apart from what is published, and only those complete enough to be drawn.
+                List<Map<String, Object>> templates = new ArrayList<>();
+                course.variants().forEach((variantId, variant) ->
+                {
+                    if (!variant.template() || !variant.problems(course.where(variantId),
+                        programme.lines(), programme.points()).isEmpty())
+                        return;
+                    Map<String, Object> template = new LinkedHashMap<>();
+                    template.put("variant", variantId);
+                    template.put("name", variant.name());
+                    template.put("closed", variant.closed());
+                    templates.add(template);
+                });
                 Map<String, Object> row = new LinkedHashMap<>();
                 row.put("club", programme.club());
                 row.put("series", programme.series());
@@ -1321,6 +1360,7 @@ public class ApiServlet extends HttpServlet
                 row.put("name", course.name());
                 row.put("notes", course.notes());
                 row.put("published", offers);
+                row.put("templates", templates);
                 out.add(row);
             }
         }
