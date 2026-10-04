@@ -887,6 +887,12 @@ function ask(title, body, choices) {
  */
 let HANDLES = '';
 
+/** How long a course label stays grown after the pointer leaves it. */
+const HOVER_HOLD_MS = 3000;
+
+/** The pending return to normal size, per step's group of labels. See the hover in `render`. */
+const SHRINKING = new Map();
+
 /** Lines the loaded programme defines, drawn from whichever ends are placed. */
 function renderLines() {
   const used = inUse();
@@ -1484,6 +1490,7 @@ function render() {
   for (const g of marks) {
     const group = marks.filter((m) => m.dataset.group === g.dataset.group);
     g.addEventListener('mouseenter', () => {
+      clearTimeout(SHRINKING.get(g.dataset.group));
       for (const member of group) {
         const ox = Number(member.dataset.ox);
         const oy = Number(member.dataset.oy);
@@ -1497,8 +1504,13 @@ function render() {
       }
       g.parentNode.appendChild(g);
     });
+    // HELD FOR A MOMENT after the pointer leaves, so a grown label can still be read — and
+    // its letter found — by somebody who has moved on to the line beside it.
     g.addEventListener('mouseleave', () => {
-      for (const member of group) member.removeAttribute('transform');
+      clearTimeout(SHRINKING.get(g.dataset.group));
+      SHRINKING.set(g.dataset.group, setTimeout(() => {
+        for (const member of group) member.removeAttribute('transform');
+      }, HOVER_HOLD_MS));
     });
   }
 
