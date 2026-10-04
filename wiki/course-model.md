@@ -98,7 +98,9 @@ began the run and the last ended it, and on a cycle they name the same step.
 
 A leg is measured **between the midpoints of consecutive lines' two defined points**; course length
 is the sum of the legs. A measured leg of zero is an error, not a short leg: it means two steps
-share a reference point. `lengthNm` on a step overrides the leg *into* that step.
+share a reference point — **except between two steps naming the same line**, which is the line
+crossed again after going round an end, and counts as nothing towards the length. `lengthNm` on a
+step overrides the leg *into* that step, which is how a course that cares gives that leg its water.
 
 On a cycle, step 0 has a leg into it — from the last mark back to the first — and it is counted,
 measured and overridable like any other. On an open course `legs[0]` is NaN, because nothing runs

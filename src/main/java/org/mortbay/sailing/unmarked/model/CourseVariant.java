@@ -130,6 +130,16 @@ public record CourseVariant(
         return Integer.toString(index);
     }
 
+    /** True when the step at {@code index} crosses again the single line the step before it crossed. */
+    private boolean recrossing(int index)
+    {
+        int before = index > 0 ? index - 1 : sequence.size() - 1;
+        CourseStep previous = sequence.get(before);
+        CourseStep here = sequence.get(index);
+        return !previous.isGate() && !here.isGate() && previous.line() != null
+            && previous.line().equals(here.line());
+    }
+
     /** The steps a boat may begin and end a lap at. Empty on an open course. */
     @JsonIgnore
     public List<CourseStep> entryPoints()
@@ -275,9 +285,14 @@ public record CourseVariant(
             // last mark is the first mark — a cycle written the open-course way, `A B C A`,
             // with the return spelled out instead of implied. That is redundant, not wrong:
             // the loop is already complete when it reaches the repeat, so the closing leg
-            // adds nothing and the length comes out the same as `A B C`. Everywhere else a
-            // zero leg still means two steps share a reference point, which no course means.
-            else if (legs[i] <= 0 && !(closed && i == 0))
+            // adds nothing and the length comes out the same as `A B C`.
+            //
+            // Nor is a zero leg between two steps naming the SAME line: the line crossed again,
+            // which a course means on purpose — a boat goes round an end and comes back to cross
+            // it once more. The leg counts as nothing towards the length, which understates the
+            // water sailed; a course that cares sets `lengthNm` on it. Everywhere else a zero leg
+            // means two different lines share a reference point, which no course means.
+            else if (legs[i] <= 0 && !(closed && i == 0) && !recrossing(i))
                 problems.add(at + " measures zero; two steps share a reference point");
         }
         if (tcfMid != null && !(tcfMid > 0))

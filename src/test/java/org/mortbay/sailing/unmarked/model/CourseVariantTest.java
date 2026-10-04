@@ -167,14 +167,30 @@ public class CourseVariantTest
     }
 
     @Test
-    public void aZeroLegAnywhereELSEIsStillAnError()
+    public void aLineCrossedAgainIsNotComplainedAbout()
     {
-        // The check earns its keep in the middle of a sequence, where two steps sharing a
-        // reference point is something no course means.
-        List<CourseStep> sequence = new java.util.ArrayList<>(of(true, 4).sequence());
-        sequence.set(2, new CourseStep("line-1", Direction.FORWARD, null, null, false, null));
-        CourseVariant doubled = new CourseVariant("v", null, false, true, null, null, sequence, null);
-        assertThat(doubled.problems("course 'c'", square(), Map.of()),
+        // Two steps naming the same line in a row: the boat goes round an end and crosses it
+        // again, which a novelty course means on purpose. The leg measures nothing and counts
+        // as nothing, and the variant can still be snapshotted.
+        List<CourseStep> sequence = new java.util.ArrayList<>(of(false, 4).sequence());
+        sequence.add(2, new CourseStep("line-1", Direction.FORWARD, null, null, false, null));
+        CourseVariant again = new CourseVariant("v", null, false, false, null, null, sequence, null);
+        assertThat(again.legLengthsNm(square(), Map.of())[2], is(0.0));
+        assertThat(again.problems("course 'c'", square(), Map.of()), is(List.of()));
+    }
+
+    @Test
+    public void aZeroLegBetweenTwoDifferentLinesIsStillAnError()
+    {
+        // The check earns its keep where two DIFFERENT lines share a reference point, which is
+        // something no course means: here a second line laid over the first, as a copy might be.
+        Map<String, Line> lines = new java.util.LinkedHashMap<>(square());
+        Line first = lines.get("line-1");
+        lines.put("copy", new Line("copy", null, first.port(), first.starboard(), null));
+        List<CourseStep> sequence = new java.util.ArrayList<>(of(false, 4).sequence());
+        sequence.add(2, new CourseStep("copy", Direction.FORWARD, null, null, false, null));
+        CourseVariant doubled = new CourseVariant("v", null, false, false, null, null, sequence, null);
+        assertThat(doubled.problems("course 'c'", lines, Map.of()),
             org.hamcrest.Matchers.hasItem(
                 "course 'c' leg into 2 measures zero; two steps share a reference point"));
     }
