@@ -218,6 +218,10 @@ derivations; these are the rules that outlive any of them.
 - **The track's dots are the course screen's colour on the approach**, so the track runs on unchanged from
   one screen to the other. A dot changes colour only when it says something: orange on the far side with
   the line not crossed — the wrong side — and green on the far side once it has been. Hollow past an end.
+- **The line itself says which side the boat is on** (`approachColour`): red while it is on the wrong side
+  to cross it, its own blue on the side to cross from, green once crossed. The start's signal colours show
+  only on the right side; on the wrong side the line is red whatever the signals, because the boat has to
+  come back either way.
 
 - **The line carries a triangle** — the editor's own notation, base on the line, apex the way you must cross
   — because the required sense is the one thing about a virtual mark that cannot be guessed from looking at
@@ -265,9 +269,9 @@ derivations; these are the rules that outlive any of them.
   properly has done the ordinary thing; a red cross would tell a sailor mid-manoeuvre they have blown the
   mark. Shape carries the fact that something was rejected, colour carries whether it matters. Red is kept
   for the one thing that IS a miss.
-- **Which side a fix is ON and which side it CONFIRMS are two questions** with two bands: `side()` is
-  geometric and narrow (`SIDE_BAND_M`), `confirmedSide()` is the stricter one the N-and-N latch counts.
-  Sharing one band makes the picture of a crossing unreadable.
+- **Which side a fix is ON and whether it is CLEAR of the line are two questions**: `side()` is the sign
+  of the unrounded distance, with no band at all, and `clear()` is the receiver's test the latch needs one
+  far-side fix to pass. A band on `side()` would leave the picture of a crossing with dots on no side.
 
 ## Orientation
 

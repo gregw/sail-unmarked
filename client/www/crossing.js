@@ -128,51 +128,38 @@ export function alongM(prepared, t) {
 }
 
 /**
- * How close to the line a fix may fall and still not be called, in metres.
+ * Which side of the line a fix is on: +1 or −1, and 0 only exactly on it.
  *
- * Half the system's resolution, and tied to it rather than chosen: every distance here is
- * rounded to the nearest metre, so a fix resolved to within half a metre of the line is as
- * close to it as this system can say anything about. Beyond that it is on a side, and saying
- * otherwise would be claiming a precision that was thrown away two steps earlier.
+ * <b>No band.</b> A side is a sign, not a distance, so it is taken from the distance BEFORE it is
+ * rounded to the metre: a fix a few centimetres over is over. A noisy fix either side of the line
+ * is not filtered here but by the latch, which needs `confirmFixes` in a row on each side before
+ * it will call a crossing; a band here as well only left the picture of a crossing with dots on
+ * no side at all through the moment being explained.
+ *
+ * How far over the line the far side's fixes reach is a separate question: see {@link clear}.
  */
-export const SIDE_BAND_M = RESOLUTION_M / 2;
-
-/**
- * Which side of the line a fix is on: +1, -1, or 0 for "too close to say".
- *
- * <b>A geometric question, and a narrow one.</b> Zero here means the fix is inside the one
- * metre this system resolves to — not that the receiver was uncertain, which is a different
- * question with a different answer and is {@link confirmedSide} below.
- *
- * The two must not share a band. With the band set to the fix's own accuracy, a boat crossing
- * at nine knots under a two-metre sky spends a second inside it, and the picture of the
- * crossing — the one thing that makes a result explicable — would come out as a run of grey
- * dots through the very moment being explained.
- */
-export function side(prepared, point, bandM = SIDE_BAND_M) {
-  const distance = signedDistanceM(prepared, point);
-  if (Math.abs(distance) <= (bandM ?? SIDE_BAND_M)) return 0;
-  return distance > 0 ? 1 : -1;
+export function side(prepared, point) {
+  return Math.sign(cross(prepared.d, sub(point, prepared.port)));
 }
 
 /**
- * Which side a fix CONFIRMS, which is not the same as which side it is on.
+ * Whether a fix is CLEAR of the line: further from it than half the receiver's own stated
+ * accuracy, or than `bandM` where the programme fixes one (`accuracyBandM`).
  *
- * A fix two metres from the line, from a receiver claiming two metres of accuracy, is on a
- * side — it is well outside the metre this system resolves to — but it is not EVIDENCE of
- * being on that side, because the error alone could account for it. Confirmation is what the
- * N-and-N latch counts, so this is the band that keeps a boat sitting on a line from
- * assembling a run out of noise and emitting a crossing it never made.
+ * A fix two metres over, from a receiver claiming five, is over — it is on that side, and it
+ * counts towards the run — but on its own it is not EVIDENCE of having crossed, because the
+ * error alone could put it there. So a crossing needs, among the run on the far side, one fix
+ * that is clear: three fixes jittering a metre either side of a line a boat is sitting on never
+ * make one, and a boat that has really crossed makes one within a fix or two.
  *
- * `bandM` null means use the fix's own stated accuracy, which is the more honest setting and
- * makes the effective width vary with the sky — an open question, and the reason this is a
- * setting at all.
- *
- * <p>Only the latch uses this. The screen colours a fix by {@link side}, so what it is
- * willing to call is not held to the stricter of the two standards.
+ * Half the accuracy rather than all of it, because the stated accuracy is a radius about the
+ * fix and the question is only whether it could be on the other side of a line; and a whole
+ * accuracy would hold a boat crossing at a shallow angle under a poor sky off its latch for
+ * longer than the leg after the line lasts.
  */
-export function confirmedSide(prepared, point, accuracyM, bandM) {
-  return side(prepared, point, bandM == null ? (accuracyM ?? 0) : bandM);
+export function clear(prepared, point, accuracyM, bandM = null) {
+  const threshold = bandM ?? (accuracyM ?? 0) / 2;
+  return Math.abs(signedDistanceM(prepared, point)) > threshold;
 }
 
 /**
@@ -367,10 +354,12 @@ export class RelocationWatch {
 /**
  * Watches one required crossing and latches it.
  *
- * Validity requires N consecutive quality fixes confirming the required side, a
- * segment that intersects the line, then N consecutive quality fixes confirming the
- * opposite side — the 3-and-3 rule at the default N. A single flyer cannot produce N
- * consecutive confirmed fixes on the far side, so it fails.
+ * Validity requires N consecutive quality fixes on the required side, a segment that
+ * intersects the line, then N consecutive quality fixes on the opposite side — the 3-and-3
+ * rule at the default N — at least one of which is CLEAR of the line ({@link clear}): further
+ * from it than half the receiver's stated accuracy. A single flyer cannot produce N consecutive
+ * fixes on the far side, and a boat sitting on the line in the receiver's noise never produces
+ * a clear one, so neither latches. The far side's run goes on counting until one is clear.
  *
  * Validity and timing are separate jobs. The confirmation decides WHETHER; the
  * interpolated instant decides WHEN, and it is never the time of any fix — taking it
@@ -402,6 +391,8 @@ export class CrossingDetector {
 
     this.pending = null;
     this.afterCount = 0;
+    // Whether any fix of the far side's run has been clear of the line yet. See `clear`.
+    this.afterClear = false;
     this.lastPoint = null;
     this.lastFix = null;
   }
@@ -420,9 +411,9 @@ export class CrossingDetector {
    * and compared against another is quietly wrong by however far apart the origins are.
    */
   accept(point, fix) {
-    // CONFIRMED side, not merely which side: the latch counts evidence, and a fix inside the
-    // receiver's own stated error is not evidence of anything.
-    const here = confirmedSide(this.line, point, fix.accuracyM, this.accuracyBandM);
+    // Which side, with no band: noise either side of the line is filtered by the runs, and by
+    // the far side's needing a fix that is clear of it.
+    const here = side(this.line, point);
 
     // A segment cuts the line, and the run behind it is long enough to be believed.
     if (this.pending == null && this.lastPoint) {
@@ -439,13 +430,15 @@ export class CrossingDetector {
           confirmBefore: this.runCount,
         };
         this.afterCount = 0;
+        this.afterClear = false;
       }
     }
 
     if (this.pending) {
       if (here !== 0 && here === -this.pending.fromSide) {
         this.afterCount += 1;
-        if (this.afterCount >= this.confirmFixes) this.settle(here);
+        this.afterClear ||= clear(this.line, point, fix.accuracyM, this.accuracyBandM);
+        if (this.afterCount >= this.confirmFixes && this.afterClear) this.settle(here);
       } else if (here === this.pending.fromSide) {
         // Came back without ever confirming the far side. Not a crossing — and this is
         // exactly the shape a single flyer makes.

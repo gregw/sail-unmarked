@@ -14,8 +14,7 @@ import {
   NOISE_SIGMAS,
   RESOLUTION_M,
   RelocationWatch,
-  SIDE_BAND_M,
-  confirmedSide,
+  clear,
   impliedKnots,
   kinematicBudgetM,
   plausible,
@@ -116,35 +115,25 @@ export function run(check) {
 
   // ------------------------------- which side it is ON, and which side it CONFIRMS
   //
-  // Two questions with two bands. Sharing one would make the plot unreadable: with the band
-  // set to the fix's own accuracy, a boat crossing at nine knots under a two-metre sky spends
-  // a second inside it and the picture of the crossing would come out as a run of grey.
+  // A side has no band: noise either side of the line is the latch's to filter, by needing
+  // `confirmFixes` in a row on each side. Confirmation is the receiver's band, below.
   const near = (metres) => toLocal(ORIGIN, at(0, metres));
 
-  check('a fix is on a side once it is clear of the metre this system resolves to',
-    side(line, near(0.6)) === 1 && side(line, near(-0.6)) === -1);
-  check('...and is too close to call inside it, which is all zero may mean here',
-    side(line, near(0.4)) === 0 && side(line, near(-0.4)) === 0);
-  // And the consequence, which is neater than it looks: perpendicular distance is resolved to
-  // the metre BEFORE the band is applied, so at half a metre the band admits exactly one
-  // value — zero. "Too close to call" is therefore not a tunable width at all, it is "this
-  // fix rounded onto the line", which is the only thing a one-metre system can mean by it.
-  check('the band is half the system resolution, not a number of its own',
-    SIDE_BAND_M === RESOLUTION_M / 2);
-  check('...so the only fix it cannot call is one that rounds onto the line itself',
-    side(line, near(0.49)) === 0 && side(line, near(0.51)) === 1);
+  check('a fix is on a side however close it is — a side is a sign, not a distance',
+    side(line, near(0.2)) === 1 && side(line, near(-0.2)) === -1);
+  check('...taken before the distance is rounded to the metre, so it is not rounded onto the line',
+    side(line, near(0.4)) === 1 && signedDistanceM(line, near(0.4)) === 0);
   check('...and two metres out is plainly on a side, whatever the receiver claims',
     side(line, near(2)) === 1);
 
-  // Confirmation is the stricter question, and it is the one the latch counts: a fix two
-  // metres out from a receiver claiming two metres is on a side but is not EVIDENCE of one.
-  check('a fix inside the receiver\'s own stated error confirms nothing',
-    confirmedSide(line, near(2), 5, null) === 0);
+  // CLEAR is the stricter question, and the latch needs one clear fix on the far side: a fix two
+  // metres out from a receiver claiming five is on a side but is not EVIDENCE of having crossed.
+  check('a fix within half the receiver\'s stated accuracy is not clear of the line',
+    !clear(line, near(2), 5, null));
   check('...though it is perfectly well on a side', side(line, near(2)) === 1);
-  check('...and the same fix confirms once the receiver claims better',
-    confirmedSide(line, near(2), 1, null) === 1);
+  check('...and one further than half of it is', clear(line, near(3), 5, null));
   check('a declared band overrides the fix\'s claim, in both directions',
-    confirmedSide(line, near(4), 1, 10) === 0 && confirmedSide(line, near(4), 25, 2) === 1);
+    !clear(line, near(4), 1, 10) && clear(line, near(4), 25, 2));
 
   // ------------------------------------------------- resolution and the COG warning
   // One metre, declared once, for the whole system. A scoring edge that moves with the
@@ -241,6 +230,21 @@ export function run(check) {
   const infiniteEnd = new CrossingDetector(eastWestLine(false, true), 'forward', { confirmFixes: 3, accuracyBandM: 2 });
   check('the same track latches when that end is infinite',
     runTrack(infiniteEnd, [[400, -40], [400, -30], [400, -20], [400, 20], [400, 30], [400, 40]]) !== null);
+
+  // THREE OVER, ONE OF THEM CLEAR. A five-metre receiver: clear is further than 2.5 m.
+  const shallow = new CrossingDetector(eastWestLine(), 'forward', { confirmFixes: 3 });
+  check('three fixes over the line, none clear of the receiver\'s noise, do not latch',
+    runTrack(shallow, [[0, -40], [0, -30], [0, -20], [0, 1], [0, 2], [0, 1]]) === null);
+  check('...and the run goes on counting, latching on the first fix that is clear',
+    runTrack(shallow, [[0, 4]]) !== null && shallow.latched.confirmAfter === 4);
+  check('...timed at the cut, not at the fix that made it count',
+    shallow.latched.time.getTime() < Date.UTC(2026, 0, 1, 18, 0, 3));
+  const deepFirst = new CrossingDetector(eastWestLine(), 'forward', { confirmFixes: 3 });
+  check('one clear fix anywhere in the three is enough',
+    runTrack(deepFirst, [[0, -40], [0, -30], [0, -20], [0, 6], [0, 1], [0, 2]]) !== null);
+  const sitting = new CrossingDetector(eastWestLine(), 'forward', { confirmFixes: 3 });
+  check('a boat sitting on the line in the receiver\'s noise never latches',
+    runTrack(sitting, [[0, -40], [0, -30], [0, -20], [0, -1], [0, 1], [0, 2], [0, 1], [0, -1], [0, 2], [0, 1], [0, 2]]) === null);
 
   // Latching is monotone: nothing later can un-make it.
   const latchedThenBack = new CrossingDetector(eastWestLine(), 'forward', { confirmFixes: 3, accuracyBandM: 2 });

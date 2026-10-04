@@ -621,7 +621,7 @@ public final class ProgrammeWriter
             # real logged tracks from these waters rather than argued about.
             defaults:
               confirmFixes: 3          # N in the 3-and-3 rule
-              accuracyBandM: null      # fixed half-width, or null to use each fix's accuracy
+              accuracyBandM: null      # how far over one far-side fix must be, or null for half its accuracy
               qc:
                 minSatellites: 4       # receiver-metadata pre-filter: necessary, not sufficient
                 maxAccuracyM: 25

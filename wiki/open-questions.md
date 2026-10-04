@@ -8,9 +8,10 @@ The numbering is stable — code and other documents refer to these by number.
    multipath could produce consecutive bad fixes, arguing for a higher N or a harder kinematic
    gate. See [crossing-detection.md](crossing-detection.md).
 
-2. **Accuracy band.** A fixed declared width versus each fix's stated accuracy. Both are
-   implemented; `accuracyBandM: null` selects per-fix, which is more honest and makes the
-   effective line width vary with the sky.
+2. **How clear of the line a far-side fix must be.** A fixed declared distance versus half each
+   fix's stated accuracy. Both are implemented; `accuracyBandM: null` selects per-fix, which is
+   more honest and makes how deep a crossing must go vary with the sky. Whether half is the right
+   fraction is a question for logged tracks.
 
 3. **Is the end-of-line warning loud enough** on a phone in glare? The mechanism is settled and
    built — one-metre resolution, a hard edge, and `projectCog()` behind the ring that turns amber

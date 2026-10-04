@@ -171,10 +171,10 @@ public record Programme(
      * Sustained multipath could in principle produce consecutive bad ones, which argues
      * for a higher N or a harder kinematic gate — an open question.
      *
-     * <p>{@code accuracyBandM} is the half-width of the band around a line inside which a
-     * boat is resolved to <em>neither</em> side, which stops a boat sitting on the line
-     * from emitting a burst of phantom crossings. Null means use each fix's own stated
-     * accuracy: more honest, and it makes the effective line width vary with the sky.
+     * <p>{@code accuracyBandM} is how far over the line one of the N far-side fixes must be
+     * for a crossing to latch, which stops a boat sitting on the line in its receiver's noise
+     * from emitting phantom crossings. Null means half each fix's own stated accuracy: more
+     * honest, and it makes how deep a crossing must go vary with the sky.
      */
     public record Detection(
         @JsonProperty("confirmFixes") int confirmFixes,

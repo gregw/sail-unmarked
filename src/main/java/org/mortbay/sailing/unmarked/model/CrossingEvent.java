@@ -17,7 +17,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  *
  * <p>Validity and timing are separate jobs and stay separate. {@code confirmBefore} and
  * {@code confirmAfter} are what made it valid — N consecutive quality fixes on the
- * required side, then N on the far side. {@code time} is what it is worth.
+ * required side, then N on the far side, one of them clear of the line. {@code time} is
+ * what it is worth.
  *
  * <p>{@code step} is the index into the course sequence, which is also what gives the
  * crossing its drawn letter; {@code line} says which line was actually crossed, and for a

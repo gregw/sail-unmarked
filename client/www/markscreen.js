@@ -29,7 +29,7 @@
 
 import { ENTRY_COLOUR, LABEL, ROLE_COLOUR, TRIANGLE, arrowHead, forwardNormal, seats, stripes, track, triangle } from './coursedraw.js';
 import { BASEMAPS, MapView, mercX, mercY } from './geo.js';
-import { fromLocal, toLocal } from './crossing.js';
+import { fromLocal, side, toLocal } from './crossing.js';
 import { TRAIL_IN_VIEW, bearingLocal, clock } from './raceclient.js';
 
 /**
@@ -1028,7 +1028,7 @@ export function plot(state, options = {}) {
   const art = crossingArt(prepared, state.watched.required, {
     real,
     to, scale, boat, focused: true, missed: state.state === 'missed', reach,
-    colour: LINE_STATE_COLOUR[state.lineState],
+    colour: approachColour(state, prepared),
   });
   out += art.out;
   const seatPx = art.seatPx;
@@ -1837,6 +1837,22 @@ export const BASEMAP_INK = 0.32;
  * The one thing that stays faint is the basemap (`BASEMAP_INK`), because that is a background
  * and is the thing everything else has to be read against.
  */
+/**
+ * THE COLOUR OF THE LINE BEING APPROACHED, which says which side of it the boat is on: green once
+ * it has been crossed, red while the boat is on the wrong side to cross it, and otherwise the
+ * line's own blue — or, where the line has a state of its own (the start's signals, a finish the
+ * time limit has closed), that state's colour. The wrong side wins over the signals: a boat over
+ * the start line has to come back whether or not the line is open. There is no band where a boat
+ * is on neither side (`side`): noise across the line is the latch's to filter, not the colour's.
+ */
+export function approachColour(state, prepared) {
+  if (state.state === 'crossed') return 'var(--ok)';
+  const approachSide = state.watched?.required === 'reverse' ? 1 : -1;
+  const on = state.point ? side(prepared, state.point) : 0;
+  if (on !== 0 && on !== approachSide) return 'var(--warn)';
+  return LINE_STATE_COLOUR[state.lineState];
+}
+
 /**
  * The colour a line's state is drawn in, on both screens: the start before the preparatory signal
  * and after it has closed, and a finish closed by the time limit, red; the start between the

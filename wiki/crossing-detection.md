@@ -89,7 +89,7 @@ at join time from the first surveyed end (`originOf`, `toLocal`). A perpendicula
 computed against one origin and compared against another would be quietly wrong by however far
 apart the origins are.
 
-### 4. The detector — the N-and-N latch
+### 4. The detector — the N-and-N latch, with one fix clear
 
 Only the **live step** sees fixes. On a two-lap windward/leeward the leeward line is the start,
 mark 2 and the finish — one line, three steps, each with its own detector — so a boat crossing it
@@ -99,13 +99,16 @@ entry line is live at once, the same way.
 
 `CrossingDetector.accept` then requires, for a crossing to be valid:
 
-1. at least **N consecutive fixes confirming one side** (N is `confirmFixes`, default 3),
+1. at least **N consecutive fixes on one side** (N is `confirmFixes`, default 3),
 2. a **segment that cuts the line**, then
-3. at least **N consecutive fixes confirming the other side**.
+3. at least **N consecutive fixes on the other side, at least one of them CLEAR of the line** —
+   further from it than half the fix's own stated accuracy (`clear`, or `accuracyBandM` where the
+   series fixes one). The far side's run goes on counting until one is.
 
-A single flyer cannot produce N confirmed fixes on the far side, so it fails; a boat that dips over
-and comes back logs *far side not confirmed*. When the far side is confirmed the candidate is
-settled (`settle`), sense first:
+A single flyer cannot produce N fixes on the far side, so it fails; a boat sitting on the line in
+the receiver's noise never produces a clear one, so it never latches; a boat that dips over and comes
+back logs *far side not confirmed*. When the far side is confirmed the candidate is settled
+(`settle`), sense first:
 
 | Outcome | Recorded as |
 |---|---|
@@ -130,17 +133,19 @@ clock offset cancels (see [the trust model](client-server-dialog.md#11-the-boat-
 
 ---
 
-## Two bands: which side a fix is ON, and which side it CONFIRMS
+## Which side a fix is ON, and whether it is CLEAR of the line
 
-| | Band | Used by |
+| | Test | Used by |
 |---|---|---|
-| `side()` | half the system's one-metre resolution (`SIDE_BAND_M`) | the screens: colouring each fix on the plot |
-| `confirmedSide()` | `accuracyBandM`, or the fix's own stated accuracy when that is null | the latch: what counts as evidence |
+| `side()` | the sign of the distance before it is rounded to the metre — no band | the runs the latch counts, and the screens |
+| `clear()` | further from the line than `accuracyBandM`, or than half the fix's stated accuracy when that is null | the latch: the one far-side fix that is evidence |
 
-A fix two metres from the line under a two-metre sky is on a side, but it is not *evidence* of
-being on that side — the error alone could account for it. The stricter band is what stops a boat
-sitting on a line assembling a crossing out of noise. The screens use the narrow one so that the
-picture of a crossing is not a run of grey dots through the moment being explained.
+A fix two metres over under a five-metre sky is over, and counts towards the run, but it is not
+*evidence* of having crossed — the error alone could put it there. Requiring one clear fix among the
+far side's run is what stops a boat sitting on a line assembling a crossing out of noise. Half the
+accuracy, because the stated accuracy is a radius about the fix and the question is only whether it
+could be on the other side of a line. The screens use `side()` too, so the picture of a crossing has
+no dots on neither side through the moment being explained.
 
 ---
 
@@ -169,7 +174,7 @@ The numbers are properties of the water and the devices on it, so they live in e
 ```yaml
 defaults:
   confirmFixes: 3          # N in the N-and-N latch
-  accuracyBandM: null      # fixed half-width, or null for each fix's stated accuracy
+  accuracyBandM: null      # how far over one far-side fix must be, or null for half its stated accuracy
   qc:
     minSatellites: 4       # metadata pre-filter
     maxAccuracyM: 25

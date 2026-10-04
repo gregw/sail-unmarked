@@ -22,6 +22,7 @@ import { BASEMAPS } from './geo.js';
 import { ENTRY_COLOUR, ROLE_COLOUR } from './coursedraw.js';
 import { clock } from './raceclient.js';
 import {
+  approachColour,
   crossingArt,
   HOLD,
   NM_FROM_M,
@@ -188,6 +189,20 @@ export function run(check) {
     overview(runOn).includes(`stroke-width="1" stroke-opacity="${OVERVIEW_INK.infinite}"`));
   check('...and a course with none has no run-on', !overview(new RaceClient(snapshot))
     .includes(`stroke-opacity="${OVERVIEW_INK.infinite}"`));
+  // THE APPROACHED LINE SAYS WHICH SIDE THE BOAT IS ON: a line along the x axis, crossed forward,
+  // which is from the south (negative) side to the north.
+  const sideLine = prepareLine({ id: 'a', port: at(-150, 0), starboard: at(150, 0) }, REF);
+  const sideWatched = { required: 'forward' };
+  const tint = (y, extra = {}) => approachColour({ watched: sideWatched, state: 'approaching', point: { x: 0, y }, ...extra }, sideLine);
+  check('the line is its own blue while the boat is on the side to cross it from', tint(-50) === undefined);
+  check('...red while it is on the wrong side', tint(50) === 'var(--warn)');
+  check('...red however close to the line it is on the wrong side: there is no band', tint(0.3) === 'var(--warn)');
+  check('...green once it has been crossed', tint(50, { state: 'crossed' }) === 'var(--ok)');
+  check('...and red on the wrong side of a REVERSE line too',
+    approachColour({ watched: { required: 'reverse' }, state: 'approaching', point: { x: 0, y: -50 } }, sideLine) === 'var(--warn)');
+  check('a start line keeps its signal colour on the right side, and is red on the wrong one',
+    tint(-50, { lineState: 'prep' }) === 'var(--toside)' && tint(50, { lineState: 'open' }) === 'var(--warn)');
+
   // A CYCLE'S ENTRY LINES are drawn in their own colour: the same three lines as a loop, with a and c
   // the lines a lap may begin and end at.
   const cycle = new RaceClient({ ...snapshot, closed: true,
