@@ -19,24 +19,25 @@
         .masthead {
             display: flex;
             align-items: baseline;
-            gap: 12px;
-            flex-wrap: wrap;
+            gap: 6px;
         }
 
         .masthead h1 {
-            font-size: 30px;
+            font-size: 19px;
+            white-space: nowrap;
         }
 
         .masthead .sub {
             font-family: var(--disp);
-            font-size: 16px;
+            font-size: 12px;
+            white-space: nowrap;
             color: var(--muted);
         }
 
         /* The links as a short list: a name to press and a line saying what it is. */
         .links {
             display: grid;
-            grid-template-columns: max-content 1fr;
+            grid-template-columns: max-content minmax(0, 1fr);
             gap: 3px 14px;
             align-items: baseline;
         }
@@ -46,8 +47,17 @@
             white-space: nowrap;
         }
 
-        .links span {
+        /* ONE LINE EACH, on a phone too: the words are short enough to fit, and if a screen is
+           narrower still they are cut short rather than wrapped. */
+        .links span, .points li {
             color: var(--muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .points li {
+            color: var(--ink);
         }
 
         .series {
@@ -69,15 +79,25 @@
             gap: 0 16px;
         }
 
+        /* Sized to fit a phone's width on one line, and larger where there is room. */
+        @media (min-width: 600px) {
+            .masthead h1 {
+                font-size: 28px;
+            }
+
+            .masthead .sub {
+                font-size: 16px;
+            }
+        }
+
         /* Club, series and course on one line, sharing it. */
         .pick {
             display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
+            gap: 6px;
         }
 
         .pick select {
-            flex: 1 1 140px;
+            flex: 1 1 0;
             min-width: 0;
             background: var(--panel2);
             color: var(--ink);
@@ -124,11 +144,11 @@
 -->
 <div class="panel">
     <!-- Bulleted here, though the site's lists are not: these are points, the lists below are data. -->
-    <ul style="list-style: disc; padding-left: 1.4em; margin: 0">
-        <li>Virtual courses with no need for a race committee on the water.</li>
-        <li>Courses are always available for practice or record attempts.</li>
-        <li>Cycle courses that boats to join/leave from their own local waters.</li>
-        <li>Distance corrected handicapping: all boats start and finish together.</li>
+    <ul class="points" style="list-style: disc inside; padding: 0; margin: 0">
+        <li>No committee boat, no marks to lay</li>
+        <li>Always open for practice and records</li>
+        <li>Circuits joined from local waters</li>
+        <li>Distance handicaps: first home wins</li>
     </ul>
 </div>
 
@@ -136,19 +156,19 @@
     <div>
         <h2>Competitors</h2>
         <div class="panel links">
-            <a href="boat.html">Boat client</a><span>Phone app to join a race and sail it</span>
-            <a href="client.html">Test client</a><span>Simulated boat and boat client</span>
-            <a href="results.html">Results</a><span>Race results and record attempts</span>
-            <a href="log.html">Event log</a><span>Courses published or withdrawn</span>
+            <a href="boat.html">Boat client</a><span>Join a race and sail it</span>
+            <a href="client.html">Test client</a><span>A simulated boat</span>
+            <a href="results.html">Results</a><span>Races and records</span>
+            <a href="log.html">Event log</a><span>What was published</span>
         </div>
     </div>
     <div>
         <h2>Administrators</h2>
         <div class="panel">
-            <p class="muted" style="margin:0 0 8px">For whoever runs the club's racing &mdash; these need a sign-in.</p>
+            <p class="muted" style="margin:0 0 6px">These need a sign-in.</p>
             <div class="links">
-                <a href="editor.html">Course editor</a><span>marks, lines, courses and races, and publishing them</span>
-                <a href="race.html">Race screen</a><span>running a race: starts, the fleet, the channel</span>
+                <a href="editor.html">Course editor</a><span>Courses and races</span>
+                <a href="race.html">Race screen</a><span>Running a race</span>
             </div>
         </div>
     </div>
