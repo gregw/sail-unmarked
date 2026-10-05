@@ -402,6 +402,31 @@ ok('with the fixes stopped, the screen says so and counts — a dead receiver is
 
 /* ------------------------------------------------------- leaving, and the watch */
 
+// RETIRING ASKS TOO, being told to the committee at once. Shown only in a live race, which this
+// practice boat is not, so the device is told it is one and its retire is caught on the way out.
+{
+  const dev = mod.__boat.device;
+  const live = Object.getOwnPropertyDescriptor(dev.dialog, 'live');
+  const sent = [];
+  const retire = dev.dialog.retire;
+  Object.defineProperty(dev.dialog, 'live', { value: true, configurable: true });
+  dev.dialog.retire = (why) => { sent.push(why); };
+  dev.render();
+  $('retire').fire('click', {});
+  ok('pressing Retire asks rather than retiring', !$('leave_ask').hidden
+    && $('leave_ask').innerHTML.includes('Retire from the race?') && sent.length === 0);
+  H('leave_ask_stay:click')();
+  ok('...and keeping racing sends nothing', $('leave_ask').hidden && sent.length === 0);
+  $('retire').fire('click', {});
+  H('leave_ask_go:click')();
+  ok('answering Retire retires', sent.length === 1 && dev.dialog.outcome === 'retired');
+  dev.dialog.retire = retire;
+  dev.dialog.outcome = null;
+  if (live) Object.defineProperty(dev.dialog, 'live', live);
+  else delete dev.dialog.live;
+  dev.render();
+}
+
 // THE BUTTON ASKS FIRST: it sits under the chart, where a thumb reaching for anything else
 // lands, and what it throws away cannot be had back.
 $('leave').fire('click', {});

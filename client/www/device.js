@@ -508,11 +508,30 @@ export class Device {
   }
 
   /**
-   * THE LEAVE BUTTON ASKS FIRST. It sits in the deck under the chart, where a wet thumb lands
-   * reaching for anything else, and what it throws away — the latched crossings, the place in
-   * the sequence, the race joined — cannot be had back by pressing anything.
+   * LEAVING AND RETIRING ASK FIRST. Both buttons sit in the deck under the chart, where a wet
+   * thumb lands reaching for anything else, and neither can be had back by pressing anything:
+   * leaving throws away the latched crossings and the place in the sequence, and a retirement is
+   * told to the committee the moment it is pressed.
    */
   leaveAsked(what) {
+    this.confirm(`Leave the ${what}?`,
+      `The course, the crossings so far${what === 'race' ? ' and the clock' : ''} are held on this
+        phone, and leaving loses them.`,
+      `Keep ${what === 'race' ? 'racing' : 'sailing'}`, 'Leave', () => this.leave());
+  }
+
+  retireAsked() {
+    this.confirm('Retire from the race?',
+      'The committee is told at once, and a retirement cannot be taken back from here.',
+      'Keep racing', 'Retire', () => {
+        this.dialog.retire('retired');
+        this.dialog.outcome = 'retired';
+        this.render();
+      });
+  }
+
+  /** The question, over the page rather than in the device, which is redrawn every fix. */
+  confirm(heading, text, stay, go, act) {
     let ask = document.getElementById('leave_ask');
     if (!ask) {
       ask = document.createElement('div');
@@ -521,12 +540,11 @@ export class Device {
     }
     ask.className = 'leaving';
     ask.innerHTML = `<div class="box">
-        <div class="kind mono">Leave the ${what}?</div>
-        <div class="text">The course, the crossings so far${what === 'race' ? ' and the clock' : ''} are
-          held on this phone, and leaving loses them.</div>
+        <div class="kind mono">${esc(heading)}</div>
+        <div class="text">${esc(text)}</div>
         <div class="row">
-          <button class="plain" id="leave_ask_stay">Keep ${what === 'race' ? 'racing' : 'sailing'}</button>
-          <button class="go" id="leave_ask_go">Leave</button>
+          <button class="plain" id="leave_ask_stay">${esc(stay)}</button>
+          <button class="go" id="leave_ask_go">${esc(go)}</button>
         </div>
       </div>`;
     ask.hidden = false;
@@ -534,7 +552,7 @@ export class Device {
     document.getElementById('leave_ask_stay').addEventListener('click', close);
     document.getElementById('leave_ask_go').addEventListener('click', () => {
       close();
-      this.leave();
+      act();
     });
   }
 
@@ -612,11 +630,7 @@ export class Device {
 
   wireBottom() {
     this.el('leave')?.addEventListener('click', () => this.leaveAsked('course'));
-    this.el('retire')?.addEventListener('click', () => {
-      this.dialog.retire('retired');
-      this.dialog.outcome = 'retired';
-      this.render();
-    });
+    this.el('retire')?.addEventListener('click', () => this.retireAsked());
     this.hooks.wireExtras?.();
   }
 
