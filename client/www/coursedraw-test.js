@@ -169,6 +169,18 @@ export function run(check) {
   ]).find((s) => s.kind === 'leg');
   check('a leg needing no turn draws no arc', !straightOn.d.includes('A'));
 
+  // A TURN MAY GO EITHER WAY, and the one drawn does not loop. Through the same line twice,
+  // the same way, a triangle's width apart: turning toward the second crossing sent the
+  // straight back across the first turn in a figure of eight, where going on round the far
+  // side of the second draws one clean hook.
+  const twice = track([
+    { crossings: [cross(0, 0, 0, -16.5)] },
+    { crossings: [cross(29, 0, 29, -16.5)] },
+  ]).find((s) => s.kind === 'leg');
+  check('a second pass through the same line does not draw a figure of eight',
+    twice.ends.to.x > twice.ends.from.x);
+  check('...it goes on round, the long way, into the second crossing', / A[\d. ]+0 1 1 29\.0,0\.0$/.test(twice.d));
+
   // The corner must never eat the leg it is turning onto.
   const shortLeg = track([
     { crossings: [cross(0, 40, 0, 36)] },

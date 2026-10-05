@@ -30,9 +30,18 @@ const ends = () => $('map').querySelectorAll('.lend').filter((g) => g.dataset.li
 ok('a line loose at both ends gets a midpoint handle', mids().length === 1);
 ok('...and each of its inline ends gets one of its own', ends().length === 2);
 
+// This line's own handle: another line's, shorter on screen, has a smaller one.
 const radius = (after, what) =>
-  Number(new RegExp(`class="${what}"[\\s\\S]{0,${after}}?r="(\\d+)"`).exec(svg())?.[1]);
-ok('the midpoint handle is a target, not a marker — 20px to hit', radius(200, 'lmid') === 20);
+  Number(new RegExp(`class="${what}" data-id="${LINE}[\\s\\S]{0,${after}}?r="(\\d+)"`).exec(svg())?.[1]);
+// A target, not a marker — 20px to hit — but never reaching over the ends' own 11px, which it
+// is drawn above: on a short line that would leave the ends ungrabbable at any zoom.
+const centres = (what) => [...svg().matchAll(new RegExp(`class="${what}" data-id="${LINE}[^"]*"[^>]*>`
+  + '<circle cx="([-\\d.]+)" cy="([-\\d.]+)"', 'g'))].map((m) => ({ x: Number(m[1]), y: Number(m[2]) }));
+const [port, starboard] = centres('lend');
+const halfPx = Math.hypot(starboard.x - port.x, starboard.y - port.y) / 2;
+ok('the midpoint handle is a target, not a marker — 20px to hit where the line has room',
+  radius(200, 'lmid') === Math.round(Math.max(6, Math.min(20, halfPx - 11))));
+ok('...and never covers the ends', radius(200, 'lmid') <= Math.max(6, halfPx - 11));
 ok('...and 6px to see, twice the plain midpoint dot',
   /class="lmid"[\s\S]{0,320}?r="6" fill="var\(--sea\)"/.test(svg()));
 

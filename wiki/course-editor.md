@@ -228,9 +228,13 @@ pointing up the screen.**
   and the front page's. Every one of them is a start and a finish, which green or red alone would say
   half of; on the boat the live one stays green.
 - **Turns have a radius.** A boat leaving a triangle's apex is still on the crossing heading, so every leg
-  arcs out of the apex, runs straight, and arcs back in. `tangentPath` iterates, because the departure arc
-  has to aim at where the arrival arc begins and vice versa; the radius shrinks on a short leg rather than
-  the arc overshooting. Arrows are placed on the **straight** portion.
+  arcs out of the apex, runs straight, and arcs back in, the straight an exact tangent to both turning
+  circles; the radius shrinks on a short leg rather than the arc overshooting. Arrows are placed on the
+  **straight** portion.
+- **Each turn may go either way, and the track does not loop when it need not.** Turning toward the next
+  mark draws a figure of eight when that mark is nearly astern and a little to one side — two crossings
+  of one line a triangle apart, say. `tangentPath` tries all four ways of turning out and in, and draws
+  the one that crosses itself and the crossings either side least, shortest among those.
 - **A gate's alternatives are seated in OPPOSITE orders along their lines**, or a mirrored gate puts each
   rounding's two triangles at opposite ends and collapses their midpoints onto one another.
 - **A gate splits AT the gate but joins well down the leg** (`MERGE_FRACTION`), and the asymmetry is the

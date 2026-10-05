@@ -96,8 +96,16 @@ function takeId(input, raw, scoped, say) {
 const el = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
+/**
+ * HOW FAR IN THE EDITOR ZOOMS: about 3 cm a pixel here, so a metre — the resolution every
+ * position is held to — is some thirty pixels, and the two ends of the shortest line anybody
+ * could draw are far enough apart to grab separately. The chart's tiles stop well short of this
+ * and are drawn enlarged; nobody is reading the chart at this scale, they are placing an end.
+ */
+const EDITOR_MAX_ZOOM = 22;
+
 const state = {
-  view: new MapView(),
+  view: Object.assign(new MapView(), { maxZoom: EDITOR_MAX_ZOOM }),
   basemap: 'chart',
   programme: null,      // { club, series, points: {...}, lines: {...}, courses: {...} }
   points: new Map(),    // id -> { id, name, latitude, longitude, notes }
@@ -973,8 +981,11 @@ function renderLines() {
       // Twice the size of the plain midpoint dot, because this one is a target rather than
       // a marker: it sits in the middle of the course, among the legs and the triangles,
       // and it is what a whole line is dragged by.
+      // Its grab circle stops short of the ends' own, which it is drawn over: on a short line a
+      // full-sized one would cover both, and the ends could not be reached at any zoom.
+      const reach = Math.max(6, Math.min(20, Math.hypot(bx - ax, by - ay) / 2 - 11));
       HANDLES += `<g class="lmid" data-id="${esc(id)}" data-line="${esc(id)}" style="cursor:grab">`
-        + `<circle cx="${midX.toFixed(1)}" cy="${midY.toFixed(1)}" r="20" fill="transparent"/>`
+        + `<circle cx="${midX.toFixed(1)}" cy="${midY.toFixed(1)}" r="${Math.round(reach)}" fill="transparent"/>`
         + `<circle cx="${midX.toFixed(1)}" cy="${midY.toFixed(1)}" r="6" fill="var(--sea)" fill-opacity="0.6" stroke="var(--toside)" stroke-width="2"/>`
         + `</g>`;
     } else {

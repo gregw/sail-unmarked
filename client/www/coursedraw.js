@@ -163,7 +163,6 @@ export function roleColour(starting, finishing) {
 const sub = (p, q) => ({ x: p.x - q.x, y: p.y - q.y });
 const add = (p, v) => ({ x: p.x + v.x, y: p.y + v.y });
 const scale = (v, k) => ({ x: v.x * k, y: v.y * k });
-const negate = (v) => ({ x: -v.x, y: -v.y });
 const len = (v) => Math.hypot(v.x, v.y);
 const unit = (v) => { const l = len(v) || 1; return { x: v.x / l, y: v.y / l }; };
 const rot90 = (v) => ({ x: -v.y, y: v.x });
@@ -176,34 +175,85 @@ const mean = (points) => points.reduce(
   { x: 0, y: 0 });
 const xy = (p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
 
+/** Below this a turn is no turn, and no arc is drawn for it. */
+const NO_TURN = 0.02;
+
 /**
- * An arc leaving `from` on heading `h`, turning at radius `r` until it points at `target`.
+ * One way of getting from `from` on heading `h1` to `to` on heading `h2`: turn, straight, turn.
  *
- * A boat crossing a line is committed to the crossing direction — that is what the
- * triangle's apex means — so it cannot be on the next leg's heading the instant it clears
- * the line. It has to turn, and a turn has a radius. Drawing an instant corner at the apex
- * says the boat pivots on the spot.
+ * A boat crossing a line is committed to the crossing direction — that is what the triangle's
+ * apex means — so it cannot be on the next leg's heading the instant it clears the line. It has
+ * to turn, and a turn has a radius; drawing an instant corner at the apex says the boat pivots
+ * on the spot. The same holds coming in: it is on the crossing heading before the base.
  *
- * SVG's sweep flag is the positive-angle direction, which with y running down is
- * clockwise on screen — the same sense as {@link turn} — so the two agree without a
- * correction. Never a large arc: `turn` returns at most half a circle.
+ * `s1` and `s2` say which way each turn goes — +1 clockwise on screen, which is {@link turn}'s
+ * positive sense and SVG's sweep flag, −1 anticlockwise, and 0 for an end with no heading,
+ * which is a turning circle of no size. Each turn's circle sits on its own side of the heading,
+ * and the straight is the tangent between the two circles: the outer one where both turn the
+ * same way, the inner where they turn opposite ways. Null when the circles are too close for
+ * an inner tangent.
+ *
+ * Exact rather than aimed: the straight leaves the first circle exactly where it heads for the
+ * second, so nothing needs iterating into agreement.
  */
-function arcFrom(from, heading, target, radius) {
-  const wanted = unit(sub(target, from));
-  const theta = turn(heading, wanted);
-  if (Math.abs(theta) < 0.02) return null;      // already pointing there; no corner to round
-  const centre = add(from, scale(rot90(heading), Math.sign(theta) * radius));
-  return {
-    end: add(centre, rot(sub(from, centre), theta)),
-    sweep: theta > 0 ? 1 : 0,
+function candidate(from, h1, s1, to, h2, s2, r) {
+  const c1 = h1 ? add(from, scale(rot90(h1), s1 * r)) : from;
+  const c2 = h2 ? add(to, scale(rot90(h2), s2 * r)) : to;
+  const between = sub(c2, c1);
+  const offset = (s1 - s2) * r;
+  const apart = len(between);
+  if (apart * apart <= offset * offset + 1e-9) return null;
+  const straight = Math.sqrt(apart * apart - offset * offset);
+  // The centres' separation is the straight plus the two radii across it; unwinding that
+  // gives the straight's direction.
+  const d = rot(unit(between), -Math.atan2(-offset, straight));
+  const p1 = h1 ? sub(c1, scale(rot90(d), s1 * r)) : from;
+  const p2 = h2 ? sub(c2, scale(rot90(d), s2 * r)) : to;
+  // Each turn the whole way round in its own sense: a turn the wrong side of nothing is
+  // nearly a full circle, which is the honest length of going round that way.
+  const sweep = (u, v, sign) => {
+    let theta = turn(u, v);
+    if (sign > 0 && theta < -NO_TURN) theta += 2 * Math.PI;
+    if (sign < 0 && theta > NO_TURN) theta -= 2 * Math.PI;
+    return Math.abs(theta) < NO_TURN ? 0 : theta;
   };
+  const t1 = h1 ? sweep(h1, d, s1) : 0;
+  const t2 = h2 ? sweep(d, h2, s2) : 0;
+  return { c1, c2, p1, p2, t1, t2, r, length: r * (Math.abs(t1) + Math.abs(t2)) + straight };
 }
 
-/** The mirror: an arc that ARRIVES at `to` already on heading `h`, coming from `source`. */
-function arcTo(to, heading, source, radius) {
-  // The same arc travelled backwards, which is why the sweep flag flips.
-  const back = arcFrom(to, negate(heading), source, radius);
-  return back && { start: back.end, sweep: back.sweep ? 0 : 1 };
+/** A path as points, arcs and all — what the crossing test below runs along. */
+function polyline(from, h1, path, to, h2) {
+  const arc = (centre, start, theta) => {
+    const n = Math.max(1, Math.ceil(Math.abs(theta) / (Math.PI / 16)));
+    return Array.from({ length: n }, (_, k) => add(centre, rot(sub(start, centre), (theta * (k + 1)) / n)));
+  };
+  // The crossings either side belong to the test: a leg that cuts back through the triangle it
+  // has just left, or the one it is making for, is as much a loop as one that crosses itself.
+  const tail = TRIANGLE.height;
+  return [
+    ...(h1 ? [sub(from, scale(h1, tail))] : []),
+    from,
+    ...(path.t1 ? arc(path.c1, from, path.t1) : []),
+    path.p2,
+    ...(path.t2 ? arc(path.c2, path.p2, path.t2) : []),
+    to,
+    ...(h2 ? [add(to, scale(h2, tail))] : []),
+  ];
+}
+
+/** How many times the line properly crosses itself, counting only segments not neighbours. */
+function crossings(points) {
+  const side = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+  const apart = (p, q) => (p > 1e-6 && q < -1e-6) || (p < -1e-6 && q > 1e-6);
+  let count = 0;
+  for (let i = 0; i + 1 < points.length; i++) {
+    for (let j = i + 2; j + 1 < points.length; j++) {
+      const [a, b, c, e] = [points[i], points[i + 1], points[j], points[j + 1]];
+      if (apart(side(a, b, c), side(a, b, e)) && apart(side(c, e, a), side(c, e, b))) count += 1;
+    }
+  }
+  return count;
 }
 
 /**
@@ -212,10 +262,11 @@ function arcTo(to, heading, source, radius) {
  * Arc out, straight, arc in — any of the three may be absent. A heading of `null` means
  * that end is unconstrained and the path simply starts or finishes straight.
  *
- * The three passes are a fixed-point iteration: the departure arc has to aim at where the
- * arrival arc begins, and the arrival arc has to be aimed at from where the departure arc
- * ends, so each is computed against the other's current answer until they agree. It
- * settles in two; three is cheap insurance.
+ * <b>Each turn may go either way, and the drawing picks.</b> Turning toward the next mark is
+ * usually right and sometimes draws a loop: with the mark nearly astern and a little to one
+ * side, turning that side swings the track out and it has to cut back across its own crossing,
+ * where turning the other way goes round clean. So every combination is tried, and the one
+ * drawn crosses itself and the crossings either side least, and is the shortest of those.
  */
 function tangentPath(from, headingOut, to, headingIn, radius) {
   const span = len(sub(to, from));
@@ -223,22 +274,25 @@ function tangentPath(from, headingOut, to, headingIn, radius) {
   // the arc overshooting the mark it is turning around.
   const r = Math.max(1, Math.min(radius, span / 3));
 
-  let straightFrom = from;
-  let straightTo = to;
-  let out = null;
-  let into = null;
-  for (let pass = 0; pass < 3; pass++) {
-    out = headingOut ? arcFrom(from, headingOut, straightTo, r) : null;
-    straightFrom = out ? out.end : from;
-    into = headingIn ? arcTo(to, headingIn, straightFrom, r) : null;
-    straightTo = into ? into.start : to;
+  const sides = (heading) => (heading ? [1, -1] : [0]);
+  const options = [];
+  for (const s1 of sides(headingOut)) {
+    for (const s2 of sides(headingIn)) {
+      const path = candidate(from, headingOut, s1, to, headingIn, s2, r);
+      if (path) options.push({ path, loops: crossings(polyline(from, headingOut, path, to, headingIn)) });
+    }
   }
+  const best = options.sort((a, b) => a.loops - b.loops || a.path.length - b.path.length)[0]?.path;
+  if (!best) return { d: `M${xy(from)} L${xy(to)}`, straightFrom: from, straightTo: to };
 
+  const arc = (theta, end) => ` A${r.toFixed(1)} ${r.toFixed(1)} 0 ${Math.abs(theta) > Math.PI ? 1 : 0} ${theta > 0 ? 1 : 0} ${xy(end)}`;
   let d = `M${xy(from)}`;
-  if (out) d += ` A${r.toFixed(1)} ${r.toFixed(1)} 0 0 ${out.sweep} ${xy(out.end)}`;
-  d += ` L${xy(straightTo)}`;
-  if (into) d += ` A${r.toFixed(1)} ${r.toFixed(1)} 0 0 ${into.sweep} ${xy(to)}`;
-  return { d, straightFrom, straightTo };
+  if (best.t1) d += arc(best.t1, best.p1);
+  // With no arc in, the straight runs to the mark itself rather than to where the tangent
+  // met a circle of no turn, which is the same place give or take a rounding.
+  d += ` L${xy(best.t2 ? best.p2 : to)}`;
+  if (best.t2) d += arc(best.t2, to);
+  return { d, straightFrom: best.t1 ? best.p1 : from, straightTo: best.t2 ? best.p2 : to };
 }
 
 function segment(d, from, to, t, kind, leg) {
