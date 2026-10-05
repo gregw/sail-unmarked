@@ -5257,6 +5257,26 @@ function wire() {
     if (ev.target.closest?.('.info')) pop.style.display = 'none';
   });
 
+  /*
+   * A TYPED FIELD IS SAVED ON ITS `change` AS WELL AS ON ITS BLUR. The blur alone left two ways
+   * to lose a name: Enter, which commits a field and keeps the focus, and leaving the page from
+   * inside the field, which never blurs it. `change` is the first; a field that keeps the focus
+   * starts a fresh edit, so what is typed next is undoable on its own. Delegated, like the
+   * popups above, because the forms are rebuilt; after the field's own handler, so a rename that
+   * ended its edit itself finds nothing left to end.
+   */
+  document.addEventListener('change', (ev) => {
+    if (!/^(INPUT|TEXTAREA)$/.test(ev.target?.tagName ?? '')) return;
+    endEdit();
+    if (document.activeElement === ev.target) beginEdit();
+  });
+  // ...and the second: leaving with an edit open saves it, and leaving before a save has landed
+  // asks first, since the browser may drop a request still in flight.
+  window.addEventListener('beforeunload', (ev) => {
+    endEdit();
+    if (state.saveState === 'saving') ev.preventDefault();
+  });
+
   window.addEventListener('resize', render);
 }
 
