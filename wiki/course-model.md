@@ -476,6 +476,7 @@ sailing against what the editor is showing means comparing revisions.
 
 | | |
 |---|---|
+| `↶` | put the working variant back to it: its sequence, cycle and midpoint TCF, and every line where it was captured. A club line is never moved to do it — one that has moved since becomes the variant's own copy at the captured position — so the design hashes to that revision again. One edit, one undo |
 | `⧉` | a new variant from it — named `<variant>-<date>`, owning all its geometry outright |
 | `↑` | hand **this** one to boats. The rollback path: a pointer move, no re-editing |
 | `✕` | take it out of the list |

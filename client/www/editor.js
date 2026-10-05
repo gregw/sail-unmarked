@@ -44,6 +44,7 @@ import {
   wheelZoomStep,
 } from './geo.js';
 import { showWhoami } from './whoami.js';
+import { RESOLUTION_M } from './crossing.js';
 
 /** How much of the chart a selected line is framed to occupy. */
 const FRAME_FRACTION = 0.2;
@@ -2057,6 +2058,7 @@ function renderRows() {
           value: snap.revision,
           label: `${snapshotName(snap, snap.revision)}${snap.revision === life.published ? ' — published' : ''}`,
         })), state.selectedSnapshot ?? '', [
+          ['snapshot_restore', '&#8630;', 'restore the working variant to this capture'],
           ['snapshot_clone', '&#10697;', 'create a new variant from this capture'],
           ['snapshot_publish', '&#8593;', 'publish this snapshot'],
           ['snapshot_delete', '&times;', 'delete this snapshot'],
@@ -2188,6 +2190,7 @@ function wireRow(levels) {
   on('cmd_variant_clone', withVariant((c, v) => cloneVariant(c, v, c)));
   on('cmd_variant_template', withCourse(addFromTemplate));
   on('cmd_variant_delete', deleteVariant);
+  on('cmd_snapshot_restore', restoreSnapshot);
   on('cmd_snapshot_clone', cloneSnapshot);
   on('cmd_snapshot_publish', publishSnapshot);
   on('cmd_snapshot_delete', forgetSnapshot);
@@ -2707,6 +2710,80 @@ function cloneSnapshot() {
   endEdit();
   render();
   note(`${id} made from ${shown.snapshot.label ?? shown.revision}`);
+}
+
+/**
+ * The working variant put back to what this capture holds: its sequence, whether it is a cycle,
+ * and its midpoint TCF, with every line it crosses where the capture had it.
+ *
+ * <b>A club line is never moved to do it.</b> Other courses cross the club's lines, and the tab
+ * rule says no course changes their geometry from here. So a line still where the capture had
+ * it is kept as it is — by reference to the club's, or as the variant's own — and one that has
+ * moved since is given to the variant as its own copy, at the captured position. The variant's
+ * own lines the capture does not cross go; its own points stay, as a line kept may sit on one.
+ *
+ * One edit, and so one undo.
+ */
+function restoreSnapshot() {
+  const course = currentCourse();
+  const shown = state.snapshotShown;
+  const variant = course?.variants.get(state.selectedVariant);
+  if (!variant || !shown) { note('select a snapshot first', true); return; }
+  beginEdit();
+  const from = shown.variant;
+  // Resolved against the WORKING variant, not GEO, which holds the capture while it is shown.
+  const where = (end) => {
+    if (!end) return null;
+    if (end.latitude != null && end.longitude != null) return end;
+    const point = variant.points.get(end.at) ?? state.points.get(end.at);
+    return point?.latitude != null ? point : null;
+  };
+  const unmoved = (end, captured) => {
+    const now = where(end);
+    return !!now && !!end.infinite === !!captured.infinite
+      && distanceM(now, captured) < RESOLUTION_M;
+  };
+  const lines = new Map();
+  for (const [id, captured] of from.lines) {
+    const own = variant.lines.get(id);
+    const current = own ?? state.lines.get(id);
+    const kept = current && unmoved(current.port, captured.port)
+      && unmoved(current.starboard, captured.starboard)
+      && Math.abs((current.handicapWidthM ?? 0) - (captured.handicapWidthM ?? 0)) < RESOLUTION_M;
+    if (kept) {
+      if (own) lines.set(id, own);
+    } else {
+      lines.set(id, {
+        ...captured, id, name: current?.name ?? null, notes: current?.notes ?? null,
+        port: { ...captured.port }, starboard: { ...captured.starboard },
+      });
+    }
+  }
+  // A step's notes and set length outlive the restore where the step still crosses the same
+  // lines the same way, since the capture does not say which length was set and which measured.
+  const crossesOf = (step) => JSON.stringify(alts(step).map((a) => [a.line, senseOf(a)]));
+  const sequence = from.sequence.map((step, i) => {
+    const was = variant.sequence[i];
+    const same = was && crossesOf(was) === crossesOf(step);
+    return {
+      ...step,
+      gate: (step.gate ?? []).map((a) => ({ ...a })),
+      lengthNm: same ? (was.lengthNm ?? null) : null,
+      notes: same ? (was.notes ?? null) : null,
+    };
+  });
+  variant.lines = lines;
+  variant.sequence = sequence;
+  variant.closed = from.closed;
+  variant.tcfMid = from.tcfMid ?? null;
+  state.selectedSnapshot = null;
+  state.snapshotShown = null;
+  state.showTransform = undefined;
+  refreshGeo();
+  formsChanged();
+  endEdit();
+  render();
+  note(`${variant.id} restored to ${shown.snapshot.label ?? shown.revision}`);
 }
 
 /** Hand this capture to boats, in place of whatever they were being handed. */

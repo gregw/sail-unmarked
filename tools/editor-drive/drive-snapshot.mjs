@@ -181,4 +181,28 @@ ok('...owning all its geometry outright, since a capture is fully inlined',
   Object.keys(clone.lines ?? {}).length > 0);
 ok('...and editable again — the form has fields', $('variantForm').innerHTML.includes('v_id'));
 
+/* -------------------------------------------------------------------- restore */
+
+// The design has moved on from the first capture by a step; restoring it puts the working
+// variant back to exactly what was captured, so the server hashes it to that capture again.
+choose('variant', VARIANT);
+await settle(800);
+const firstSteps = (await (await fetch(`/api/courses/${firstRev}`)).json()).steps.length;
+const designSteps = (await (await fetch(`/api/programmes/${KEY}`)).json())
+  .courses[COURSE].variants[VARIANT].sequence.length;
+ok('the design has moved on from the first capture', designSteps !== firstSteps);
+choose('snapshot', firstRev);
+await settle(900);
+ok('a chosen capture offers to restore the design to it',
+  $('rows').innerHTML.includes('cmd_snapshot_restore'));
+H('cmd_snapshot_restore:click')();
+await settle(1400);
+const restored = (await (await fetch(`/api/programmes/${KEY}`)).json()).courses[COURSE].variants[VARIANT];
+ok('restoring writes the captured sequence back to the file', restored.sequence.length === firstSteps);
+life = await (await fetch(`/api/lifecycle/${KEY}`)).json();
+ok('...so exactly that the design hashes to the capture\'s own revision',
+  life.courses[COURSE].variants[VARIANT].revision === firstRev);
+ok('...and the editor is back on the design, not the capture',
+  chosenIn('snapshot') === '' && chosenIn('variant') === VARIANT);
+
 report();
