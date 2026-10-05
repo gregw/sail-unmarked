@@ -532,8 +532,10 @@ it was open is drawn when it lets go, and only if something changed.
 
 **The club is the exception, and is remembered rather than defaulted.** A sail number, a boat name and a club
 are facts about whoever is holding the phone; the series, course and variant are the decision being made.
-`sessionStorage` for now, wrapped in a try — storage is not always there to be had, and a join screen that
-threw rather than opening would be the worst possible trade for remembering a sail number.
+So are the boat's length and its TCF. `localStorage`, so they outlive a closed tab, a reload and a restarted
+server, and stay in this browser until a join sends them; wrapped in a try — storage is not always there to be
+had, and a join screen that threw rather than opening would be the worst possible trade for remembering a sail
+number.
 
 **Only TODAY's races are offered.** Where a series has races but none today the screen says so, since *no
 races* and *no races today* are different facts and only the second is worth acting on.

@@ -209,11 +209,11 @@ Object.defineProperty(globalThis, 'navigator', { value: {}, configurable: true }
 globalThis.ResizeObserver = class { observe() {} disconnect() {} };
 
 /*
- * A SESSION STORE, because the join screen remembers who the boat is in one. Strings in, strings
+ * A LOCAL STORE, because the join screen remembers who the boat is in one. Strings in, strings
  * out, no events and no quota — which is all the page asks of it. Real enough to prove what is
  * kept and, just as much to the point, what is not.
  */
-globalThis.sessionStorage = (() => {
+globalThis.localStorage = (() => {
   const held = new Map();
   return {
     getItem: (k) => (held.has(k) ? held.get(k) : null),

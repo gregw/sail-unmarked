@@ -71,9 +71,10 @@ export const NO_RACE = '__course';
  * — they are the decision being made, and a remembered one would be a default nobody chose,
  * which on a race morning is how a boat ends up sailing yesterday's course.
  *
- * `sessionStorage`, deliberately for now: it lasts a session, which is what "the same boat all
- * afternoon" needs, and it does not quietly become a permanent setting on a shared phone. The
- * real home for this is whatever the Capacitor build uses, and that is not built yet.
+ * `localStorage`, so it outlives a closed tab, a reload and a restarted server: the boat is the
+ * same boat next weekend too. Only in this browser — nothing of it goes to the server until a
+ * join sends it. On a shared phone the fields are simply typed over. The real home for this is
+ * whatever the Capacitor build uses, and that is not built yet.
  *
  * Wrapped, because storage is not always there to be had — a private window, blocked site data
  * — and a join screen that threw rather than opening would be the worst possible trade for
@@ -95,16 +96,17 @@ export function allocatedToday(hhmm) {
 
 export function recall() {
   try {
-    const held = JSON.parse(sessionStorage.getItem(REMEMBERED) ?? '{}');
+    const held = JSON.parse(localStorage.getItem(REMEMBERED) ?? '{}');
     return {
       sail: typeof held.sail === 'string' ? held.sail : '',
       name: typeof held.name === 'string' ? held.name : '',
       club: typeof held.club === 'string' ? held.club : null,
       // A LENGTH IS A FACT ABOUT THE BOAT, like its sail number, and does not change between
-      // races — so it is remembered with them rather than asked again every afternoon. The TCF
-      // is not: a handicap is a decision somebody may revise, and one carried forward silently
-      // would be scored against.
+      // races — so it is remembered with them rather than asked again every afternoon. So is the
+      // TCF: it changes when the handicapper says so, which is rarely, and it is on the join
+      // screen to be checked every time it is used.
       ...(typeof held.lengthM === 'string' && held.lengthM ? { lengthM: held.lengthM } : {}),
+      ...(typeof held.tcf === 'string' && held.tcf ? { tcf: held.tcf } : {}),
     };
   } catch {
     return {};
@@ -113,8 +115,8 @@ export function recall() {
 
 export function remember(boat) {
   try {
-    sessionStorage.setItem(REMEMBERED, JSON.stringify({
-      sail: boat.sail, name: boat.name, club: boat.club ?? null, lengthM: boat.lengthM,
+    localStorage.setItem(REMEMBERED, JSON.stringify({
+      sail: boat.sail, name: boat.name, club: boat.club ?? null, lengthM: boat.lengthM, tcf: boat.tcf,
     }));
   } catch {
     // Nothing to be done and nothing worth saying: the page works, it just forgets.
@@ -506,6 +508,37 @@ export class Device {
   }
 
   /**
+   * THE LEAVE BUTTON ASKS FIRST. It sits in the deck under the chart, where a wet thumb lands
+   * reaching for anything else, and what it throws away — the latched crossings, the place in
+   * the sequence, the race joined — cannot be had back by pressing anything.
+   */
+  leaveAsked(what) {
+    let ask = document.getElementById('leave_ask');
+    if (!ask) {
+      ask = document.createElement('div');
+      ask.id = 'leave_ask';
+      document.body.appendChild(ask);
+    }
+    ask.className = 'leaving';
+    ask.innerHTML = `<div class="box">
+        <div class="kind mono">Leave the ${what}?</div>
+        <div class="text">The course, the crossings so far${what === 'race' ? ' and the clock' : ''} are
+          held on this phone, and leaving loses them.</div>
+        <div class="row">
+          <button class="plain" id="leave_ask_stay">Keep ${what === 'race' ? 'racing' : 'sailing'}</button>
+          <button class="go" id="leave_ask_go">Leave</button>
+        </div>
+      </div>`;
+    ask.hidden = false;
+    const close = () => { ask.hidden = true; };
+    document.getElementById('leave_ask_stay').addEventListener('click', close);
+    document.getElementById('leave_ask_go').addEventListener('click', () => {
+      close();
+      this.leave();
+    });
+  }
+
+  /**
    * Leave the course, and hand the page whatever it has to undo.
    *
    * A fresh join rather than a reset in place, everywhere: every detector has to be new —
@@ -578,7 +611,7 @@ export class Device {
   }
 
   wireBottom() {
-    this.el('leave')?.addEventListener('click', () => this.leave());
+    this.el('leave')?.addEventListener('click', () => this.leaveAsked('course'));
     this.el('retire')?.addEventListener('click', () => {
       this.dialog.retire('retired');
       this.dialog.outcome = 'retired';
@@ -1069,7 +1102,7 @@ export class Device {
       remember(this.boat);
     });
     keep('j_name', 'name', true);
-    keep('j_tcf', 'tcf');
+    keep('j_tcf', 'tcf', true);
     keep('j_length', 'lengthM', true);
     keep('j_alloc', 'allocated');
     // Redrawn when the time is set, not as it is typed, so the button can say it is ready.
@@ -1248,7 +1281,7 @@ export class Device {
     this.host.innerHTML = startRow(this.dialog, Date.now(), null)
       + waitingPanel(this.waiting, { raceName: this.dialog.raceName })
       + `<div class="deck"><button class="plain" id="leave">Leave race</button></div>`;
-    this.el('leave')?.addEventListener('click', () => this.leave());
+    this.el('leave')?.addEventListener('click', () => this.leaveAsked('race'));
     return undefined;
   }
 

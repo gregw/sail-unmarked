@@ -300,7 +300,11 @@ mod.__boat.leaving.arm(true);
 ok('the boat\'s declared length reaches the thing that draws it',
   mod.__boat.device.client.boatLengthM === 12.5);
 ok('...and is kept for next time, being a fact about the boat rather than about today',
-  JSON.parse(globalThis.sessionStorage.getItem('unmarked.join') ?? '{}').lengthM === '12.5');
+  JSON.parse(globalThis.localStorage.getItem('unmarked.join') ?? '{}').lengthM === '12.5');
+// The TCF too, which changes when the handicapper says so and is checked on every join.
+mod.__boat.device.boat.tcf = '0.987';
+(await import('../../client/www/device.js')).remember(mod.__boat.device.boat);
+ok('...and so is the TCF', (await import('../../client/www/device.js')).recall().tcf === '0.987');
 ok('...and goes on the record, which is the only artefact that leaves this system',
   mod.__boat.device.client.record().lengthM === 12.5);
 // The club's setting for how close the plot may zoom comes off `/api/config`, read with the
@@ -398,9 +402,20 @@ ok('with the fixes stopped, the screen says so and counts — a dead receiver is
 
 /* ------------------------------------------------------- leaving, and the watch */
 
+// THE BUTTON ASKS FIRST: it sits under the chart, where a thumb reaching for anything else
+// lands, and what it throws away cannot be had back.
 $('leave').fire('click', {});
+await settle(200);
+ok('pressing Leave asks rather than leaving', !$('leave_ask').hidden
+  && $('leave_ask').innerHTML.includes('Leave the course?') && !/<div class="join">/.test(device()));
+H('leave_ask_stay:click')();
+await settle(200);
+ok('...and keeping sailing closes the question and stays on the course',
+  $('leave_ask').hidden && !/<div class="join">/.test(device()));
+$('leave').fire('click', {});
+H('leave_ask_go:click')();
 await settle(400);
-ok('leaving the course comes back to the join screen', /<div class="join">/.test(device()));
+ok('answering Leave leaves the course, back to the join screen', /<div class="join">/.test(device()));
 // On the join screen there is nothing to lose, and a page that argued about being left would
 // be one people close for good.
 ok('...and stops guarding the back gesture, there being nothing left to lose',

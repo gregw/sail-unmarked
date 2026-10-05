@@ -364,3 +364,27 @@ button.plain.on { border-color: var(--ok); color: var(--ok); }
 .goto .row { display: flex; gap: 8px; align-items: center; }
 .goto .row .go { flex: 1; margin-top: 0; }
 .clist-hint { margin: 8px 12px; font-size: 11px; }
+
+/*
+  LEAVING ASKS FIRST, whether by the Leave button or the back gesture (boat.html): nothing is
+  cached across a reload, so a boat that leaves mid-afternoon comes back to the join screen with
+  the course, the crossings and the clock gone. The question sits over the page rather than
+  inside the device, because the device is rebuilt from scratch every second and anything drawn
+  into it would blink out between the press and the answer.
+*/
+.leaving {
+  position: fixed; inset: 0; z-index: 10;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(14, 26, 38, 0.86); padding: 24px;
+}
+.leaving[hidden] { display: none; }
+.leaving .box {
+  background: var(--panel); border: 2px solid var(--warn); border-radius: 8px;
+  padding: 14px; width: 100%; max-width: 380px;
+}
+.leaving .kind {
+  font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--warn);
+}
+.leaving .text { font-size: 17px; margin: 6px 0 12px; }
+.leaving .row { display: flex; gap: 8px; }
+.leaving .row button { flex: 1; }
