@@ -211,7 +211,9 @@ async function loadProgramme(key) {
   state.snapshotShown = null;
   state.selectedLine = null;
   state.picking = null;
-  state.open = {};
+  // The series' own fold is ABOVE the programme, so it outlives loading one: renaming a series
+  // reloads it, and a rename that shut the form it was typed in would close it under the hand.
+  state.open = state.open?.series === undefined ? {} : { series: state.open.series };
   state.endMode = {};
   formsChanged();
   state.rowsHtml = undefined;
@@ -3676,14 +3678,46 @@ function renderSeriesForm() {
   el('s_name').addEventListener('change', (ev) => retitleSeries({ name: ev.target.value }));
 }
 
+/**
+ * The field somebody is in, by id, and where its caret is: what `refocus` puts back after a
+ * rebuild replaced the element under them.
+ */
+function focusNow() {
+  const at = document.activeElement;
+  if (!at?.id) return null;
+  return { id: at.id, from: at.selectionStart ?? null, to: at.selectionEnd ?? null };
+}
+
+function refocus(was) {
+  const now = was && el(was.id);
+  if (!now || now === document.activeElement) return;
+  // Somebody already somewhere else while the reload ran is left there.
+  const at = document.activeElement;
+  if (at && at !== document.body) return;
+  now.focus?.();
+  try {
+    if (was.from !== null) now.setSelectionRange?.(was.from, was.to);
+  } catch {
+    // Not a text field: focus is all it keeps.
+  }
+}
+
 async function retitleSeries(change) {
   await flush();
   try {
     const done = await post(`/api/programmes/${state.key}/rename`, change);
+    /*
+     * THE FIELD CLICKED INTO KEEPS THE FOCUS. A rename commits on `change`, which is the blur
+     * that moved somebody to the next field; reloading rebuilds the form, and that field is
+     * replaced under them. Read here, after the POST, so it is where they went, not where they
+     * left.
+     */
+    const was = focusNow();
     state.seriesFormFor = undefined;
     // The series row re-wires its own controls; see where #rowSeries is assigned.
     wireRow(['series']);
     await loadProgrammeList(`${done.club}/${done.series}`);
+    refocus(was);
     note(change.series ? `renamed to ${done.series}` : 'renamed');
   } catch (e) {
     note(e.message, true);

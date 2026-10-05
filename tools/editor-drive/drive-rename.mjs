@@ -23,7 +23,7 @@ const url = `/api/programmes/${prog.club}/${prog.series}`;
 
 /** Type into a field and let it change, with no blur behind it. */
 const retitle = async (field, value) => {
-  H(`${field}:focus`)();
+  H(`${field}:focus`)?.();
   $(field).value = value;
   H(`${field}:change`)({ target: { value } });
   await settle(1100);
@@ -102,5 +102,21 @@ ok('a renamed point reaches the file', 'drive-renamed-point' in afterPoint.point
 ok('...and the old name is gone', !(POINT in afterPoint.points));
 const ends = Object.values(afterPoint.lines).flatMap((l) => [l.port?.at, l.starboard?.at]);
 ok('...and no line end is left naming it', !ends.includes(POINT));
+
+/* ------------------------------------------------------------------------- the series */
+
+// Renaming reloads the programme, and the form it was typed in must still be open after: a
+// series form that shut itself on every rename was the symptom.
+unfold('series');
+await settle(400);
+ok('the series form is open', $('rowSeries').innerHTML.includes('id="seriesForm"'));
+await retitle('s_name', 'A series renamed by a driver');
+ok('a retitled series reaches the file',
+  (await get(url)).name === 'A series renamed by a driver');
+ok('...and its form is still open', $('rowSeries').innerHTML.includes('id="seriesForm"'));
+await retitle('s_id', 'drive-renamed-series');
+ok('a renamed series moves the file',
+  (await fetch(`/api/programmes/${prog.club}/drive-renamed-series`)).ok);
+ok('...and its form is still open', $('rowSeries').innerHTML.includes('id="seriesForm"'));
 
 report();
