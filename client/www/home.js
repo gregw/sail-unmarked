@@ -13,6 +13,7 @@
 import { overview } from './markscreen.js';
 import { RaceClient } from './raceclient.js';
 import { personalise } from './handicap.js';
+import { showWhoami } from './whoami.js';
 
 /** The chart at full strength: here it is the picture, not something under a boat's screen. */
 const HOME_INK = 1;
@@ -153,4 +154,8 @@ globalThis.addEventListener?.('resize', () => {
   resizing = setTimeout(draw, 150);
 });
 
+showWhoami();
+// The site's own address, under the title: what to type, or pass on, to come back here.
+const title = el('h_title');
+if (title) title.title = globalThis.location?.origin ?? '';
 load();

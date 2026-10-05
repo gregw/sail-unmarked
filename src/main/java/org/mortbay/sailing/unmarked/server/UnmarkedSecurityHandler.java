@@ -78,8 +78,13 @@ public class UnmarkedSecurityHandler extends SecurityHandler
          * of it: behind anything that terminates the connection — a reverse proxy on this machine,
          * a router doing the TLS — every request arrives from that one address, and listing it
          * would hand the editor to everybody who comes through it, silently.
+         *
+         * NOT THE SIGN-IN ITSELF: an administrator by address may still choose to sign in, to put
+         * a name to what they do, and a sign-in the bypass let straight through would come back
+         * signed in as nobody.
          */
-        if (!bypass.isEmpty() && bypass.contains(remote(request)))
+        if (!bypass.isEmpty() && !pathInContext.equals(AuthFilter.LOGIN_PATH)
+            && bypass.contains(remote(request)))
             return Constraint.ALLOWED;
 
         for (String screen : SCREENS)

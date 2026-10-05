@@ -53,7 +53,8 @@ and writes, so a URL pattern alone cannot say *unless it is a GET*.
 without signing in; `allowLoopback: true` adds this machine's own, `127.0.0.1` and `::1`, which is
 what a laptop you are sitting at wants (`AuthConfig.bypass`). Addresses only — a host name would be
 looked up, and a bypass that followed DNS would be whoever controlled the name; an entry that is not
-an address is left out and logged.
+an address is left out and logged. The sign-in itself, `/auth/login`, is never bypassed, so someone
+at a listed address can still sign in, and what they do then carries their name.
 
 It is read off the **connection**, never off `X-Forwarded-For`, which is whatever the client said it
 was — a bypass that believed a header would be no bypass at all. **So whatever terminates connections

@@ -226,6 +226,29 @@ class AuthIntegrationTest
         assertThat("an address that is not listed still signs in", status("/editor.html"), is(303));
     }
 
+    @Test
+    void aListedAddressCanStillChooseToSignIn(@TempDir Path root) throws Exception
+    {
+        start(root, false, null, "127.0.0.1");
+        HttpClient browser = browser();
+        String base = "http://localhost:" + port(unmarked);
+        assertThat(body(browser, "/api/config"), containsString("\"signedIn\" : false"));
+
+        signingInAs = "officer@myc.org.au";
+        HttpResponse<String> challenge = browser.send(HttpRequest.newBuilder()
+            .uri(URI.create(base + "/auth/login?to=/index.html")).GET().build(),
+            HttpResponse.BodyHandlers.ofString());
+        assertThat("the front page's sign-in goes to the provider, bypass or not",
+            challenge.statusCode(), is(303));
+        String state = challenge.headers().firstValue("location").orElseThrow()
+            .replaceAll(".*[?&]state=([^&]*).*", "$1");
+        browser.send(HttpRequest.newBuilder()
+            .uri(URI.create(base + "/auth/callback?state=" + state + "&code=a-code"))
+            .GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertThat("...and comes back signed in", body(browser, "/api/config"),
+            containsString("\"signedIn\" : true"));
+    }
+
     /* ---------------------------------------------------------------- with it off */
 
     @Test
