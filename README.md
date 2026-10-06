@@ -89,6 +89,6 @@ See [Open questions](https://github.com/gregw/sail-unmarked/wiki/open-questions)
 
 The documents are the [project wiki](https://github.com/gregw/sail-unmarked/wiki), checked out at `wiki/` as a git submodule. Start with
 its [**Home**](https://github.com/gregw/sail-unmarked/wiki/Home) page — how the whole thing works, in one pass, with a map of the rest of
-the wiki and a glossary. The design brief is `wiki/unmarked-racing-brief.html`, to open in a
-browser. [`CLAUDE.md`](CLAUDE.md) holds
+the wiki and a glossary. The design brief is its
+[unmarked-racing-brief](https://github.com/gregw/sail-unmarked/wiki/unmarked-racing-brief) page. [`CLAUDE.md`](CLAUDE.md) holds
 the working notes for changing the code.
