@@ -181,6 +181,36 @@ export function run(check) {
     twice.ends.to.x > twice.ends.from.x);
   check('...it goes on round, the long way, into the second crossing', / A[\d. ]+0 1 1 29\.0,0\.0$/.test(twice.d));
 
+  // NOR ACROSS THE LEG BEFORE. A zig-zag between two leaning lines, every crossing westward:
+  // turning away from a crossing on the side the last leg came in by sends the straight back
+  // across that leg, a loop the other turn does not draw.
+  const heads = (x, y, hx, hy) => {
+    const l = Math.hypot(hx, hy);
+    return cross(x, y, x + (16.5 * hx) / l, y + (16.5 * hy) / l);
+  };
+  const zig = [-0.965, 0.26];
+  const zag = [-0.96, -0.29];
+  const zigzag = track([
+    { crossings: [heads(500, 650, -0.6, -0.8)] },
+    { crossings: [heads(430, 430, ...zig)] },
+    { crossings: [heads(585, 430, ...zag)] },
+    { crossings: [heads(402, 330, ...zig)] },
+    { crossings: [heads(615, 330, ...zag)] },
+  ]).filter((s) => s.kind === 'leg');
+  const meets = (p, q) => {
+    const side = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    const apart = (u, v) => (u > 1e-6 && v < -1e-6) || (u < -1e-6 && v > 1e-6);
+    for (let i = 0; i + 1 < p.length; i++) {
+      for (let j = 0; j + 1 < q.length; j++) {
+        if (apart(side(p[i], p[i + 1], q[j]), side(p[i], p[i + 1], q[j + 1]))
+          && apart(side(q[j], q[j + 1], p[i]), side(q[j], q[j + 1], p[i + 1]))) return true;
+      }
+    }
+    return false;
+  };
+  check('a leg is not drawn back across the leg before it, where turning the other way avoids it',
+    zigzag.slice(1).every((leg, i) => !meets(leg.points, zigzag[i].points)));
+
   // The corner must never eat the leg it is turning onto.
   const shortLeg = track([
     { crossings: [cross(0, 40, 0, 36)] },

@@ -233,8 +233,9 @@ pointing up the screen.**
   **straight** portion.
 - **Each turn may go either way, and the track does not loop when it need not.** Turning toward the next
   mark draws a figure of eight when that mark is nearly astern and a little to one side — two crossings
-  of one line a triangle apart, say. `tangentPath` tries all four ways of turning out and in, and draws
-  the one that crosses itself and the crossings either side least, shortest among those.
+  of one line a triangle apart, say, or sends a zig-zag's straight back across the leg that just
+  arrived. `tangentPath` tries all four ways of turning out and in, and draws the one that crosses
+  itself, the crossings either side and the leg before it least, shortest among those.
 - **A gate's alternatives are seated in OPPOSITE orders along their lines**, or a mirrored gate puts each
   rounding's two triangles at opposite ends and collapses their midpoints onto one another.
 - **A gate splits AT the gate but joins well down the leg** (`MERGE_FRACTION`), and the asymmetry is the

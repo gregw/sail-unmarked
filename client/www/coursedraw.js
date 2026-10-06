@@ -256,6 +256,20 @@ function crossings(points) {
   return count;
 }
 
+/** How many times one line properly crosses another. */
+function crossingsWith(points, other) {
+  const side = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+  const apart = (p, q) => (p > 1e-6 && q < -1e-6) || (p < -1e-6 && q > 1e-6);
+  let count = 0;
+  for (let i = 0; i + 1 < points.length; i++) {
+    for (let j = 0; j + 1 < other.length; j++) {
+      const [a, b, c, e] = [points[i], points[i + 1], other[j], other[j + 1]];
+      if (apart(side(a, b, c), side(a, b, e)) && apart(side(c, e, a), side(c, e, b))) count += 1;
+    }
+  }
+  return count;
+}
+
 /**
  * A path from one point to another that honours the heading at either end.
  *
@@ -266,9 +280,13 @@ function crossings(points) {
  * usually right and sometimes draws a loop: with the mark nearly astern and a little to one
  * side, turning that side swings the track out and it has to cut back across its own crossing,
  * where turning the other way goes round clean. So every combination is tried, and the one
- * drawn crosses itself and the crossings either side least, and is the shortest of those.
+ * drawn crosses itself, the crossings either side and the leg before it least, and is the
+ * shortest of those. The leg before counts because that is where the loop shows: turning away
+ * from a crossing on the wrong side sends the straight back across the leg that just arrived.
+ *
+ * `avoid` is that leg, as points; what comes back carries this one's, for the leg after.
  */
-function tangentPath(from, headingOut, to, headingIn, radius) {
+function tangentPath(from, headingOut, to, headingIn, radius, avoid = []) {
   const span = len(sub(to, from));
   // A corner must never eat its own leg. On a short leg the radius shrinks rather than
   // the arc overshooting the mark it is turning around.
@@ -279,11 +297,14 @@ function tangentPath(from, headingOut, to, headingIn, radius) {
   for (const s1 of sides(headingOut)) {
     for (const s2 of sides(headingIn)) {
       const path = candidate(from, headingOut, s1, to, headingIn, s2, r);
-      if (path) options.push({ path, loops: crossings(polyline(from, headingOut, path, to, headingIn)) });
+      if (!path) continue;
+      const points = polyline(from, headingOut, path, to, headingIn);
+      options.push({ path, points, loops: crossings(points) + crossingsWith(points, avoid) });
     }
   }
-  const best = options.sort((a, b) => a.loops - b.loops || a.path.length - b.path.length)[0]?.path;
-  if (!best) return { d: `M${xy(from)} L${xy(to)}`, straightFrom: from, straightTo: to };
+  const chosen = options.sort((a, b) => a.loops - b.loops || a.path.length - b.path.length)[0];
+  const best = chosen?.path;
+  if (!best) return { d: `M${xy(from)} L${xy(to)}`, straightFrom: from, straightTo: to, points: [from, to] };
 
   const arc = (theta, end) => ` A${r.toFixed(1)} ${r.toFixed(1)} 0 ${Math.abs(theta) > Math.PI ? 1 : 0} ${theta > 0 ? 1 : 0} ${xy(end)}`;
   let d = `M${xy(from)}`;
@@ -292,7 +313,7 @@ function tangentPath(from, headingOut, to, headingIn, radius) {
   // met a circle of no turn, which is the same place give or take a rounding.
   d += ` L${xy(best.t2 ? best.p2 : to)}`;
   if (best.t2) d += arc(best.t2, to);
-  return { d, straightFrom: best.t1 ? best.p1 : from, straightTo: best.t2 ? best.p2 : to };
+  return { d, straightFrom: best.t1 ? best.p1 : from, straightTo: best.t2 ? best.p2 : to, points: chosen.points };
 }
 
 function segment(d, from, to, t, kind, leg) {
@@ -315,10 +336,12 @@ function segment(d, from, to, t, kind, leg) {
 }
 
 /** Build a segment from a tangent path, with the arrow on its straight portion. */
-function tangentSegment(from, headingOut, to, headingIn, radius, t, kind, leg) {
-  const path = tangentPath(from, headingOut, to, headingIn, radius);
+function tangentSegment(from, headingOut, to, headingIn, radius, t, kind, leg, avoid = []) {
+  const path = tangentPath(from, headingOut, to, headingIn, radius, avoid);
   const seg = segment(path.d, path.straightFrom, path.straightTo, t, kind, leg);
   seg.d = path.d;
+  // Kept off the segment's own fields: it is for the next leg's choice, not for drawing.
+  Object.defineProperty(seg, 'points', { value: path.points, enumerable: false });
   return seg;
 }
 
@@ -382,10 +405,12 @@ export function track(steps, options = {}) {
   for (let i = 0; i + 1 < steps.length; i++) pairs.push([i, i + 1]);
   if (options.closed && steps.length > 1) pairs.push([steps.length - 1, 0]);
 
+  // The leg drawn last, which the next one is chosen not to cross where it can help it.
+  let previous = [];
   for (const [i, next] of pairs) {
     const from = steps[i].crossings;
     const to = steps[next].crossings;
-    if (!from.length || !to.length) continue;
+    if (!from.length || !to.length) { previous = []; continue; }
     const t = (i + 0.5) / span;
     const leg = { from: i, to: next };
 
@@ -398,8 +423,10 @@ export function track(steps, options = {}) {
     // At a gate junction the branches have already turned the boat onto the trunk, so the
     // trunk itself starts and ends unconstrained. At a plain crossing the trunk is the
     // thing that has to turn.
-    segments.push(tangentSegment(merge, from.length > 1 ? null : heading(from[0]),
-      J, to.length > 1 ? null : heading(to[0]), radius, t, 'leg', leg));
+    const drawn = tangentSegment(merge, from.length > 1 ? null : heading(from[0]),
+      J, to.length > 1 ? null : heading(to[0]), radius, t, 'leg', leg, previous);
+    segments.push(drawn);
+    previous = drawn.points ?? [];
 
     if (from.length > 1) {
       for (const crossing of from) {
