@@ -177,7 +177,7 @@ service user, `/opt/sail-unmarked`, `/var/lib/sail-unmarked` — carry the `sail
 - **Nothing in `data/` is a survey.** The sample series carry positions placed by eye on a chart; a
   position nobody supplied is `null` and reported. Test fixtures invent their own and say so.
 - **Section references** like `§8.2` in code are to `wiki/client-server-dialog.md`, whose numbering
-  is stable; `brief §5` is `wiki/unmarked-racing-brief.md`; open questions are numbered in
+  is stable; *the brief* (`brief §5`) is the original design brief, kept only in the wiki's git history as `unmarked-racing-brief.md`; open questions are numbered in
   `wiki/open-questions.md`.
 
 ---

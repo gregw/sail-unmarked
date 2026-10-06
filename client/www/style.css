@@ -1,8 +1,6 @@
 /*
- * The on-water palette from the brief. Dark by default and not by preference: these
- * screens are read in a cockpit, one-handed, in glare or at dusk, by somebody who has
- * something else to be doing. Every value here is from wiki/unmarked-racing-brief.md
- * so the app and its own design document cannot drift apart.
+ * The on-water palette. Dark by default and not by preference: these screens are read in a
+ * cockpit, one-handed, in glare or at dusk, by somebody who has something else to be doing.
  */
 :root {
   --sea: #0e1a26;

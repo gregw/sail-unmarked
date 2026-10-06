@@ -29,7 +29,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  *
  * <p><b>A course has no geometry of its own.</b> Everything sailable lives on a variant —
  * Div 1, Div 2, the short course — and a course with a single variant is the ordinary case
- * where nobody ever thinks about the word. See {@code wiki/course-lifecycle.md}.
+ * where nobody ever thinks about the word. See {@code wiki/course-model.md}, the lifecycle.
  *
  * <h2>Two shapes in the file, one model in memory</h2>
  * A course with one plain variant is written flat, with no variant level at all:

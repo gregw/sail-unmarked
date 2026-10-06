@@ -12,7 +12,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * One editable design belonging to exactly one {@link Course}: Div 1, the short course, or
  * simply <em>the</em> variant where a course has only one.
  *
- * <p>See {@code wiki/course-lifecycle.md}. A variant is the thing an editor edits and the
+ * <p>See {@code wiki/course-model.md}, the lifecycle. A variant is the thing an editor edits and the
  * thing a snapshot is taken <em>of</em>; it is mutable right up to the warning gun, because
  * nothing a boat has sailed depends on it staying still — what a boat sailed is a
  * {@link CourseSnapshot}, and those are immutable.

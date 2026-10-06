@@ -80,7 +80,7 @@ covers the login and installing on a Raspberry Pi.
 
 A prototype that runs end to end: a race can be defined, published, joined from a phone, started,
 sailed, and read back as results. Not built yet: the native wrapper and an offline tile cache, the
-brief's Live place picture (the boat's Place screen is a ranked table), a boat switching to a
+picture of the whole fleet at your corrected time (the boat's Place screen is a ranked table), a boat switching to a
 course change mid-race, re-posting a record with its full track, and a club entering its fleet's
 TCFs in advance.
 See [Open questions](https://github.com/gregw/sail-unmarked/wiki/open-questions) for what is undecided.
@@ -89,6 +89,5 @@ See [Open questions](https://github.com/gregw/sail-unmarked/wiki/open-questions)
 
 The documents are the [project wiki](https://github.com/gregw/sail-unmarked/wiki), checked out at `wiki/` as a git submodule. Start with
 its [**Home**](https://github.com/gregw/sail-unmarked/wiki/Home) page — how the whole thing works, in one pass, with a map of the rest of
-the wiki and a glossary. The design brief is its
-[unmarked-racing-brief](https://github.com/gregw/sail-unmarked/wiki/unmarked-racing-brief) page. [`CLAUDE.md`](CLAUDE.md) holds
+the wiki and a glossary. [`CLAUDE.md`](CLAUDE.md) holds
 the working notes for changing the code.
