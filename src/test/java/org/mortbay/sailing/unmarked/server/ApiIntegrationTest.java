@@ -385,7 +385,7 @@ public class ApiIntegrationTest
             HttpRequest.newBuilder(URI.create(base + "/")).build(),
             HttpResponse.BodyHandlers.ofString());
         assertThat(response.statusCode(), is(200));
-        assertThat(response.body().contains("Unmarked Racing"), is(true));
+        assertThat(response.body().contains("id=\"h_title\""), is(true));
     }
 
     /* --------------------------------------------------------- series CRUD */

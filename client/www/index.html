@@ -90,6 +90,15 @@
             }
         }
 
+        /* Two columns of three where there is room for them; narrower keeps one, which is the
+           only way each point stays whole on its line. */
+        @media (min-width: 760px) {
+            .points {
+                columns: 2;
+                column-gap: 24px;
+            }
+        }
+
         /* Club, series and course on one line, sharing it. */
         .pick {
             display: flex;
@@ -149,6 +158,8 @@
         <li>Always open for practice and records</li>
         <li>Circuits joined from local waters</li>
         <li>Distance handicaps: first home wins</li>
+        <li>No mark rounding rules!</li>
+        <li>Novelty courses</li>
     </ul>
 </div>
 
