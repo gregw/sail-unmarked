@@ -246,8 +246,8 @@ pointing up the screen.**
 - **Text inside a triangle is a darker shade of that triangle** (`darken`) — which is also why the
   triangles are filled rather than outlined. Darkening keeps the letter recessive: the shape carries the
   direction, the letter only says which step.
-- **Course labels are sized to be read, and double under the pointer** — and stay doubled for three
-  seconds after it leaves (`HOVER_HOLD_MS`), so a label can still be read from the line beside it. Hover sets an SVG `transform`
+- **Course labels are sized to be read, and double under the pointer** — only while it is there, back
+  to normal size the moment it leaves. Hover sets an SVG `transform`
   directly rather than re-rendering, and scales about the label's own anchor — for a triangle its **base**,
   so a grown triangle stays on its line. **Raised within the course's own layer and no further**: the
   points and the grips on the lines' ends and middles are drawn after it, so a grown triangle never
