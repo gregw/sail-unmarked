@@ -898,6 +898,53 @@ function ask(title, body, choices) {
  */
 let HANDLES = '';
 
+/**
+ * THE STEP GROWN UNDER THE POINTER, by its group, or null.
+ *
+ * Grown by setting the transform directly rather than by re-rendering: hover fires constantly,
+ * and rebuilding the whole chart for each one would make the map stutter. An SVG transform
+ * attribute also avoids the transform-box rules that decide where a CSS transform-origin lands
+ * on an SVG element.
+ *
+ * A hover lights the whole STEP, not the one shape under the pointer: the leg into it, both
+ * branches where that leg is a gate, and every triangle those branches reach. They all carry the
+ * same letter, so lighting one and not the others invites the reader to wonder which of them the
+ * letter belonged to.
+ *
+ * <b>Followed on the chart, not on the marks.</b> A grown mark is moved to the top of the course
+ * layer, and a browser that sees the element under its pointer leave the document and come back
+ * may never tell it the pointer left — so a `mouseleave` on the mark itself left it grown until
+ * the next pan. The chart's own element is never rebuilt, so every move over it says which mark,
+ * if any, is under the pointer now, and the grown step follows that.
+ */
+let HOVERED = null;
+
+function hoverAt(target) {
+  const svg = el('map');
+  const g = target?.closest?.('.cmark') ?? null;
+  const key = g?.dataset.group ?? null;
+  if (key === HOVERED) return;
+  if (HOVERED) {
+    for (const member of svg.querySelectorAll('.cmark')) {
+      if (member.dataset.group === HOVERED) member.removeAttribute('transform');
+    }
+  }
+  HOVERED = key;
+  if (!key) return;
+  for (const member of [...svg.querySelectorAll('.cmark')].filter((m) => m.dataset.group === key)) {
+    const ox = Number(member.dataset.ox);
+    const oy = Number(member.dataset.oy);
+    // Each grows about its OWN anchor — for a triangle that is its base, so it stays on its line
+    // rather than lifting off it.
+    member.setAttribute('transform',
+      `translate(${ox} ${oy}) scale(${LABEL.hoverScale}) translate(${-ox} ${-oy})`);
+    // Last in the document is topmost in SVG. Raised within the course layer, so above the rest
+    // of the course but never above the grips; the one under the pointer last of all.
+    if (member !== g) member.parentNode.appendChild(member);
+  }
+  g.parentNode.appendChild(g);
+}
+
 /** Lines the loaded programme defines, drawn from whichever ends are placed. */
 function renderLines() {
   const used = inUse();
@@ -1486,36 +1533,8 @@ function render() {
     renderEndReadout() +
     state.view.scaleBar();
 
-  // Grown under the pointer by setting the transform directly, rather than by
-  // re-rendering: hover fires constantly, and rebuilding the whole chart for each one
-  // would make the map stutter. An SVG transform attribute also avoids the transform-box
-  // rules that decide where a CSS transform-origin lands on an SVG element.
-  // A hover lights the whole STEP, not the one shape under the pointer: the leg into it,
-  // both branches where that leg is a gate, and every triangle those branches reach. They
-  // all carry the same letter, so lighting one and not the others invites the reader to
-  // wonder which of them the letter belonged to.
-  const marks = [...svg.querySelectorAll('.cmark')];
-  for (const g of marks) {
-    const group = marks.filter((m) => m.dataset.group === g.dataset.group);
-    g.addEventListener('mouseenter', () => {
-      for (const member of group) {
-        const ox = Number(member.dataset.ox);
-        const oy = Number(member.dataset.oy);
-        // Each grows about its OWN anchor — for a triangle that is its base, so it stays
-        // on its line rather than lifting off it.
-        member.setAttribute('transform',
-          `translate(${ox} ${oy}) scale(${LABEL.hoverScale}) translate(${-ox} ${-oy})`);
-        // Last in the document is topmost in SVG. The hovered shape is moved last in the course
-        // layer, so it ends up above the rest of the course but never above the grips.
-        if (member !== g) member.parentNode.appendChild(member);
-      }
-      g.parentNode.appendChild(g);
-    });
-    // Grown only while the pointer is on it: normal size again the moment it leaves.
-    g.addEventListener('mouseleave', () => {
-      for (const member of group) member.removeAttribute('transform');
-    });
-  }
+  // A rebuilt chart has nothing grown on it; the next move over a mark grows it afresh.
+  HOVERED = null;
 
   for (const g of svg.querySelectorAll('.pt')) {
     g.addEventListener('mousedown', (ev) => {
@@ -5165,6 +5184,9 @@ function wire() {
     if (placingArmed()) beginEdit();
     panning = { at: svgPx(ev), from: svgPx(ev), moved: false };
   });
+
+  svg.addEventListener('mousemove', (ev) => hoverAt(ev.target));
+  svg.addEventListener('mouseleave', () => hoverAt(null));
 
   window.addEventListener('mousemove', (ev) => {
     if (state.dragging) {
