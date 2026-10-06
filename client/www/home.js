@@ -128,7 +128,18 @@ function draw() {
     return;
   }
   const width = Math.max(260, Math.round(host.clientWidth || 600));
-  const height = Math.round(Math.min(width * 0.7, 520));
+  // At least the old proportion, and down to the bottom of the window where it is taller: the
+  // chart is the last thing on the page, so the room below it is the chart's. Measured from the
+  // top of the PAGE, so it is the same height wherever the page happens to be scrolled.
+  const least = Math.round(Math.min(width * 0.7, 520));
+  const box = host.getBoundingClientRect?.() ?? {};
+  const top = (box.top ?? 0) + (window.scrollY ?? 0);
+  const bottom = box.bottom ?? (box.top ?? 0) + (box.height ?? 0);
+  // Whatever stands below the chart — its panel's padding and border, the page's own — measured
+  // rather than assumed, so a change of style cannot push the page into a scroll.
+  const below = Math.max(0, (document.documentElement?.scrollHeight ?? 0) - (bottom + (window.scrollY ?? 0)));
+  const room = Math.floor((window.innerHeight ?? 0) - top - below);
+  const height = Number.isFinite(room) ? Math.max(least, room) : least;
   host.innerHTML = overview(client, {
     width, height, orientation: 'north', basemap: 'chart', basemapInk: HOME_INK,
   });
@@ -149,7 +160,7 @@ el('h_series').addEventListener('change', (ev) => { state.series = ev.target.val
 el('h_course').addEventListener('change', (ev) => { state.offer = ev.target.value; show(); });
 // Fitted to the width it has, so drawn again when that changes.
 let resizing = null;
-globalThis.addEventListener?.('resize', () => {
+window.addEventListener('resize', () => {
   clearTimeout(resizing);
   resizing = setTimeout(draw, 150);
 });

@@ -57,6 +57,8 @@ await post(`/api/lifecycle/${HKEY}/publications`, { publish: [{ course: 'handica
 
 /* ------------------------------------------------------------------------- the page */
 
+// A tall window: the chart runs to its foot rather than stopping at its usual proportion.
+window.innerHeight = 1400;
 await import('../../client/www/home.js');
 await settle(1200);
 
@@ -84,6 +86,14 @@ const lines = new Set(shown.snapshot.steps.flatMap((s) => s.crossings.map((c) =>
 ok('...with only the lines the course crosses', (chart.match(/<line [^>]*stroke-width="(2|3\.5)"/g) ?? []).length === lines);
 
 ok('...on the chart at full strength', /class="basemap"[^>]*opacity="1"/.test(chart));
+
+const tall = Number(/<svg class="plot" viewBox="0 0 \d+ (\d+)"/.exec(chart)?.[1]);
+ok('in a tall window the chart grows to the bottom of it', tall === 1400);
+window.innerHeight = 200;
+H('window:resize')();
+await settle(400);
+const short = Number(/<svg class="plot" viewBox="0 0 \d+ (\d+)"/.exec(html('h_chart'))?.[1]);
+ok('...and in a short one keeps its usual size rather than shrinking', short > 200 && short < tall);
 
 await pick('h_club', 'myc.org.au');
 await pick('h_series', '2026-windward-leeward');
