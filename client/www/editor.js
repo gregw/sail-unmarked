@@ -3316,9 +3316,33 @@ function wireRaceFields(race) {
   }
   // A DIVISION'S START, field by field: times as HH:MM, minutes as whole numbers; empty is the
   // default (or, for a time, not set yet).
+  /*
+   * THE LINE NEVER CLOSES BEFORE IT OPENS. An open start's close is after its open, and an
+   * allocated start's last is not before its first — the rules the server reports a race by, held
+   * here as the time is typed so a race nobody could start is never written. Refused with the
+   * field put back, rather than the other time moved to suit: which of the two is wrong is the
+   * officer's call.
+   */
+  const minutes = (hm) => (hm ? Number(hm.split(':')[0]) * 60 + Number(hm.split(':')[1]) : null);
+  const windowProblem = (division) => {
+    const kind = state.races.get(race.id).startType ?? 'scratch';
+    const first = minutes(division.start);
+    const last = minutes(division.closes);
+    if (first === null || last === null) return null;
+    if (kind === 'open' && last <= first) return 'the line has to close after it opens';
+    if (kind === 'allocated' && last < first) return 'the last start cannot be before the first';
+    return null;
+  };
   const startField = (attr, field, parse) => {
     for (const input of el('raceForm').querySelectorAll(`[data-${attr}]`)) {
       input.addEventListener('change', (ev) => {
+        const division = state.races.get(race.id).divisions[input.dataset[attr]];
+        const problem = windowProblem({ ...division, [field]: parse(ev.target.value) });
+        if (problem) {
+          note(`${input.dataset[attr]}: ${problem}`, true);
+          ev.target.value = division[field] ?? '';
+          return;
+        }
         beginEdit();
         state.races.get(race.id).divisions[input.dataset[attr]][field] = parse(ev.target.value);
         endEdit();

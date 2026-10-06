@@ -228,6 +228,25 @@ await settle(1400);
 ok('an open start asks when its line closes, and not how long it stays open',
   form().includes('data-dcloses=') && !form().includes('data-dopen='));
 
+// THE LINE NEVER CLOSES BEFORE IT OPENS: refused as it is typed, the field put back.
+const closesField = $('raceForm').querySelectorAll('[data-dcloses]')[0];
+const tooEarly = { target: { value: '13:30' } };
+closesField.fire('change', tooEarly);
+await settle(1400);
+ok('a close before the open is refused, and not written',
+  Object.values((await file()).races[FIRST].divisions)[0].closes !== '13:30');
+ok('...the field put back, and saying why',
+  tooEarly.target.value !== '13:30' && $('rowMsg').innerHTML.includes('close after it opens'));
+$('raceForm').querySelectorAll('[data-dcloses]')[0].fire('change', { target: { value: '14:35' } });
+await settle(1400);
+ok('a close after it is written',
+  Object.values((await file()).races[FIRST].divisions)[0].closes === '14:35');
+const openAgain = { target: { value: '15:00' } };
+$('raceForm').querySelectorAll('[data-dstart]')[0].fire('change', openAgain);
+await settle(1400);
+ok('...and moving the open past the close is refused too',
+  Object.values((await file()).races[FIRST].divisions)[0].start === '14:05' && openAgain.target.value === '14:05');
+
 /* ------------------------------------------------ a clone, and another division */
 
 // A CLONE IS SET UP BEFORE IT IS OFFERED: whatever the original was, the copy starts not public.
