@@ -73,7 +73,7 @@ courses around Sydney Harbour to try in the test rig. Their positions were place
 **nothing in this repository is a survey**, and real positions must be surveyed before anybody races.
 
 With no `data/config/auth.yaml` the editor and the race screen are open to anything that can reach
-the port, which is right for a laptop and wrong for anything else. [`wiki/deployment.md`](wiki/deployment.md)
+the port, which is right for a laptop and wrong for anything else. [Deployment](https://github.com/gregw/sail-unmarked/wiki/deployment)
 covers the login and installing on a Raspberry Pi.
 
 ## Status
@@ -83,11 +83,12 @@ sailed, and read back as results. Not built yet: the native wrapper and an offli
 brief's Live place picture (the boat's Place screen is a ranked table), a boat switching to a
 course change mid-race, re-posting a record with its full track, and a club entering its fleet's
 TCFs in advance.
-See [`wiki/open-questions.md`](wiki/open-questions.md) for what is undecided.
+See [Open questions](https://github.com/gregw/sail-unmarked/wiki/open-questions) for what is undecided.
 
 ## Documentation
 
-Start with [**`wiki/overview.md`**](wiki/overview.md) — how the whole thing works, in one pass, with
-a map of the rest of the wiki and a glossary. The design brief is
-[`wiki/unmarked-racing-brief.html`](wiki/unmarked-racing-brief.html). [`CLAUDE.md`](CLAUDE.md) holds
+The documents are the [project wiki](https://github.com/gregw/sail-unmarked/wiki), checked out at `wiki/` as a git submodule. Start with
+its [**Home**](https://github.com/gregw/sail-unmarked/wiki/Home) page — how the whole thing works, in one pass, with a map of the rest of
+the wiki and a glossary. The design brief is `wiki/unmarked-racing-brief.html`, to open in a
+browser. [`CLAUDE.md`](CLAUDE.md) holds
 the working notes for changing the code.

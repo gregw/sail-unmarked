@@ -3,7 +3,7 @@
 **Sail racing around virtual marks.** Every mark is a line to be crossed via GPS rather than a
 point to be rounded.
 
-`README.md` is the outside view and [`wiki/overview.md`](wiki/overview.md) is how the whole
+`README.md` is the outside view and [`wiki/Home.md`](wiki/Home.md) is how the whole
 system works, with a map of the wiki and a glossary. This file is the working one: what must not
 regress, where things live, and how to work on it. It does not repeat the wiki; for most questions
 the file named is the answer, and the code's comments — which explain *why*, not *what* — are the
@@ -62,7 +62,7 @@ page does.** A spec for new client logic goes in the matching `*-test.js` and is
 ```txt
 unmarked/
   README.md, CLAUDE.md
-  wiki/                                 the documents — start at overview.md
+  wiki/                                 git submodule -> the GitHub wiki; start at Home.md
   data/config/config.yaml               site, listener, and the one boat-display setting
   data/config/auth.yaml                 the login (GITIGNORED — holds a client secret);
                                         auth.yaml.example beside it shows the shape
