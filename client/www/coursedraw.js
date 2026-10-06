@@ -64,12 +64,8 @@ export const MERGE_FRACTION = 0.85;
  *
  * `arrowPx` is sized so the arrowhead's own centroid sits at the circle's centre and its
  * tip still clears `markR`; the letter then goes at that centroid.
- *
- * `hoverScale` is what a label grows to under the pointer. A course drawn small enough to
- * see whole has labels too small to read; rather than pick one, the drawing does both —
- * small enough for the shape of the course, and one hover away from legible.
  */
-export const LABEL = { fontPx: 11, markR: 14, arrowPx: 11, hoverScale: 2 };
+export const LABEL = { fontPx: 11, markR: 14, arrowPx: 11 };
 
 /**
  * Where each crossing of one line sits along it, in pixels along the port→starboard axis.

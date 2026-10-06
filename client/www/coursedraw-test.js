@@ -70,7 +70,6 @@ export function run(check) {
   check('the triangle is big enough to hold a letter', TRIANGLE.half * 2 > LABEL.fontPx);
   check('crossings on one line stay clear of each other',
     TRIANGLE.minGap > TRIANGLE.half * 2);
-  check('hovering doubles a label', LABEL.hoverScale === 2);
 
   // ---------------------------------------------------- the leg marker fits together
   // A circle holding an arrowhead holding a letter: each has to fit inside the last, or
