@@ -138,7 +138,17 @@
   /* One row per crossing: its letter, the line, the sense, and a way to remove it.
      A gate's alternatives are indented under the step they belong to, because a gate is
      a choice at one step and never a step of its own. */
-  .stepblock { border: 1px solid var(--panel2); border-radius: 4px; padding: 1px 4px; margin-bottom: 2px; }
+  .stepblock { border: 1px solid var(--panel2); border-radius: 4px; padding: 1px 4px; margin-bottom: 2px;
+    transition: transform 120ms ease-out; background: var(--panel); }
+  /* The block in hand follows the pointer exactly, over the others, and says it is lifted. */
+  .stepblock.dragging { transition: none; position: relative; z-index: 2; border-color: var(--line);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5); }
+  /* A grip is a handle, so a touch on it drags rather than scrolling the pane. */
+  .s_grip { flex: 0 0 auto; cursor: grab; touch-action: none; user-select: none; color: var(--muted);
+    font-size: 15px; line-height: 15px; padding: 0 4px 0 1px; }
+  .s_grip:hover { color: var(--line); }
+  .stepblock.dragging .s_grip { cursor: grabbing; }
+  .s_gripgap { flex: 0 0 auto; width: 15px; }
   .steprow { display: flex; align-items: center; gap: 4px; margin-bottom: 1px; }
   .steprow:last-child { margin-bottom: 0; }
   .steprow.alt { padding-left: 12px; }

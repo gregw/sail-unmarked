@@ -4562,6 +4562,9 @@ function renderSteps(variant) {
         // gate's alternatives are a choice within the step, not steps of their own.
         const rows = (gate ?? [step]).map((entry, j) => `
           <div class="steprow${gate && j > 0 ? ' alt' : ''}">
+            ${j === 0
+              ? `<span data-step="${i}" class="s_grip" title="drag to move this step">&#10303;</span>`
+              : '<span class="s_gripgap"></span>'}
             <span class="seq">${gate && j > 0 ? '&#8627;' : esc(variantLetter(variant, i))}</span>
             ${!gate && step.point
               // A ROUNDING names a point, and its sense is which side the mark is left on.
@@ -4572,10 +4575,7 @@ function renderSteps(variant) {
             ${variant.closed && j === 0
               ? `<button data-step="${i}" class="s_entry${step.entry ? ' on' : ''}" title="a boat may begin and end a lap here">&#8635;</button>`
               : ''}
-            ${j === 0
-              ? `<button data-step="${i}" class="s_up" title="earlier">&uarr;</button>
-                 <button data-step="${i}" class="s_down" title="later">&darr;</button>`
-              : '<span class="grow"></span>'}
+            ${j === 0 ? '' : '<span class="grow"></span>'}
             <button data-step="${i}" data-alt="${j}" class="s_del" title="remove">&times;</button>
           </div>`).join('');
         return `<div class="stepblock">${rows}</div>`;
@@ -4615,10 +4615,58 @@ function renderSteps(variant) {
   // crossing twice. That is what keeps the scoring from having to decide which of several
   // crossings closed the loop, and it puts the burden on course design instead.
   on('s_entry', (i) => { variant.sequence[i].entry = !variant.sequence[i].entry; });
-  on('s_up', (i) => { if (i > 0) variant.sequence.splice(i - 1, 0, variant.sequence.splice(i, 1)[0]); });
-  on('s_down', (i) => {
-    if (i < variant.sequence.length - 1) variant.sequence.splice(i + 1, 0, variant.sequence.splice(i, 1)[0]);
-  });
+
+  /*
+   * A STEP IS MOVED BY DRAGGING ITS GRIP. The block follows the pointer and the others slide out
+   * of its way, so where it will land is in front of you before it lands; letting go there moves
+   * it, as one edit and one undo. Pointer events rather than HTML drag and drop, which a touch
+   * screen does not have, and followed on the DOCUMENT, so a pointer that strays off the list
+   * still drags. A gate moves whole: the grip is on its first row.
+   */
+  for (const grip of el('c_steps').querySelectorAll('.s_grip')) {
+    grip.addEventListener('pointerdown', (ev) => {
+      ev.preventDefault?.();
+      const from = Number(grip.dataset.step);
+      const blocks = [...el('c_steps').querySelectorAll('.stepblock')];
+      const rects = blocks.map((block) => block.getBoundingClientRect());
+      if (!rects[from]) return;
+      // The step's height and the gap below it: how far each block it passes moves aside.
+      const room = rects[from + 1] ? rects[from + 1].top - rects[from].top
+        : rects[from].height + (from > 0 ? rects[from].top - rects[from - 1].bottom : 2);
+      const startY = ev.clientY;
+      let to = from;
+      blocks[from].classList.add('dragging');
+      const move = (e) => {
+        const dy = e.clientY - startY;
+        const centre = rects[from].top + rects[from].height / 2 + dy;
+        // Where it lands is how many of the OTHER steps it is now below.
+        to = rects.filter((r, k) => k !== from && r.top + r.height / 2 < centre).length;
+        blocks.forEach((block, k) => {
+          let shift = 0;
+          if (k === from) shift = dy;
+          else if (from < to && k > from && k <= to) shift = -room;
+          else if (from > to && k >= to && k < from) shift = room;
+          block.style.transform = shift ? `translateY(${shift}px)` : '';
+        });
+      };
+      const up = () => {
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', up);
+        document.removeEventListener('pointercancel', up);
+        blocks.forEach((block) => { block.style.transform = ''; block.classList.remove('dragging'); });
+        if (to !== from) {
+          beginEdit();
+          variant.sequence.splice(to, 0, variant.sequence.splice(from, 1)[0]);
+          formsChanged();
+          endEdit();
+        }
+        render();
+      };
+      document.addEventListener('pointermove', move);
+      document.addEventListener('pointerup', up);
+      document.addEventListener('pointercancel', up);
+    });
+  }
 }
 
 /** True when some step of this variant, not a gate's side, names a handicap track. */

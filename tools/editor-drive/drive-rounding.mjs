@@ -24,6 +24,9 @@ const sequence = async () => (await get(url)).courses[COURSE].variants?.[VARIANT
   ?? (await get(url)).courses[COURSE].sequence;
 const before = (await sequence()).length;
 ok('the sequence offers a point to round beside a line to cross', $('variantForm').innerHTML.includes('id="c_addpt"'));
+// The order is changed by dragging a step's grip, so each step has one and there are no arrows.
+ok('every step has a grip to drag it by', ($('c_steps').innerHTML.match(/class="s_grip"/g) ?? []).length === before);
+ok('...and no up and down arrows', !/class="s_(up|down)"/.test($('c_steps').innerHTML));
 H('c_addpt:click')();
 await settle(1200);
 const after = await sequence();
