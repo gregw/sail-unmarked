@@ -123,6 +123,9 @@ const publishable = sailable.filter((v) =>
 ok('every variant with a capture is published, together',
   publishable.length > 0
   && publishable.every((v) => !!out.courses[COURSE].variants[v].published));
+ok('...after which there is nothing left to publish, and the button says so by disabling itself',
+  $('c_publish_latest').disabled === true
+  && /already published/.test($('c_publish_latest').title ?? ''));
 ok('...each handed its LATEST capture, which is what race morning means',
   publishable.every((v) => out.courses[COURSE].variants[v].publishedIsLatest === true));
 ok('...and it says what it did', $('rowMsg').innerHTML.includes('published the latest'));

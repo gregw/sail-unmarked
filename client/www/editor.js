@@ -3993,10 +3993,21 @@ function dirtyVariants(course) {
   });
 }
 
-/** The variants of one course that have a snapshot to hand a fleet. */
+/**
+ * The variants whose latest capture is not what boats are handed — what `Publish latest` acts on.
+ * A variant whose latest is already published has nothing to do, so a course whose every
+ * variant is in that state has nothing to publish and its button stands down.
+ */
 function publishableVariants(course) {
-  return [...course.variants.keys()]
-    .filter((id) => (lifeOf(course.id, id).snapshots ?? []).length > 0);
+  return [...course.variants.keys()].filter((id) => {
+    const life = lifeOf(course.id, id);
+    return (life.snapshots ?? []).length > 0 && !life.publishedIsLatest;
+  });
+}
+
+/** Whether any variant of this course has been captured at all. */
+function capturedVariants(course) {
+  return [...course.variants.keys()].some((id) => (lifeOf(course.id, id).snapshots ?? []).length > 0);
 }
 
 /**
@@ -4046,7 +4057,10 @@ async function snapshotDirty(course) {
  */
 async function publishLatest(course) {
   const wanted = publishableVariants(course);
-  if (!wanted.length) return note('nothing captured to publish', true);
+  if (!wanted.length) {
+    return note(capturedVariants(course)
+      ? 'the latest capture of every variant is already published' : 'nothing captured to publish', true);
+  }
   try {
     await post(`/api/lifecycle/${state.key}/publications`,
       { publish: wanted.map((id) => ({ course: course.id, variant: id })) });
@@ -4780,7 +4794,9 @@ function syncCourseForm() {
       publishLatest.disabled = ready === 0;
       publishLatest.title = ready
         ? `hand the fleet the latest capture of ${ready === 1 ? 'it' : `all ${ready}`}`
-        : 'nothing captured to publish';
+        : capturedVariants(course)
+          ? 'the latest capture of every variant is already published'
+          : 'nothing captured to publish';
     }
   }
 
