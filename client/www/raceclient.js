@@ -230,6 +230,11 @@ export function originOf(snapshot) {
 /** The midpoint of a crossing's two ends: the point legs are measured to and drawn to. */
 export function midpointOf(crossing) {
   const { port, starboard } = crossing;
+  // A ROUNDING is steered for at its mark, the line's port end: the line out of the turn is how
+  // the rounding is detected, not where the course goes.
+  if (crossing.point) {
+    return port?.latitude == null ? null : { latitude: port.latitude, longitude: port.longitude };
+  }
   if (!port || !starboard || port.latitude == null || starboard.latitude == null) return null;
   return {
     latitude: (port.latitude + starboard.latitude) / 2,
@@ -317,6 +322,9 @@ export class RaceClient {
         // handicap track, the track and where along it this boat's line sits (`placedName`).
         name: crossing.name ?? crossing.line,
         required: sense(crossing.cross),
+        // A rounding of a point, crossed as a short half-infinite line from the mark
+        // (`model/Rounding.java`): the overview draws it as the mark, the approach as the line.
+        point: !!crossing.point,
         midpoint: midpointOf(crossing),
         // On a step handicapped by distance, everywhere ANY boat's line may lie. Drawn faintly
         // under this boat's own line so that a boat rounding somewhere else is no surprise.

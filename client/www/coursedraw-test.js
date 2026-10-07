@@ -8,7 +8,7 @@
 
 import {
   ARROW_CENTROID, LABEL, MERGE_FRACTION, ROLE_COLOUR, TRIANGLE,
-  arrowHead, darken, forwardNormal, roleColour, seats, track, triangle,
+  arrowHead, darken, forwardNormal, roleColour, rounding, seats, track, triangle,
 } from './coursedraw.js';
 
 export function run(check) {
@@ -209,6 +209,38 @@ export function run(check) {
   };
   check('a leg is not drawn back across the leg before it, where turning the other way avoids it',
     zigzag.slice(1).every((leg, i) => !meets(leg.points, zigzag[i].points)));
+
+  // ----------------------------------------------------------- rounding a point
+  // An arc about the mark, the way it is rounded, round the outside of the turn: in going up the
+  // screen and out to the left, a port rounding runs anticlockwise from the mark's right to its top.
+  const up = { x: 0, y: -1 };
+  const left = { x: -1, y: 0 };
+  const port = rounding({ x: 0, y: 0 }, 'forward', up, left);
+  check('a port rounding starts on the side the boat passes, right of the mark going up',
+    port.base.x > 10 && Math.abs(port.base.y) < 0.5);
+  check('...and ends above it, where it leaves to the left', port.apex.y < -10 && Math.abs(port.apex.x) < 0.5);
+  check('...turning anticlockwise, which SVG calls sweep 0', / 0 0 0\.0,-16\.0$/.test(port.path));
+  check('...arriving on the heading it came in on and leaving on the one it goes out on',
+    Math.abs(port.inHeading.y + 1) < 1e-9 && Math.abs(port.outHeading.x + 1) < 1e-9);
+  const starboard = rounding({ x: 0, y: 0 }, 'reverse', up, { x: 1, y: 0 });
+  check('a starboard rounding goes clockwise, from the mark\'s left', starboard.base.x < -10 && / 0 0 1 /.test(starboard.path));
+  const straight = rounding({ x: 0, y: 0 }, 'forward', up, up);
+  const sweep = (r) => Math.abs(Math.atan2(r.apex.y, r.apex.x) - Math.atan2(r.base.y, r.base.x));
+  check('a mark passed straight still shows a quarter turn of arc, so its way round can be read',
+    Math.abs(sweep(straight) - Math.PI / 2) < 1e-6);
+  check('a second rounding of the same mark is drawn further out',
+    rounding({ x: 0, y: 0 }, 'forward', up, left, 1).radius > port.radius);
+
+  // THE TRACK JOINS THE ARROW: into its tail and out of its head.
+  const roundTrack = track([
+    { crossings: [cross(0, 200, 0, 180)] },
+    { crossings: [port] },
+    { crossings: [cross(-200, -20, -220, -20)] },
+  ]);
+  const legs = roundTrack.filter((s) => s.kind === 'leg');
+  check('the leg in ends at the tail of the arrow', legs[0].d.trim().endsWith(`${port.base.x.toFixed(1)},${port.base.y.toFixed(1)}`));
+  check('...and the leg out leaves from its head', legs[1].d.startsWith(`M${port.apex.x.toFixed(1)},${port.apex.y.toFixed(1)}`));
+  check('...and the rounding\'s own piece of track is its arc', roundTrack.some((s) => s.kind === 'crossing' && s.d === port.path));
 
   // The corner must never eat the leg it is turning onto.
   const shortLeg = track([

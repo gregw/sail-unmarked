@@ -107,7 +107,8 @@ public final class ProgrammeWriter
     {
         String original = Files.readString(file, StandardCharsets.UTF_8);
         for (Rename rename : renames)
-            original = renameReference(original, referenceKey(rename.kind()), rename.from(), rename.to());
+            for (String key : referenceKeys(rename.kind()))
+                original = renameReference(original, key, rename.from(), rename.to());
         String updated = original;
         if (points != null)
             updated = splice(updated, "points", emit(points));
@@ -302,12 +303,13 @@ public final class ProgrammeWriter
     /**
      * The key that refers to a thing of this kind from elsewhere in the file.
      *
-     * <p>A point is named by a line end's {@code at:}; a line is named by a course step's
-     * {@code line:}. Renaming either has to follow that key, or the reference is orphaned.
+     * <p>A point is named by a line end's {@code at:}, and by a course step that rounds it,
+     * {@code point:}; a line is named by a course step's {@code line:}. Renaming either has to
+     * follow those keys, or the reference is orphaned.
      */
-    public static String referenceKey(String kind)
+    public static java.util.List<String> referenceKeys(String kind)
     {
-        return "line".equals(kind) ? "line" : "at";
+        return "line".equals(kind) ? java.util.List.of("line") : java.util.List.of("at", "point");
     }
 
     /** One id change to follow through the file. {@code kind} is {@code point} or {@code line}. */
@@ -447,7 +449,8 @@ public final class ProgrammeWriter
             }
             else if (step.notes() != null && !step.notes().isBlank())
             {
-                out.append(item).append("line: ").append(step.line()).append('\n');
+                out.append(item).append(step.isRounding() ? "point: " : "line: ")
+                    .append(step.isRounding() ? step.point() : step.line()).append('\n');
                 out.append(field).append("cross: ").append(sense(step)).append('\n');
                 if (step.lengthNm() != null)
                     out.append(field).append("lengthNm: ").append(trim(step.lengthNm())).append('\n');
@@ -464,7 +467,8 @@ public final class ProgrammeWriter
 
     private static String stepInline(CourseStep step)
     {
-        StringBuilder out = new StringBuilder("{line: ").append(step.line())
+        StringBuilder out = new StringBuilder(step.isRounding() ? "{point: " : "{line: ")
+            .append(step.isRounding() ? step.point() : step.line())
             .append(", cross: ").append(sense(step));
         if (step.lengthNm() != null)
             out.append(", lengthNm: ").append(trim(step.lengthNm()));

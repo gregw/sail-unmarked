@@ -119,6 +119,55 @@ export function triangle(at, along, normal, scale = 1) {
 }
 
 /**
+ * How a point rounding is drawn: the arc's radius about the mark, how much further out each later
+ * rounding of the same mark goes, the least arc drawn, and the arrowhead and dot.
+ */
+export const ROUNDING = { radius: 16, gap: 10, minSweep: Math.PI / 2, arrowPx: 6, dotR: 3.5 };
+
+/**
+ * A ROUNDING OF A POINT, drawn as an arc about the mark with an arrowhead: anticlockwise for a port
+ * rounding (`forward`, the mark left to port), clockwise for a starboard one. The arc runs round
+ * the outside of the turn, from where a boat coming in along `inDir` meets it to where one leaving
+ * along `outDir` leaves it, so its tail and head are where the track arrives and departs, on the
+ * arc's own tangent. Never less than a quarter turn, so a mark passed nearly straight still shows
+ * which way round it goes. The `k`-th rounding of the same mark sits further out than the last.
+ *
+ * Returns what `track` needs of a crossing — `base` (the tail), `apex` (the head), the headings
+ * in and out, and the arc as `path` — with the arrowhead, the dot and where the letter goes.
+ */
+export function rounding(centre, sense, inDir, outDir, k = 0, scale = 1) {
+  const r = (ROUNDING.radius + k * ROUNDING.gap) * scale;
+  const port = String(sense ?? 'forward').toLowerCase() !== 'reverse';
+  // Screen angles grow clockwise, because y runs down: anticlockwise is falling angle.
+  const dir = port ? -1 : 1;
+  const tangent = (t) => (port ? { x: Math.sin(t), y: -Math.cos(t) } : { x: -Math.sin(t), y: Math.cos(t) });
+  const angleFor = (u) => (port ? Math.atan2(u.x, -u.y) : Math.atan2(-u.x, u.y));
+  let t0 = angleFor(inDir ?? outDir);
+  let sweep = ((dir * (angleFor(outDir ?? inDir) - t0)) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+  if (sweep < ROUNDING.minSweep) {
+    t0 -= dir * (ROUNDING.minSweep - sweep) / 2;
+    sweep = ROUNDING.minSweep;
+  }
+  const t1 = t0 + dir * sweep;
+  const at = (t, radius = r) => ({ x: centre.x + radius * Math.cos(t), y: centre.y + radius * Math.sin(t) });
+  const tail = at(t0);
+  const head = at(t1);
+  const out = tangent(t1);
+  const mid = t0 + (dir * sweep) / 2;
+  return {
+    base: tail,
+    apex: head,
+    inHeading: tangent(t0),
+    outHeading: out,
+    path: `M${xy(tail)} A${r.toFixed(1)} ${r.toFixed(1)} 0 ${sweep > Math.PI ? 1 : 0} ${port ? 0 : 1} ${xy(head)}`,
+    arrow: arrowHead(head, (Math.atan2(out.y, out.x) * 180) / Math.PI, ROUNDING.arrowPx * scale),
+    dot: { x: centre.x, y: centre.y },
+    label: at(mid, r + 9 * scale),
+    radius: r,
+  };
+}
+
+/**
  * What a leg is FOR, as a colour.
  *
  * Not sequence position. On a cycle there is no sequence to
@@ -385,13 +434,21 @@ export function track(steps, options = {}) {
   const mergeAt = options.mergeFraction ?? MERGE_FRACTION;
   const segments = [];
   const span = Math.max(1, steps.length - 1);
-  /** The heading a boat is on while crossing: base to apex, which is the required sense. */
-  const heading = (crossing) => unit(sub(crossing.apex, crossing.base));
+  /**
+   * The heading a boat arrives at a crossing on, and the one it leaves on: base to apex, which is
+   * the required sense, for a line. A rounding (`rounding`) arrives at its arc's tail and leaves
+   * from its head, each on the arc's own tangent there, and says so.
+   */
+  const headingIn = (crossing) => crossing.inHeading ?? unit(sub(crossing.apex, crossing.base));
+  const headingOut = (crossing) => crossing.outHeading ?? unit(sub(crossing.apex, crossing.base));
 
   steps.forEach((step, i) => {
     for (const crossing of step.crossings) {
-      segments.push(segment(`M${xy(crossing.base)} L${xy(crossing.apex)}`,
-        crossing.base, crossing.apex, i / span, 'crossing', { from: i, to: i }));
+      const seg = segment(crossing.path ?? `M${xy(crossing.base)} L${xy(crossing.apex)}`,
+        crossing.base, crossing.apex, i / span, 'crossing', { from: i, to: i });
+      // A rounding's path is its arc; the arrow on it belongs to the mark, not the segment.
+      if (crossing.path) seg.d = crossing.path;
+      segments.push(seg);
     }
   });
 
@@ -419,19 +476,19 @@ export function track(steps, options = {}) {
     // At a gate junction the branches have already turned the boat onto the trunk, so the
     // trunk itself starts and ends unconstrained. At a plain crossing the trunk is the
     // thing that has to turn.
-    const drawn = tangentSegment(merge, from.length > 1 ? null : heading(from[0]),
-      J, to.length > 1 ? null : heading(to[0]), radius, t, 'leg', leg, previous);
+    const drawn = tangentSegment(merge, from.length > 1 ? null : headingOut(from[0]),
+      J, to.length > 1 ? null : headingIn(to[0]), radius, t, 'leg', leg, previous);
     segments.push(drawn);
     previous = drawn.points ?? [];
 
     if (from.length > 1) {
       for (const crossing of from) {
-        segments.push(tangentSegment(crossing.apex, heading(crossing), merge, trunk, radius, t, 'merge', leg));
+        segments.push(tangentSegment(crossing.apex, headingOut(crossing), merge, trunk, radius, t, 'merge', leg));
       }
     }
     if (to.length > 1) {
       for (const crossing of to) {
-        segments.push(tangentSegment(J, trunk, crossing.base, heading(crossing), radius, t, 'split', leg));
+        segments.push(tangentSegment(J, trunk, crossing.base, headingIn(crossing), radius, t, 'split', leg));
       }
     }
   }

@@ -493,6 +493,38 @@ public class ProgrammeWriterTest
     }
 
     @Test
+    public void aRoundingIsWrittenAsAPointAndReadsBack() throws Exception
+    {
+        Map<String, Course> round = new LinkedHashMap<>();
+        round.put("c", flat("c", null, false, null,
+            new CourseStep("start", Direction.FORWARD, null, null, false, null),
+            new CourseStep(null, Direction.REVERSE, null, null, false, null, "reef"),
+            new CourseStep(null, Direction.FORWARD, null, null, false, "Leave it to port.", "reef"),
+            new CourseStep("start", Direction.REVERSE, null, null, false, null)));
+        String out = ProgrammeWriter.emitCourses(round);
+        assertThat(out, containsString("      - {point: reef, cross: reverse}\n"));
+        assertThat("a noted rounding is a block too", out, containsString("      - point: reef\n        cross: forward\n"));
+        com.fasterxml.jackson.databind.ObjectMapper yaml =
+            new com.fasterxml.jackson.databind.ObjectMapper(new com.fasterxml.jackson.dataformat.yaml.YAMLFactory());
+        Map<String, Course> read = yaml.readValue(out.replaceAll("(?m)^  ", ""),
+            new com.fasterxml.jackson.core.type.TypeReference<Map<String, Course>>() {});
+        CourseStep step = read.get("c").variant(CourseVariant.MAIN).sequence().get(1);
+        assertThat(step.point(), is("reef"));
+        assertThat(step.cross(), is(Direction.REVERSE));
+        assertThat(step.isRounding(), is(true));
+    }
+
+    @Test
+    public void aPointRenameIsFollowedIntoTheRoundingsToo()
+    {
+        String yaml = "courses:\n  c:\n    sequence:\n      - {point: reef, cross: forward}\n";
+        String out = yaml;
+        for (String key : ProgrammeWriter.referenceKeys("point"))
+            out = ProgrammeWriter.renameReference(out, key, "reef", "shark");
+        assertThat(out, containsString("{point: shark, cross: forward}"));
+    }
+
+    @Test
     public void allThreeBlocksSurviveTogether(@TempDir Path dir) throws Exception
     {
         Path file = dir.resolve("fixture.yaml");

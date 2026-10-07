@@ -1070,6 +1070,44 @@ export function run(check) {
     lapped.elapsed(lapped.finishAt.getTime() + 999999)
       === lapped.crossings[lapped.crossings.length - 1].time.getTime() - began.getTime());
 
+  /* --------------------------------------------------------- rounding a point */
+
+  // A ROUNDING IS CROSSED AS A LINE: from the mark, out of the turn, half-infinite — the shape
+  // the server resolves it to (`model/Rounding.java`). Here a mark 400 m up the course, rounded
+  // to the west: the outside of that turn is to the north-east.
+  const reef = at(0, 400);
+  const arm = at(10 / Math.SQRT2, 400 + 10 / Math.SQRT2);
+  const roundingOf = (cross) => ({
+    line: 'mark', cross, point: true,
+    port: { latitude: reef.latitude, longitude: reef.longitude, infinite: false },
+    starboard: { latitude: arm.latitude, longitude: arm.longitude, infinite: true },
+  });
+  const westward = (() => {
+    const south = at(-600, 250);
+    const north = at(-600, 550);
+    return { line: 'west', cross: 'FORWARD',
+      port: { ...south, infinite: false }, starboard: { ...north, infinite: false } };
+  })();
+  const roundCourse = (cross) => snapshot([
+    { letter: 'S', entry: false, legNm: null, crossings: [line('start', 0, 'FORWARD')] },
+    { letter: '1', entry: false, legNm: 0.2, crossings: [roundingOf(cross)] },
+    { letter: 'F', entry: false, legNm: 0.3, crossings: [westward] },
+  ]);
+  const roundIt = (client) => {
+    sail(client, { e: 25, n: -100 }, { e: 25, n: 100 });
+    sail(client, { e: 25, n: 100 }, { e: 25, n: 450 });
+    sail(client, { e: 25, n: 450 }, { e: -200, n: 450 });
+    return client;
+  };
+  const ported = roundIt(fresh(roundCourse('FORWARD')));
+  check('going round a mark to port is a port rounding, latched like any line',
+    ported.at === 2 && ported.crossings.some((c) => c.step === 1));
+  check('...and the course is steered to the mark itself, not to the line it is crossed as',
+    Math.abs(ported.steps[1].crossings[0].midpoint.latitude - reef.latitude) < 1e-9);
+  const wrong = roundIt(fresh(roundCourse('REVERSE')));
+  check('going round it the same way when it is to be left to starboard rounds nothing',
+    wrong.at === 1 && !wrong.crossings.some((c) => c.step === 1));
+
   /* ------------------------------------------------------------------ the clock */
 
   check('a clock reads m:ss', clock(65000) === '1:05');

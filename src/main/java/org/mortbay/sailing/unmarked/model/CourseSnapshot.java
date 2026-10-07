@@ -23,7 +23,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  *
  * <h2>What the revision covers, and what it does not</h2>
  * The hash is over the GEOMETRY AND THE ORDER — the resolved positions, the infinite
- * flags, the crossing senses, the entry marks, whether the course closes. It is not over
+ * flags, the crossing senses, which steps round a point, the entry marks, whether the course
+ * closes. It is not over
  * names or notes: renaming a mark changes nothing about where a boat had to sail, and
  * bumping the revision for it would split one course into two that cannot be compared.
  *
@@ -108,13 +109,24 @@ public record CourseSnapshot(
         }
     }
 
-    /** One line to cross, resolved. More than one on a step means a gate. */
+    /**
+     * One line to cross, resolved. More than one on a step means a gate.
+     *
+     * <p>{@code point} is true where the step rounds a point: {@code line} is then the point's id,
+     * the port end is the mark and the starboard end the infinite line out of the turn
+     * ({@link Rounding}). A boat crosses it as it would any line; its screens draw a mark.
+     */
     public record Crossing(
         @JsonProperty("line") String line,
         @JsonProperty("cross") Direction cross,
         @JsonProperty("port") End port,
-        @JsonProperty("starboard") End starboard)
+        @JsonProperty("starboard") End starboard,
+        @JsonProperty("point") Boolean point)
     {
+        public Crossing(String line, Direction cross, End port, End starboard)
+        {
+            this(line, cross, port, starboard, null);
+        }
     }
 
     /** An end, as a place and whether the line runs on past it. */
@@ -152,8 +164,17 @@ public record CourseSnapshot(
         {
             CourseStep step = variant.sequence().get(i);
             List<Crossing> crossings = new ArrayList<>();
+            if (step.isRounding())
+            {
+                crossings.add(rounding(variant, i, lines, points));
+                steps.add(new Step(variant.sequenceLetter(i), false,
+                    Double.isNaN(legs[i]) ? null : legs[i], crossings, null, null));
+                continue;
+            }
             for (CourseStep alternative : step.alternatives())
             {
+                if (alternative.line() == null)
+                    continue;
                 Line line = lines.get(alternative.line());
                 if (line == null)
                     continue;
@@ -194,6 +215,29 @@ public record CourseSnapshot(
             : course + "/" + variant + "/" + stamp;
         return new CourseSnapshot(revision, club, series, course, variant, named, name,
             closed, steps, lengthNm, defaults, at, tcfMin, tcfMax, tcfMid);
+    }
+
+    /**
+     * A rounding as the line it is crossed as: the mark finite at the port end, and the line out of
+     * the turn through {@link Rounding#arm}, infinite, at the starboard end. The turn is between
+     * the legs either side, measured from the steps before and after — round the ends of a cycle.
+     */
+    private static Crossing rounding(CourseVariant variant, int i, Map<String, Line> lines,
+        Map<String, NamedPoint> points)
+    {
+        List<CourseStep> sequence = variant.sequence();
+        CourseStep step = sequence.get(i);
+        int n = sequence.size();
+        Position mark = step.referencePoint(lines, points);
+        Position before = i > 0 || variant.closed()
+            ? sequence.get((i - 1 + n) % n).referencePoint(lines, points) : null;
+        Position after = i < n - 1 || variant.closed()
+            ? sequence.get((i + 1) % n).referencePoint(lines, points) : null;
+        Position arm = Rounding.arm(mark, before, after, step.cross());
+        return new Crossing(step.point(), step.cross(),
+            new End(mark == null ? null : mark.latitude(), mark == null ? null : mark.longitude(), false),
+            new End(arm == null ? null : arm.latitude(), arm == null ? null : arm.longitude(), true),
+            true);
     }
 
     private static End end(LineEnd from, Map<String, NamedPoint> points)
@@ -242,7 +286,9 @@ public record CourseSnapshot(
                 canonical.append("|R").append(step.handicapWidthM());
             for (Crossing crossing : step.crossings())
             {
-                canonical.append("|C").append(crossing.line()).append(':').append(crossing.cross());
+                // `P` for a rounding, only when it is one, so every course of lines keeps its revision.
+                canonical.append(Boolean.TRUE.equals(crossing.point()) ? "|P" : "|C")
+                    .append(crossing.line()).append(':').append(crossing.cross());
                 for (End end : List.of(crossing.port(), crossing.starboard()))
                 {
                     canonical.append(':')

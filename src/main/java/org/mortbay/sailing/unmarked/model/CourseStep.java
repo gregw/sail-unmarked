@@ -16,6 +16,10 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * marks with virtual lines adds {@code mark} and a rounding sense beside them, and every
  * existing file keeps loading.
  *
+ * <p><b>A step may round a point instead</b>: {@code point} names it, and {@code cross} is the
+ * rounding sense — forward leaves the mark to port, reverse to starboard. On the water it is
+ * crossed as the short half-infinite line {@link Rounding} resolves it to.
+ *
  * <p><b>A gate's alternatives are ordinary steps</b>, which is what makes them
  * element-agnostic: the two sides of a gate need not be the same kind of thing, so a gate
  * with a virtual line one side and a real buoy the other is expressible without a special
@@ -54,13 +58,28 @@ public record CourseStep(
     @JsonProperty("gate") List<CourseStep> gate,
     @JsonProperty("lengthNm") Double lengthNm,
     @JsonProperty("entry") boolean entry,
-    @JsonProperty("notes") String notes)
+    @JsonProperty("notes") String notes,
+    @JsonProperty("point") String point)
 {
     public CourseStep
     {
         gate = (gate == null) ? List.of() : List.copyOf(gate);
-        if (cross == null && line != null)
+        if (cross == null && (line != null || point != null))
             cross = Direction.FORWARD;
+    }
+
+    /** A step that crosses a line, or holds a gate. */
+    public CourseStep(String line, Direction cross, List<CourseStep> gate, Double lengthNm,
+        boolean entry, String notes)
+    {
+        this(line, cross, gate, lengthNm, entry, notes, null);
+    }
+
+    /** True when this step rounds a point rather than crossing a line. */
+    @JsonIgnore
+    public boolean isRounding()
+    {
+        return !isGate() && point != null;
     }
 
     /** True when this step offers a choice rather than naming one line. */
@@ -87,9 +106,16 @@ public record CourseStep(
      */
     public Position referencePoint(Map<String, Line> lines, Map<String, NamedPoint> points)
     {
+        if (isRounding())
+        {
+            // The mark itself, not the midpoint of the line it is crossed as: the line is a
+            // device for detecting the rounding, and the course goes to the mark.
+            NamedPoint mark = points.get(point);
+            return mark == null ? null : mark.position();
+        }
         if (!isGate())
         {
-            Line l = lines.get(line);
+            Line l = line == null ? null : lines.get(line);
             return l == null ? null : l.referencePoint(points);
         }
         Position sum = null;

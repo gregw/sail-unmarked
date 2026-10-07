@@ -29,7 +29,7 @@
  */
 
 import { ENTRY_COLOUR, ROLE_COLOUR, roleColour } from './coursedraw.js';
-import { ARROW_CENTROID, LABEL, TRIANGLE, arrowHead, darken, forwardNormal, seats, stripes, track, triangle } from './coursedraw.js';
+import { ARROW_CENTROID, LABEL, ROUNDING, TRIANGLE, arrowHead, darken, forwardNormal, rounding, seats, stripes, track, triangle } from './coursedraw.js';
 import { geometry, outward, widthHandle, widthThrough, zone } from './handicap.js';
 import {
   BASEMAPS,
@@ -362,12 +362,25 @@ function snapshotVariant() {
  */
 function variantFromSnapshot(snap) {
   const lines = new Map();
+  const points = new Map();
   const end = (e) => ({
     latitude: e?.latitude ?? null,
     longitude: e?.longitude ?? null,
     infinite: !!e?.infinite,
   });
   const sequence = (snap.steps ?? []).map((step) => {
+    // A ROUNDING comes back as the mark it rounds, at the line's port end, where the capture put it.
+    const round = (step.crossings ?? []).find((c) => c.point);
+    if (round) {
+      if (!points.has(round.line)) {
+        points.set(round.line, {
+          id: round.line, name: round.line,
+          latitude: round.port?.latitude ?? null, longitude: round.port?.longitude ?? null, notes: null,
+        });
+      }
+      return { point: round.line, line: null, cross: String(round.cross ?? 'forward').toLowerCase(),
+        gate: [], entry: false, notes: null };
+    }
     const parts = (step.crossings ?? []).map((c) => {
       if (!lines.has(c.line)) {
         lines.set(c.line, {
@@ -385,7 +398,7 @@ function variantFromSnapshot(snap) {
   });
   return {
     id: snap.revision, name: snap.label, template: false, closed: !!snap.closed,
-    tcfMid: snap.tcfMid ?? null, points: new Map(), lines, sequence, notes: null,
+    tcfMid: snap.tcfMid ?? null, points, lines, sequence, notes: null,
   };
 }
 
@@ -442,6 +455,8 @@ function affectedBy(kind, id) {
         const line = variant.lines.get(lineId) ?? state.lines.get(lineId);
         if (line?.port?.at === id || line?.starboard?.at === id) { hit = true; break; }
       }
+      // A course that ROUNDS the point stands on it as directly as one whose line ends there.
+      if (variant.sequence.some((step) => !step.gate?.length && step.point === id)) hit = true;
       if (hit && variant.points.has(id)) hit = false;
     }
     if (hit) out.push({ course: course.id, variant: variant.id });
@@ -464,6 +479,10 @@ function courseParts(variant) {
     for (const alternative of alts(step)) if (alternative.line) lines.add(alternative.line);
   }
   const points = new Set();
+  // A rounded mark is part of the course's geometry like a line's end.
+  for (const step of variant.sequence) {
+    if (!step.gate?.length && step.point) points.add(step.point);
+  }
   const inline = [];
   for (const id of lines) {
     const line = variant.lines.get(id) ?? state.lines.get(id);
@@ -1092,7 +1111,60 @@ function courseCrossings(variant) {
       });
     });
   }
+  // A POINT ROUNDING is an arc about its mark, out of the turn between the legs either side,
+  // anticlockwise to port and clockwise to starboard. Each later rounding of the same mark is
+  // drawn further out, so two passes of one mark read as two.
+  const sequence = variant.sequence ?? [];
+  const passes = new Map();
+  sequence.forEach((step, index) => {
+    if (step.gate?.length || !step.point) return;
+    const mark = GEO.points.get(step.point);
+    if (mark?.latitude == null) return;
+    const [x, y] = state.view.toPx(mark);
+    const around = (offset) => {
+      const n = sequence.length;
+      const j = index + offset;
+      if (!variant.closed && (j < 0 || j >= n)) return null;
+      return stepPx(sequence[(j + n) % n]);
+    };
+    const toward = (from, to) => {
+      if (!from || !to) return null;
+      const length = Math.hypot(to.x - from.x, to.y - from.y);
+      return length < 1e-6 ? null : { x: (to.x - from.x) / length, y: (to.y - from.y) / length };
+    };
+    const centre = { x, y };
+    const k = passes.get(step.point) ?? 0;
+    passes.set(step.point, k + 1);
+    const shape = rounding(centre, step.cross, toward(around(-1), centre), toward(centre, around(1)), k);
+    if (!drawn.has(index)) drawn.set(index, []);
+    drawn.get(index).push({ ...shape, letter: variantLetter(variant, index), entry: false, line: step.point, rounding: true });
+  });
   return { steps, drawn };
+}
+
+/**
+ * Where a step sits on the screen, for the turn at a rounding either side of it: a line's midpoint,
+ * a gate's midpoint between its sides, or a mark. Null while it is unplaced.
+ */
+function stepPx(step) {
+  const places = [];
+  for (const alternative of alts(step)) {
+    if (alternative.point && !step.gate?.length) {
+      const mark = GEO.points.get(alternative.point);
+      if (mark?.latitude == null) return null;
+      places.push(state.view.toPx(mark));
+      continue;
+    }
+    const line = GEO.lines.get(alternative.line);
+    const port = endPosition(line?.port);
+    const starboard = endPosition(line?.starboard);
+    if (!port || !starboard) return null;
+    const [ax, ay] = state.view.toPx(port);
+    const [bx, by] = state.view.toPx(starboard);
+    places.push([(ax + bx) / 2, (ay + by) / 2]);
+  }
+  if (!places.length) return null;
+  return { x: places.reduce((t, p) => t + p[0], 0) / places.length, y: places.reduce((t, p) => t + p[1], 0) / places.length };
 }
 
 /**
@@ -1108,6 +1180,7 @@ function inUse() {
   const lines = new Set();
   const points = new Set();
   for (const step of variant.sequence ?? []) {
+    if (!step.gate?.length && step.point) points.add(step.point);
     for (const alternative of alts(step)) {
       if (!alternative.line) continue;
       lines.add(alternative.line);
@@ -1210,6 +1283,16 @@ function renderCourse() {
 
   usable.forEach((step, i) => {
     for (const shape of drawn.get(step.index)) {
+      if (shape.rounding) {
+        // The mark, the arc round it with the way round on its head, and the step's letter outside.
+        out += `<g class="cmark" data-id="${esc(shape.letter)}@${esc(shape.line)}">`;
+        out += `<path d="${shape.path}" fill="none" stroke="${ROLE_COLOUR.leg}" stroke-width="2.4" stroke-linecap="round"/>`;
+        out += `<polygon points="${shape.arrow}" fill="${ROLE_COLOUR.leg}"/>`;
+        out += `<circle cx="${shape.dot.x.toFixed(1)}" cy="${shape.dot.y.toFixed(1)}" r="${ROUNDING.dotR}" fill="var(--line)"/>`;
+        out += `<text x="${shape.label.x.toFixed(1)}" y="${(shape.label.y + LABEL.fontPx * 0.35).toFixed(1)}" text-anchor="middle" font-family="var(--mono)" font-size="${LABEL.fontPx}" font-weight="600" fill="${ROLE_COLOUR.leg}" stroke="var(--sea)" stroke-width="3" paint-order="stroke">${esc(shape.letter)}</text>`;
+        out += `</g>`;
+        continue;
+      }
       const accent = paint(starts[i], finishes[i], { from: shape.base, to: shape.apex }, `tr${i}-${shape.line}`);
       out += `<g class="cmark" data-id="${esc(shape.letter)}@${esc(shape.line)}">`;
       // An entry point on a cycle is a start and a finish at once — a boat joins here and
@@ -1810,6 +1893,14 @@ function deleteThing() {
     const held = linesUsing(id);
     if (held.length) {
       warnInForm('f_dm', `still used by ${held.join(', ')} — change those ends first`);
+      return;
+    }
+    const rounded = everyVariant()
+      .filter(({ variant }) => !variant.points.has(id)
+        && variant.sequence.some((step) => !step.gate?.length && step.point === id))
+      .map(({ course, variant }) => `${course.id}/${variant.id}`);
+    if (rounded.length) {
+      warnInForm('f_dm', `still rounded by ${rounded.join(', ')} — take those steps off it first`);
       return;
     }
     beginEdit();
@@ -2666,7 +2757,8 @@ function cloneSnapshot() {
   const from = shown.variant;
   course.variants.set(id, {
     id, name: null, template: false, closed: from.closed, tcfMid: from.tcfMid ?? null,
-    points: new Map(),
+    // Its rounded marks too: everything a capture holds is the new variant's own.
+    points: new Map([...from.points].map(([pid, pt]) => [pid, { ...pt, id: pid }])),
     // Everything a snapshot holds is inlined, so the new variant owns all of it outright
     // and can be moved without asking anybody.
     lines: new Map([...from.lines].map(([lid, l]) => [lid, {
@@ -2733,9 +2825,17 @@ function restoreSnapshot() {
       });
     }
   }
+  // A rounded mark is kept where it still is, and otherwise given to the variant at the captured
+  // position, as a moved line is.
+  for (const [id, captured] of from.points) {
+    const current = variant.points.get(id) ?? state.points.get(id);
+    if (!current || current.latitude == null || distanceM(current, captured) >= RESOLUTION_M) {
+      variant.points.set(id, { ...captured, id, name: current?.name ?? null, notes: current?.notes ?? null });
+    }
+  }
   // A step's notes and set length outlive the restore where the step still crosses the same
   // lines the same way, since the capture does not say which length was set and which measured.
-  const crossesOf = (step) => JSON.stringify(alts(step).map((a) => [a.line, senseOf(a)]));
+  const crossesOf = (step) => JSON.stringify(alts(step).map((a) => [a.line ?? a.point, senseOf(a)]));
   const sequence = from.sequence.map((step, i) => {
     const was = variant.sequence[i];
     const same = was && crossesOf(was) === crossesOf(step);
@@ -3502,7 +3602,9 @@ function snapshotFields() {
   const published = snap.revision === life.published;
   const rows = (shown.variant.sequence ?? []).map((step, i) => {
     const letter = variantLetter(shown.variant, i);
-    const parts = alts(step).map((a) => `${esc(a.line)} ${senseOf(a) === 'reverse' ? 'rev' : 'fwd'}`);
+    const parts = alts(step).map((a) => (a.point
+      ? `${esc(a.point)} ${senseOf(a) === 'reverse' ? 'stbd' : 'port'}`
+      : `${esc(a.line)} ${senseOf(a) === 'reverse' ? 'rev' : 'fwd'}`));
     const legNm = snap.steps?.[i]?.legNm;
     return `<div class="steprow">
       <span class="seq">${esc(letter)}</span>
@@ -3580,6 +3682,7 @@ function variantFields(course, variant) {
         <div id="c_steps"></div>
         <div class="endrow" style="margin:4px 0 10px">
           <button id="c_add">Add line</button>
+          <button id="c_addpt">Add point</button>
           <button id="c_alt">Add alternative</button>
         </div>` : ''}
 
@@ -3666,11 +3769,27 @@ function wireVariantFields(course, variant) {
     render();
   });
 
+  // A ROUNDING OF A POINT: port by default, of a mark other than the one just rounded.
+  el('c_addpt').addEventListener('click', () => {
+    const ids = [...GEO.points.keys()].sort((a, b) => a.localeCompare(b));
+    if (!ids.length) { note('no points to round: place one on the Points tab first', true); return; }
+    const last = variant.sequence[variant.sequence.length - 1];
+    beginEdit();
+    variant.sequence.push({
+      point: ids.find((id) => id !== last?.point) ?? ids[0],
+      line: null, cross: 'forward', gate: [], notes: null,
+    });
+    formsChanged();
+    endEdit();
+    render();
+  });
+
   // "Alternative to the previous line": the last step becomes a gate, or gains another
   // side if it is one already. A gate is a choice at ONE step, never a step of its own.
   el('c_alt').addEventListener('click', () => {
     const last = variant.sequence[variant.sequence.length - 1];
     if (!last) return;
+    if (!last.gate?.length && last.point) { note('a gate\'s sides are lines; a rounding cannot be one', true); return; }
     beginEdit();
     if (!last.gate?.length) {
       last.gate = [{ line: last.line, cross: last.cross ?? 'forward' }];
@@ -4415,8 +4534,12 @@ function firstLineOf(variant) {
  * and a count that called them one would not match what unfolding shows.
  */
 function crossings(variant) {
-  const rows = (variant.sequence ?? []).reduce((n, step) => n + (step.gate?.length || 1), 0);
-  return rows === 0 ? 'empty' : `${rows} ${rows === 1 ? 'line' : 'lines'}`;
+  const sequence = variant.sequence ?? [];
+  const rounded = sequence.filter((step) => !step.gate?.length && step.point).length;
+  const rows = sequence.reduce((n, step) => n + (step.gate?.length || 1), 0) - rounded;
+  if (rows + rounded === 0) return 'empty';
+  const lines = `${rows} ${rows === 1 ? 'line' : 'lines'}`;
+  return rounded ? `${lines}, ${rounded} ${rounded === 1 ? 'rounding' : 'roundings'}` : lines;
 }
 
 function renderSteps(variant) {
@@ -4426,6 +4549,9 @@ function renderSteps(variant) {
   // line, and a list you have to read all of is not a list you can find anything in.
   const options = (selected) => [...GEO.lines.keys()].sort((a, b) => a.localeCompare(b))
     .map((id) => `<option value="${esc(id)}"${id === selected ? ' selected' : ''}>${esc(id)}${isAdhoc('line', id) ? ' (ad-hoc)' : ''}</option>`)
+    .join('');
+  const pointOptions = (selected) => [...GEO.points.keys()].sort((a, b) => a.localeCompare(b))
+    .map((id) => `<option value="${esc(id)}"${id === selected ? ' selected' : ''}>${esc(id)}${isAdhoc('point', id) ? ' (ad-hoc)' : ''}</option>`)
     .join('');
 
   el('c_steps').innerHTML = steps.length === 0
@@ -4437,8 +4563,12 @@ function renderSteps(variant) {
         const rows = (gate ?? [step]).map((entry, j) => `
           <div class="steprow${gate && j > 0 ? ' alt' : ''}">
             <span class="seq">${gate && j > 0 ? '&#8627;' : esc(variantLetter(variant, i))}</span>
-            <select data-step="${i}" data-alt="${j}" class="s_line">${options(entry.line)}</select>
-            <button data-step="${i}" data-alt="${j}" class="s_dir" title="crossing sense">${senseOf(entry) === 'reverse' ? 'rev' : 'fwd'}</button>
+            ${!gate && step.point
+              // A ROUNDING names a point, and its sense is which side the mark is left on.
+              ? `<select data-step="${i}" data-alt="${j}" class="s_point" title="the point rounded">${pointOptions(entry.point)}</select>
+                 <button data-step="${i}" data-alt="${j}" class="s_dir" title="rounding: port leaves the mark to port">${senseOf(entry) === 'reverse' ? 'stbd' : 'port'}</button>`
+              : `<select data-step="${i}" data-alt="${j}" class="s_line">${options(entry.line)}</select>
+                 <button data-step="${i}" data-alt="${j}" class="s_dir" title="crossing sense">${senseOf(entry) === 'reverse' ? 'rev' : 'fwd'}</button>`}
             ${variant.closed && j === 0
               ? `<button data-step="${i}" class="s_entry${step.entry ? ' on' : ''}" title="a boat may begin and end a lap here">&#8635;</button>`
               : ''}
@@ -4453,7 +4583,7 @@ function renderSteps(variant) {
 
   const on = (cls, fn) => {
     for (const node of el('c_steps').querySelectorAll(`.${cls}`)) {
-      node.addEventListener(cls === 's_line' ? 'change' : 'click', (ev) => {
+      node.addEventListener(cls === 's_line' || cls === 's_point' ? 'change' : 'click', (ev) => {
         beginEdit();
         fn(Number(node.dataset.step), Number(node.dataset.alt), ev, node);
         formsChanged();
@@ -4464,6 +4594,7 @@ function renderSteps(variant) {
   };
 
   on('s_line', (i, j, ev, node) => { entryAt(variant, i, j).line = node.value; });
+  on('s_point', (i, j, ev, node) => { entryAt(variant, i, j).point = node.value; });
   on('s_dir', (i, j) => {
     const entry = entryAt(variant, i, j);
     entry.cross = senseOf(entry) === 'forward' ? 'reverse' : 'forward';
@@ -4509,6 +4640,13 @@ function handicapShape(variant) {
   const steps = [];
   for (const step of variant?.sequence ?? []) {
     const crossings = [];
+    if (!step.gate?.length && step.point) {
+      // A rounding is where its mark is, for the legs either side of a track.
+      const mark = GEO.points.get(step.point);
+      if (mark?.latitude == null) return null;
+      steps.push({ crossings: [{ line: step.point, cross: step.cross, port: mark, starboard: mark }], handicapWidthM: null });
+      continue;
+    }
     for (const alternative of alts(step)) {
       const line = GEO.lines.get(alternative.line);
       const port = endPosition(line?.port);
@@ -4785,13 +4923,17 @@ function rename(oldId, wanted) {
     }
   }
   // An ad-hoc line may still name a CLUB point — detaching a point does not detach the
-  // other end — so a club rename has to reach into the variants as well.
+  // other end — so a club rename has to reach into the variants as well, and into every
+  // course that rounds it.
   for (const { variant } of everyVariant()) {
     if (variant.points.has(oldId)) continue;
     for (const line of variant.lines.values()) {
       for (const end of [line.port, line.starboard]) {
         if (end && end.at === oldId) end.at = newId;
       }
+    }
+    for (const step of variant.sequence) {
+      if (step.point === oldId) step.point = newId;
     }
   }
   // Recorded on the edit in progress, so the save can carry it: the points block is
@@ -4904,7 +5046,8 @@ function coursesPayload() {
           handicapWidthM: l.handicapWidthM ?? null,
         }])),
         sequence: v.sequence.map((step) => ({
-          line: step.gate?.length ? null : (step.line ?? null),
+          line: step.gate?.length || step.point ? null : (step.line ?? null),
+          point: step.gate?.length ? null : (step.point ?? null),
           cross: step.gate?.length ? null : senseOf(step),
           gate: (step.gate ?? []).map((a) => ({ line: a.line ?? null, cross: senseOf(a) })),
           lengthNm: step.lengthNm ?? null,

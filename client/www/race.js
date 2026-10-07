@@ -231,10 +231,13 @@ function extent(row) {
 
 /** The midpoint of a step, which is what a leg is measured between. */
 function midOf(step) {
-  const mids = (step.crossings ?? []).map((crossing) => ({
-    latitude: ((crossing.port?.latitude ?? 0) + (crossing.starboard?.latitude ?? 0)) / 2,
-    longitude: ((crossing.port?.longitude ?? 0) + (crossing.starboard?.longitude ?? 0)) / 2,
-  }));
+  // A rounding is measured to its mark, the line's port end.
+  const mids = (step.crossings ?? []).map((crossing) => (crossing.point
+    ? { latitude: crossing.port?.latitude ?? 0, longitude: crossing.port?.longitude ?? 0 }
+    : {
+      latitude: ((crossing.port?.latitude ?? 0) + (crossing.starboard?.latitude ?? 0)) / 2,
+      longitude: ((crossing.port?.longitude ?? 0) + (crossing.starboard?.longitude ?? 0)) / 2,
+    }));
   if (!mids.length) return null;
   return {
     latitude: mids.reduce((sum, m) => sum + m.latitude, 0) / mids.length,
@@ -336,6 +339,15 @@ function renderChart() {
       for (const crossing of step.crossings ?? []) {
         if (crossing.port?.latitude == null) continue;
         const [px, py] = state.view.toPx(crossing.port);
+        if (crossing.point) {
+          // A rounding is its mark, a dot, never the line it is crossed as.
+          out += `<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="5" fill="${colour}"/>`
+            + `<text x="${px.toFixed(1)}" y="${(py - 9).toFixed(1)}" text-anchor="middle"`
+            + ` font-family="var(--disp)" font-size="15" font-weight="700" fill="${colour}"`
+            + ` style="paint-order:stroke;stroke:var(--sea);stroke-width:3px">`
+            + `${esc(step.letter ?? index)}</text>`;
+          continue;
+        }
         const [sx, sy] = state.view.toPx(crossing.starboard);
         if (!corners) {
           out += `<line x1="${px.toFixed(1)}" y1="${py.toFixed(1)}" x2="${sx.toFixed(1)}"`

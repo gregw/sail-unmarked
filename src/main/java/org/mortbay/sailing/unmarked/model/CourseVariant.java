@@ -264,14 +264,34 @@ public record CourseVariant(
         {
             CourseStep step = sequence.get(i);
             String at = where + " step " + sequenceLetter(i);
-            if (!step.isGate() && step.line() == null)
-                problems.add(at + " names neither a line nor a gate");
+            if (!step.isGate() && step.line() == null && step.point() == null)
+                problems.add(at + " names neither a line, a point nor a gate");
+            if (!step.isGate() && step.line() != null && step.point() != null)
+                problems.add(at + " names both line '" + step.line() + "' and point '" + step.point()
+                    + "'; a step crosses a line or rounds a point");
             if ((i == 0 || i == sequence.size() - 1) && step.isGate())
                 problems.add(at + " is a gate; the start and the finish must be a single line");
+            // A START, FINISH OR LAP'S ENTRY IS CROSSED AS ITSELF. A rounding is a device for
+            // detecting that a boat went round a mark, with nothing to say where it starts from.
+            boolean end = closed ? step.entry() : (i == 0 || i == sequence.size() - 1);
+            if (end && step.isRounding())
+                problems.add(at + " rounds point '" + step.point() + "'; a "
+                    + (closed ? "lap's entry" : i == 0 ? "start" : "finish") + " must be a line");
             for (CourseStep alt : step.alternatives())
             {
                 if (alt.line() != null && !all.containsKey(alt.line()))
                     problems.add(at + " names unknown line '" + alt.line() + "'");
+                if (step.isGate() && alt.point() != null)
+                    problems.add(at + " is a gate with point '" + alt.point() + "' as a side; a"
+                        + " gate's sides are lines");
+            }
+            if (step.isRounding())
+            {
+                NamedPoint mark = allPoints.get(step.point());
+                if (mark == null)
+                    problems.add(at + " rounds unknown point '" + step.point() + "'");
+                else if (!mark.surveyed())
+                    problems.add(at + " rounds point '" + step.point() + "', which has no position");
             }
         }
 

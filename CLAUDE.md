@@ -98,7 +98,8 @@ unmarked/
     model/                              records: Position, NamedPoint, LineEnd, Line, Direction,
                                         CourseStep, CourseVariant, Course, Race, Programme,
                                         CourseSnapshot, CourseRecord, CrossingEvent, Fix,
-                                        FixVerdict, JoinMode, Ids, Geo, Handicap
+                                        FixVerdict, JoinMode, Ids, Geo, Handicap, Rounding
+                                        (a point rounding resolved to the line it is crossed as)
     course/ProgrammeLibrary.java        loads and validates the series files; creates, renames
     course/ProgrammeWriter.java         splices YAML rather than serialising it
     store/JsonStore.java                records, archived geometry, conduct; atomic, journalled

@@ -27,7 +27,7 @@
  * exercised without a screen.
  */
 
-import { ENTRY_COLOUR, LABEL, ROLE_COLOUR, TRIANGLE, arrowHead, forwardNormal, seats, stripes, track, triangle } from './coursedraw.js';
+import { ENTRY_COLOUR, LABEL, ROLE_COLOUR, ROUNDING, TRIANGLE, arrowHead, forwardNormal, rounding, seats, stripes, track, triangle } from './coursedraw.js';
 import { BASEMAPS, MapView, mercX, mercY } from './geo.js';
 import { fromLocal, side, toLocal } from './crossing.js';
 import { TRAIL_IN_VIEW, bearingLocal, clock } from './raceclient.js';
@@ -1029,6 +1029,7 @@ export function plot(state, options = {}) {
     real,
     to, scale, boat, focused: true, missed: state.state === 'missed', reach,
     colour: approachColour(state, prepared),
+    mark: !!state.watched.point,
   });
   out += art.out;
   const seatPx = art.seatPx;
@@ -1265,6 +1266,11 @@ export function crossingArt(prepared, required, options) {
       out += `<line x1="${end.x.toFixed(1)}" y1="${end.y.toFixed(1)}" x2="${away.x.toFixed(1)}"`
         + ` y2="${away.y.toFixed(1)}" stroke="${ink}" stroke-width="${(lineW * 0.85).toFixed(1)}"`
         + ` stroke-dasharray="${dash.toFixed(0)},${(dash * 0.55).toFixed(0)}" opacity="${(fade * 0.78).toFixed(2)}"/>`;
+    } else if (options.mark && !missed) {
+      // A ROUNDING'S MARK, at the line's port end: the line is how the rounding is detected, and
+      // the mark is the thing on the water, so it is drawn as one.
+      out += `<circle cx="${end.x.toFixed(1)}" cy="${end.y.toFixed(1)}" r="6"`
+        + ` fill="var(--line)" stroke="var(--sea)" stroke-width="1.5"/>`;
     } else {
       out += `<circle cx="${end.x.toFixed(1)}" cy="${end.y.toFixed(1)}" r="${missed ? 6.5 : 3}"`
         + ` fill="${missed ? 'none' : 'var(--line)'}" stroke="var(--line)" stroke-width="2"`
@@ -2173,6 +2179,8 @@ export function overview(client, options = {}) {
   const byLine = new Map();
   client.steps.forEach((step) => {
     for (const crossing of step.crossings) {
+      // A rounding is drawn as its mark, below, never as the line it is crossed as.
+      if (crossing.point) continue;
       if (!byLine.has(crossing.line)) byLine.set(crossing.line, []);
       byLine.get(crossing.line).push({ step, crossing });
     }
@@ -2195,6 +2203,37 @@ export function overview(client, options = {}) {
         { x: normal.x * sign, y: normal.y * sign }, markScale));
     });
   }
+
+  // A POINT ROUNDING: the mark, and an arc round it the way it is rounded, out of the turn between
+  // the legs either side — the editor's own drawing (`rounding`). A later rounding of the same mark
+  // sits further out.
+  const stepAt = (step) => {
+    const places = step.crossings.map((c) => (c.point ? c.prepared.port
+      : { x: (c.prepared.port.x + c.prepared.starboard.x) / 2, y: (c.prepared.port.y + c.prepared.starboard.y) / 2 }));
+    if (!places.length) return null;
+    return to({ x: places.reduce((t, p) => t + p.x, 0) / places.length, y: places.reduce((t, p) => t + p.y, 0) / places.length });
+  };
+  const toward = (from, at) => {
+    if (!from || !at) return null;
+    const length = Math.hypot(at.x - from.x, at.y - from.y);
+    return length < 1e-6 ? null : { x: (at.x - from.x) / length, y: (at.y - from.y) / length };
+  };
+  const passes = new Map();
+  client.steps.forEach((step, i) => {
+    const crossing = step.crossings.find((c) => c.point);
+    if (!crossing) return;
+    const n = client.steps.length;
+    const closed = !!client.snapshot.closed;
+    const before = i > 0 || closed ? stepAt(client.steps[(i - 1 + n) % n]) : null;
+    const after = i < n - 1 || closed ? stepAt(client.steps[(i + 1) % n]) : null;
+    const mark = to(crossing.prepared.port);
+    const k = passes.get(crossing.line) ?? 0;
+    passes.set(crossing.line, k + 1);
+    placed.set(`${step.index}:${crossing.line}`, {
+      ...rounding(mark, crossing.required, toward(before, mark), toward(mark, after), k, markScale),
+      rounding: true,
+    });
+  });
 
   let out = background;
   if (zone) {
@@ -2264,8 +2303,16 @@ export function overview(client, options = {}) {
       const shape = placed.get(`${step.index}:${crossing.line}`);
       if (!shape) continue;
       const colour = live ? ROLE_COLOUR.start : done ? 'var(--muted)' : ROLE_COLOUR.leg;
-      out += `<polygon points="${shape.points}" fill="${colour}"`
-        + ` opacity="${live ? 1 : done ? OVERVIEW_INK.done : OVERVIEW_INK.ahead}"/>`;
+      const opacity = live ? 1 : done ? OVERVIEW_INK.done : OVERVIEW_INK.ahead;
+      if (shape.rounding) {
+        out += `<path d="${shape.path}" fill="none" stroke="${colour}" stroke-width="${(2.6 * markScale).toFixed(1)}"`
+          + ` stroke-linecap="round" opacity="${opacity}"/>`;
+        out += `<polygon points="${shape.arrow}" fill="${colour}" opacity="${opacity}"/>`;
+        out += `<circle cx="${shape.dot.x.toFixed(1)}" cy="${shape.dot.y.toFixed(1)}" r="${(ROUNDING.dotR * markScale).toFixed(1)}"`
+          + ` fill="${live ? ROLE_COLOUR.start : 'var(--line)'}"/>`;
+      } else {
+        out += `<polygon points="${shape.points}" fill="${colour}" opacity="${opacity}"/>`;
+      }
       // THE LETTER, as large as its triangle allows and as readable as it can be made: white and
       // bold, with a dark outline under it, which holds against green, blue and grey alike.
       const font = OVERVIEW_MARK.fontPx * (markScale / OVERVIEW_MARK.base);
