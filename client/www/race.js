@@ -52,7 +52,7 @@ import { boatArt, esc, hhmmss } from './markscreen.js';
 import { stripes } from './coursedraw.js';
 import { envelope, geometry } from './handicap.js';
 import { duration } from './screens.js';
-import { showWhoami } from './whoami.js';
+import { editableClubs, showWhoami } from './whoami.js';
 
 const el = (id) => document.getElementById(id);
 
@@ -110,7 +110,9 @@ async function loadRaces() {
    * screen saying why. A club's connection being briefly bad is not an unusual condition.
    */
   try {
-    state.programmes = await json('/api/programmes');
+    // Only the clubs this account is an officer of: another club's races are not this desk's.
+    const mine = editableClubs(await WHOAMI);
+    state.programmes = (await json('/api/programmes')).filter((p) => !mine || mine.has(p.club));
   } catch (error) {
     state.message = `Could not read the programmes: ${error.message}`;
     render();
@@ -783,7 +785,7 @@ el('chart').addEventListener('pointerup', () => { drag = null; });
  * connection, which is most clubs.
  */
 render();
-showWhoami();
+const WHOAMI = showWhoami();
 await loadRaces();
 await poll();
 // A second is the right rate for a desk: the fleet feed itself is five-second and the states

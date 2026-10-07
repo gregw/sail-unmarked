@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.is;
@@ -249,6 +250,55 @@ class AuthIntegrationTest
             containsString("\"signedIn\" : true"));
     }
 
+    /* ------------------------------------------------------------- club officers */
+
+    @Test
+    void aClubsAdminsChangeThatClubAndNoOther(@TempDir Path root) throws Exception
+    {
+        // Case differs on purpose: an address is compared as the provider will send it.
+        start(root, false, null, null, """
+            superAdmins: [boss@example.org]
+            clubs:
+              test.example:
+                admins: [Officer@Test.Example]
+              other.example:
+                admins: [stranger@other.example]
+            """);
+        String mine = "/api/programmes/test.example/fixture";
+        String theirs = "/api/programmes/other.example/somebody-elses";
+
+        HttpClient officer = browser();
+        signIn(officer, "officer@test.example");
+        assertThat("an admin reaches its own club's writes", status(officer, "PUT", mine, "{}"), not(oneOf(303, 403)));
+        assertThat("...and not another club's", status(officer, "PUT", theirs, "{}"), is(403));
+        assertThat("...whichever write it is", status(officer, "POST",
+            "/api/lifecycle/other.example/somebody-elses/snapshots", "{}"), is(403));
+        assertThat("...including creating a series there, which names its club in the body",
+            status(officer, "POST", "/api/programmes", "{\"club\":\"other.example\",\"series\":\"x\"}"),
+            is(403));
+        assertThat("the page is told which clubs to offer", body(officer, "/api/config"),
+            allOf(containsString("\"allClubs\" : false"), containsString("test.example")));
+
+        HttpClient stranger = browser();
+        signIn(stranger, "stranger@other.example");
+        HttpResponse<String> refused = send(stranger, "PUT", mine, "{}");
+        assertThat("an admin of another club is refused here", refused.statusCode(), is(403));
+        assertThat("...and told who it is, which club, and where the fix is", refused.body(),
+            allOf(containsString("stranger@other.example"), containsString("test.example"),
+                containsString("auth.yaml")));
+
+        HttpClient boss = browser();
+        signIn(boss, "boss@example.org");
+        assertThat("a super-admin changes any club", status(boss, "PUT", theirs, "{}"), not(oneOf(303, 403)));
+        assertThat("...and is told so", body(boss, "/api/config"), containsString("\"allClubs\" : true"));
+
+        HttpClient nobody = browser();
+        signIn(nobody, "visitor@example.com");
+        assertThat("an account named nowhere may sign in and change nothing",
+            status(nobody, "PUT", mine, "{}"), is(403));
+        assertThat("reads stay open to it", status(nobody, "/api/programmes"), is(200));
+    }
+
     /* ---------------------------------------------------------------- with it off */
 
     @Test
@@ -375,6 +425,12 @@ class AuthIntegrationTest
 
     private void start(Path root, boolean allowLoopback, String domain, String allowIP) throws Exception
     {
+        start(root, allowLoopback, domain, allowIP, "");
+    }
+
+    private void start(Path root, boolean allowLoopback, String domain, String allowIP, String more)
+        throws Exception
+    {
         String issuerUrl = issuer == null ? startStubIssuer() : "http://localhost:" + port(issuer);
         Path data = fixture(root);
         // Rewritten each time: the loopback test starts twice against one fixture, and the
@@ -387,9 +443,10 @@ class AuthIntegrationTest
             allowLoopback: %s
             %s
             %s
+            %s
             """.formatted(issuerUrl, allowLoopback,
             domain == null ? "" : "allowedDomain: \"" + domain + "\"",
-            allowIP == null ? "" : "allowIP: \"" + allowIP + "\""));
+            allowIP == null ? "" : "allowIP: \"" + allowIP + "\"", more));
         unmarked = UnmarkedServer.start(data, 0);
     }
 
@@ -448,7 +505,22 @@ class AuthIntegrationTest
 
     private int status(String method, String path, String body) throws Exception
     {
-        return plain.send(HttpRequest.newBuilder()
+        return status(plain, method, path, body);
+    }
+
+    private HttpResponse<String> send(HttpClient client, String method, String path, String body)
+        throws Exception
+    {
+        return client.send(HttpRequest.newBuilder()
+            .uri(URI.create("http://localhost:" + port(unmarked) + path))
+            .header("Content-Type", "application/json")
+            .method(method, HttpRequest.BodyPublishers.ofString(body)).build(),
+            HttpResponse.BodyHandlers.ofString());
+    }
+
+    private int status(HttpClient client, String method, String path, String body) throws Exception
+    {
+        return client.send(HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:" + port(unmarked) + path))
             .header("Content-Type", "application/json")
             .method(method, HttpRequest.BodyPublishers.ofString(body)).build(),

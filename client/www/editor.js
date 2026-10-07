@@ -43,7 +43,7 @@ import {
   translateBy,
   wheelZoomStep,
 } from './geo.js';
-import { showWhoami } from './whoami.js';
+import { editableClubs, showWhoami } from './whoami.js';
 import { RESOLUTION_M } from './crossing.js';
 
 /** How much of the chart a selected line is framed to occupy. */
@@ -104,6 +104,9 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
  */
 const EDITOR_MAX_ZOOM = 22;
 
+/** Who is signed in, read once; the clubs it may change follow from it (`editableClubs`). */
+const WHOAMI = showWhoami();
+
 const state = {
   view: Object.assign(new MapView(), { maxZoom: EDITOR_MAX_ZOOM }),
   basemap: 'chart',
@@ -161,7 +164,12 @@ async function json(path) {
 }
 
 async function loadProgrammeList(keep = null) {
-  state.programmes = await json('/api/programmes');
+  // Only the clubs this account is an officer of; a club it cannot change has nothing to edit.
+  const mine = editableClubs(await WHOAMI);
+  state.programmes = (await json('/api/programmes')).filter((p) => !mine || mine.has(p.club));
+  if (mine && mine.size === 0) {
+    note('this account is not an admin of any club; a super-admin can add it under clubs: in auth.yaml', true);
+  }
   const wanted = state.programmes.some((p) => `${p.club}/${p.series}` === keep)
     ? keep
     : (state.programmes.length ? `${state.programmes[0].club}/${state.programmes[0].series}` : null);
@@ -5350,7 +5358,6 @@ function wire() {
 wire();
 showTab('courses');
 renderActions();
-showWhoami();
 loadProgrammeList(null).catch((e) => {
   el('status').innerHTML = `<span class="warn">${esc(e.message)}</span>`;
 });

@@ -35,5 +35,15 @@ export async function showWhoami(id = 'whoami') {
   }
 }
 
+/**
+ * THE CLUBS THIS ACCOUNT MAY CHANGE, from what `showWhoami` returned: a set of club ids, or null
+ * for every club — no login, a super-admin, or a server that names no officers. The officer's
+ * screens offer only these; the server checks every write again, so this is a convenience and
+ * never the control.
+ */
+export function editableClubs(auth) {
+  return auth?.allClubs === false ? new Set(auth.clubs ?? []) : null;
+}
+
 const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' };
 const esc = (value) => String(value ?? '').replace(/[&<>"]/g, (c) => ESC[c]);

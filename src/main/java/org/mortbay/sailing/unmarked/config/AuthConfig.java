@@ -6,10 +6,13 @@ import java.net.UnknownHostException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.regex.Pattern;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -23,7 +26,8 @@ import org.slf4j.LoggerFactory;
  * Who may run a club's racing from this server, loaded from {@code data/config/auth.yaml}.
  *
  * <p>Narrowed to what this system asks of a login: one OpenID Connect client, registered once
- * with the provider, and optionally one domain whose accounts may sign in.
+ * with the provider, optionally one domain whose accounts may sign in, and who may change each
+ * club — {@code superAdmins} for every club, and each club's own {@code admins}.
  *
  * <p><b>AUTHENTICATE AUTHORITY, TRUST DATA</b> — dialog §7.1, and the whole of why
  * this is asymmetric. A boat's positions and instants are trusted by design, so a login on a
@@ -49,8 +53,19 @@ public record AuthConfig(
     @JsonProperty("redirectPath") String redirectPath,
     @JsonProperty("allowedDomain") String allowedDomain,
     @JsonProperty("allowLoopback") boolean allowLoopback,
-    @JsonProperty("allowIP") String allowIP)
+    @JsonProperty("allowIP") String allowIP,
+    @JsonProperty("superAdmins") List<String> superAdmins,
+    @JsonProperty("clubs") Map<String, Club> clubs)
 {
+    /** A club's own officers: the accounts that may change its courses and run its races. */
+    public record Club(@JsonProperty("admins") List<String> admins)
+    {
+        public Club
+        {
+            admins = lower(admins);
+        }
+    }
+
     private static final Logger LOG = LoggerFactory.getLogger(AuthConfig.class);
 
     private static final JsonMapper YAML_MAPPER = JsonMapper.builder(new YAMLFactory())
@@ -74,6 +89,14 @@ public record AuthConfig(
         redirectPath = pathOf(redirectPath.trim());
         if (!redirectPath.startsWith("/"))
             redirectPath = "/" + redirectPath;
+        superAdmins = lower(superAdmins);
+        Map<String, Club> byClub = new LinkedHashMap<>();
+        if (clubs != null)
+        {
+            clubs.forEach((club, officers) -> byClub.put(club.trim().toLowerCase(Locale.ENGLISH),
+                officers == null ? new Club(null) : officers));
+        }
+        clubs = Map.copyOf(byClub);
     }
 
     /** A login with no addresses let past it. */
@@ -81,6 +104,56 @@ public record AuthConfig(
         String redirectPath, String allowedDomain, boolean allowLoopback)
     {
         this(enabled, issuer, clientId, clientSecret, redirectPath, allowedDomain, allowLoopback, null);
+    }
+
+    /** A login with no per-club officers: every account it admits may change every club. */
+    public AuthConfig(boolean enabled, String issuer, String clientId, String clientSecret,
+        String redirectPath, String allowedDomain, boolean allowLoopback, String allowIP)
+    {
+        this(enabled, issuer, clientId, clientSecret, redirectPath, allowedDomain, allowLoopback,
+            allowIP, null, null);
+    }
+
+    /** Accounts as they are compared: trimmed and lower-cased, blanks dropped. */
+    private static List<String> lower(List<String> emails)
+    {
+        if (emails == null)
+            return List.of();
+        return emails.stream()
+            .filter(e -> e != null && !e.isBlank())
+            .map(e -> e.trim().toLowerCase(Locale.ENGLISH))
+            .toList();
+    }
+
+    /**
+     * WHETHER OFFICERS ARE NAMED CLUB BY CLUB. Until {@code auth.yaml} names a super-admin or a
+     * club's admins, every account the login admits may change every club, which suits a server
+     * with one club on it. Once any are named, only they may.
+     */
+    public boolean namesOfficers()
+    {
+        return !superAdmins.isEmpty() || !clubs.isEmpty();
+    }
+
+    /** An account that may change every club, and create new ones. */
+    public boolean isSuperAdmin(String email)
+    {
+        return email != null && superAdmins.contains(email.trim().toLowerCase(Locale.ENGLISH));
+    }
+
+    /** The clubs this account is named an admin of. */
+    public Set<String> clubsOf(String email)
+    {
+        if (email == null)
+            return Set.of();
+        String who = email.trim().toLowerCase(Locale.ENGLISH);
+        Set<String> out = new TreeSet<>();
+        clubs.forEach((club, officers) ->
+        {
+            if (officers.admins().contains(who))
+                out.add(club);
+        });
+        return out;
     }
 
     /** An IP address literal, IPv4 dotted or IPv6 with colons — never a name to be looked up. */
@@ -170,6 +243,13 @@ public record AuthConfig(
             return auth;
         }
         auth.requireUsable(file);
+        if (auth.namesOfficers())
+            LOG.info("Club officers: super-admins {}; {}", auth.superAdmins(),
+                auth.clubs().isEmpty() ? "no club admins" : auth.clubs().entrySet().stream()
+                    .map(e -> e.getKey() + " " + e.getValue().admins()).toList());
+        else
+            LOG.warn("{} names no superAdmins and no club admins — every account it admits may "
+                + "change every club", file);
         Set<InetAddress> bypass = auth.bypass();
         LOG.info("Sign-in required for the editor and the race screen: {} accounts via {}{}",
             auth.allowedDomain() == null ? "any" : auth.allowedDomain(), auth.issuer(),
@@ -199,9 +279,8 @@ public record AuthConfig(
      * to the address. The {@code hd} parameter on the <em>request</em> is only a hint to the
      * account chooser and is not a control; the check has to happen here, on what came back.
      *
-     * <p>A second tier — some accounts may abandon a race, others only watch — is where it would
-     * go, and it is deliberately not here: nothing enforces one today, and a field nothing
-     * enforces reads as a promise.
+     * <p>This is whether an account may sign in at all. Which clubs it may then change is
+     * {@link #isSuperAdmin} and {@link #clubsOf}.
      */
     public boolean permits(String email, String hostedDomain)
     {

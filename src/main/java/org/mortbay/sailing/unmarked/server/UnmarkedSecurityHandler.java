@@ -5,6 +5,7 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.Set;
 
+import org.eclipse.jetty.ee10.servlet.ServletContextRequest;
 import org.eclipse.jetty.security.Constraint;
 import org.eclipse.jetty.security.SecurityHandler;
 import org.eclipse.jetty.server.Request;
@@ -116,5 +117,18 @@ public class UnmarkedSecurityHandler extends SecurityHandler
     {
         SocketAddress remote = request.getConnectionMetaData().getRemoteSocketAddress();
         return remote instanceof InetSocketAddress inet ? inet.getAddress() : null;
+    }
+
+    /**
+     * Whether a servlet's request came from an address let past the login — the same test, off
+     * the same connection, for the servlet that has to decide which clubs such a request may
+     * change.
+     */
+    public static boolean bypassed(jakarta.servlet.http.HttpServletRequest req, Set<InetAddress> bypass)
+    {
+        if (bypass.isEmpty())
+            return false;
+        ServletContextRequest request = ServletContextRequest.getServletContextRequest(req);
+        return request != null && bypass.contains(remote(request));
     }
 }

@@ -1,14 +1,17 @@
 package org.mortbay.sailing.unmarked.server;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
+import java.util.Set;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -16,6 +19,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -117,18 +121,84 @@ public class ApiServlet extends HttpServlet
     private final CourseLedger ledger;
     private final Dialog dialog;
     private final AuthConfig auth;
+    private final Set<InetAddress> bypass;
     private final String version;
+
+    /** The paths whose writes act on one club, named by the path segment after these. */
+    private static final Set<String> CLUB_WRITES = Set.of("programmes", "lifecycle", "conduct");
 
     public ApiServlet(UnmarkedConfig config, ProgrammeLibrary programmes,
         JsonStore store, CourseLedger ledger, Dialog dialog, AuthConfig auth, String version)
     {
         this.auth = auth;
+        this.bypass = auth == null || !auth.enabled() ? Set.of() : auth.bypass();
         this.config = config;
         this.programmes = programmes;
         this.store = store;
         this.ledger = ledger;
         this.dialog = dialog;
         this.version = version;
+    }
+
+    /**
+     * WHICH CLUBS THIS REQUEST MAY CHANGE: null for every club, or the set it is an officer of.
+     *
+     * <p>Every club with no login at all, from an address let past it, or while {@code auth.yaml}
+     * names no officers; every club for a super-admin; otherwise the clubs that name the account
+     * among their admins. The security handler has already decided that the request is signed in
+     * at all — this decides which club's racing it may act on.
+     */
+    Set<String> editableClubs(HttpServletRequest req)
+    {
+        if (auth == null || !auth.enabled() || UnmarkedSecurityHandler.bypassed(req, bypass))
+            return null;
+        if (!auth.namesOfficers())
+            return null;
+        SignedIn who = SignedIn.of(req, auth);
+        if (auth.isSuperAdmin(who.email()))
+            return null;
+        return auth.clubsOf(who.email());
+    }
+
+    private boolean mayChange(HttpServletRequest req, String club)
+    {
+        Set<String> clubs = editableClubs(req);
+        return clubs == null || (club != null && clubs.contains(club.toLowerCase(Locale.ENGLISH)));
+    }
+
+    /** One sentence: who, which club, and where the fix is. */
+    private void refuseClub(HttpServletRequest req, HttpServletResponse resp, String club) throws IOException
+    {
+        SignedIn who = SignedIn.of(req, auth);
+        String account = who.email() == null ? "This account" : who.email();
+        LOG.warn("Refused {} {} — {} is not an admin of {}", req.getMethod(), req.getRequestURI(), account, club);
+        // The sentence as the body, plain: the pages show a refusal's text as it arrives.
+        resp.setStatus(403);
+        resp.setContentType("text/plain; charset=utf-8");
+        resp.getWriter().write(account + " is not an admin of " + club
+            + "; a super-admin can add it under clubs: in auth.yaml");
+    }
+
+    /**
+     * A WRITE TO A CLUB IS AN OFFICER OF THAT CLUB'S, checked here once for every route whose
+     * path names the club, before any of them runs. Creating a series names its club in the body
+     * instead, and is checked where the body is read.
+     */
+    @Override
+    protected void service(HttpServletRequest req, HttpServletResponse resp)
+        throws ServletException, IOException
+    {
+        String method = req.getMethod();
+        if (!"GET".equals(method) && !"HEAD".equals(method))
+        {
+            String[] path = split(req.getPathInfo());
+            if (path.length >= 2 && CLUB_WRITES.contains(path[0]) && !mayChange(req, path[1]))
+            {
+                refuseClub(req, resp, path[1]);
+                return;
+            }
+        }
+        super.service(req, resp);
     }
 
     @Override
@@ -154,13 +224,18 @@ public class ApiServlet extends HttpServlet
                 body.put("display", config.display());
                 body.put("programmeErrors", programmes.loadErrors());
                 body.put("storeErrors", store.loadErrors());
+                // WHICH CLUBS THIS BROWSER MAY CHANGE, so the officer's screens offer only those.
+                // A convenience, not the control: every write is checked again by the server.
+                Set<String> editable = editableClubs(req);
                 body.put("auth", Map.of(
                     "required", auth != null && auth.enabled(),
                     "signedIn", who.isSignedIn(),
                     "email", who.email() == null ? "" : who.email(),
                     "name", who.name() == null ? "" : who.name(),
                     "login", AuthFilter.LOGIN_PATH,
-                    "logout", AuthFilter.LOGOUT_PATH));
+                    "logout", AuthFilter.LOGOUT_PATH,
+                    "allClubs", editable == null,
+                    "clubs", editable == null ? List.of() : List.copyOf(editable)));
                 send(resp, body);
                 return;
             }
@@ -561,6 +636,11 @@ public class ApiServlet extends HttpServlet
             resp.sendError(400, "Unreadable request: " + e.getMessage());
             return;
         }
+        if (!mayChange(req, body.get("club")))
+        {
+            refuseClub(req, resp, body.get("club"));
+            return;
+        }
         try
         {
             Programme made = programmes.create(body.get("club"), body.get("series"),
@@ -648,8 +728,8 @@ public class ApiServlet extends HttpServlet
      * <p>Behind the officer's login ({@link UnmarkedSecurityHandler}) and {@code configWrites},
      * like the other writes. Abandoning a race is the most consequential act in this system
      * and the one that most obviously wants a name attached to it — §7.1's "authenticate
-     * authority, trust data". There is one tier of officer: any account the login admits may
-     * do any of this.
+     * authority, trust data". Any officer of the race's club may do any of this; there is no
+     * second tier within a club.
      */
     private void conduct(HttpServletRequest req, HttpServletResponse resp, String club,
         String series, String raceId) throws IOException
@@ -1592,7 +1672,7 @@ public class ApiServlet extends HttpServlet
         if (race.date() == null)
             return List.of();
         List<CourseRecord> found = new ArrayList<>();
-        java.util.Set<String> seen = new java.util.LinkedHashSet<>();
+        Set<String> seen = new java.util.LinkedHashSet<>();
         for (Race.Division division : race.divisions().values())
         {
             if (division.course() == null || !seen.add(division.course()))

@@ -64,6 +64,16 @@ redirectPath: "/auth/callback"
 # asserts rather than against anything the browser said.
 # allowedDomain: "myc.org.au"
 
+# WHO MAY CHANGE EACH CLUB. superAdmins may change every club; each club's admins may change that
+# club's courses and run its races, and nothing of any other club's. Accounts are the addresses
+# the provider signs people in as, compared without regard to case. A club is keyed by its domain,
+# the name of its directory under clubs/. Until any are named here, every account the login
+# admits may change every club. Restart the server after changing them.
+# superAdmins: ["owner@example.org"]
+# clubs:
+#   myc.org.au:
+#     admins: ["officer@myc.org.au", "someone@gmail.com"]
+
 # ADDRESSES TREATED AS ADMINISTRATORS, WITHOUT SIGNING IN. A comma-separated list of IP
 # addresses — addresses, not host names — whose requests reach the editor and the race screen as
 # if signed in. Empty by default.
@@ -71,7 +81,7 @@ redirectPath: "/auth/callback"
 # Matched against the address the CONNECTION comes from, never against X-Forwarded-For, which a
 # client can write. So whatever terminates connections in front of this server — a reverse proxy
 # on this machine, a router doing the TLS — is the address every request through it arrives
-# from: NEVER LIST IT, or everybody who comes through it is an administrator. List the machines
+# from: NEVER LIST IT, or everybody who comes through it is a super-admin. List the machines
 # that reach this server directly, on its own port.
 # allowIP: "192.168.1.20, 192.168.1.21"
 
