@@ -5123,7 +5123,12 @@ function snapshot() {
  * are ignored: tabbing from latitude to longitude is one edit, not two.
  */
 function beginEdit() {
-  if (!state.editing) state.editing = snapshot();
+  if (state.editing) return;
+  state.editing = snapshot();
+  // THE MESSAGE LINE REPORTS WHAT JUST HAPPENED, so the next edit takes it down: a refusal left up
+  // after the thing it refused had been put right, or deleted, reads as a problem still there.
+  const message = el('rowMsg');
+  if (message) message.innerHTML = '';
 }
 
 /**

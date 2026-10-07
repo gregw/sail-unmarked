@@ -241,6 +241,7 @@ $('raceForm').querySelectorAll('[data-dcloses]')[0].fire('change', { target: { v
 await settle(1400);
 ok('a close after it is written',
   Object.values((await file()).races[FIRST].divisions)[0].closes === '14:35');
+ok('...and the refusal is taken down once the time is put right', !$('rowMsg').innerHTML.includes('close after it opens'));
 const openAgain = { target: { value: '15:00' } };
 $('raceForm').querySelectorAll('[data-dstart]')[0].fire('change', openAgain);
 await settle(1400);
