@@ -865,8 +865,10 @@ export function run(check) {
   sail(closing, { e: 0, n: -400 }, { e: 0, n: -200 });
   const ttl = closing.timeToLine();
   // Ten metres every two seconds is 5 m/s; 200 m of it is forty seconds to the water.
-  check('time to line is the distance along the COG over the speed being made',
-    Math.abs(ttl.reachSeconds - 40) < 4);
+  // To the second: the distance is smoothed by predicting it on at the speed first, so a steady
+  // approach is not counted down two seconds behind itself.
+  check('time to line is the distance along the COG over the speed being made, with no lag',
+    Math.abs(ttl.reachSeconds - 40) < 1);
   check('...and says the present course DOES cross the line', ttl.crossing === true);
 
   // THE NUMBER SHOWN COUNTS DOWN TO THE LATCH, NOT TO THE WATER. A crossing is not latched
@@ -876,10 +878,23 @@ export function run(check) {
   check('...with the confirmation delay added, since that is when the screen will say CROSSED',
     Math.abs(ttl.seconds - (ttl.reachSeconds + ttl.confirmSeconds)) < 1e-9
     && ttl.confirmSeconds > 0);
-  // Fixes two seconds apart and three of them wanted: six seconds, measured from the fixes
-  // that actually arrived rather than from what the receiver was asked for.
-  check('...the delay being the fix interval times the count the detector wants',
-    Math.abs(ttl.confirmSeconds - closing.confirmFixes * 2) < 0.5);
+  // Fixes two seconds apart and three of them wanted: the first lands up to one interval after
+  // the crossing, so two and a half intervals, five seconds, measured from the fixes that actually
+  // arrived rather than from what the receiver was asked for.
+  check('...the delay being the fix interval times the count the detector wants, less a half',
+    Math.abs(ttl.confirmSeconds - (closing.confirmFixes - 0.5) * 2) < 0.5);
+
+  // ACROSS, AND BEING PROVED: the countdown is then the fixes still wanted, and the screen says
+  // the boat is confirming rather than on the wrong side.
+  const proving = fresh(WINDWARD_LEEWARD);
+  sail(proving, { e: 0, n: -100 }, { e: 0, n: 10 });
+  const overLine = proving.timeToLine();
+  check('once across the right way, time to line counts the confirming fixes still wanted',
+    overLine.confirming === true && Math.abs(overLine.seconds - 2 * 2) < 0.5);
+  check('...and the approach says it is confirming, not on the wrong side',
+    proving.markState(Date.now()).confirming === true);
+  sail(proving, { e: 0, n: 10 }, { e: 0, n: 30 });
+  check('...which ends when the crossing latches', proving.at === 1);
   const slower = fresh(WINDWARD_LEEWARD);
   sail(slower, { e: 0, n: -400 }, { e: 0, n: -200 }, { dtSeconds: 4 });
   check('...so a receiver reporting half as often is twice as long to be sure',

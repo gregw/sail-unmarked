@@ -1106,6 +1106,14 @@ export class RaceClient {
    * thirty seconds from now the boat will be past the end having scored nothing.
    */
   timeToLine() {
+    // ONCE ACROSS THE RIGHT WAY, what is left is the proof: the fixes the detector still wants,
+    // each a measured fix interval. The water has been reached, so the cut no longer counts.
+    const watched = this.watching();
+    const status = watched?.detector && this.point ? watched.detector.status(this.point) : null;
+    if (status?.confirming) {
+      const confirmSeconds = status.awaiting * (this.fixSeconds ?? 1);
+      return { seconds: confirmSeconds, crossing: true, reachSeconds: 0, confirmSeconds, confirming: true };
+    }
     if (this.smoothCogM == null || this.smoothSogMs == null) {
       return { seconds: null, crossing: false, reachSeconds: null, confirmSeconds: this.confirmSeconds() };
     }
@@ -1130,13 +1138,12 @@ export class RaceClient {
    * A time-to-line that ignored it counted down to zero and then sat at zero while nothing
    * happened, which reads as the application having missed it.
    *
-   * <b>The estimate is the fix interval times the count</b>, and both parts are honest: the
-   * count is the detector's own, and the interval is measured from the fixes actually arriving
-   * rather than from what the receiver was asked for. It is an over-estimate by up to one
-   * interval — the first confirming fix may land immediately after the crossing, so the true
-   * delay is somewhere between `(N-1)` and `N` intervals — and over-estimating is the right
-   * way round: a countdown that reaches zero a moment early has told the truth late, where one
-   * that reaches zero a moment late says the boat has already crossed when it has not.
+   * <b>The estimate is the fix interval times the count less a half</b>: the first confirming
+   * fix lands anywhere up to one interval after the crossing, so the true delay is between
+   * `N-1` and `N` intervals and the middle of that is the honest guess. The count is the
+   * detector's own, and the interval is measured from the fixes actually arriving rather than
+   * from what the receiver was asked for. Once the boat is across, the countdown is the fixes
+   * the detector is still waiting for, exactly — see `timeToLine`.
    *
    * Falls back to the interval the receiver was asked for when nothing has arrived yet, and to
    * one second when even that is unknown, because a null here would take the whole readout away
@@ -1144,7 +1151,7 @@ export class RaceClient {
    */
   confirmSeconds() {
     const interval = this.fixSeconds ?? 1;
-    return this.confirmFixes * interval;
+    return (this.confirmFixes - 0.5) * interval;
   }
 
   /** Blend this fix's speed and COG cut into the smoothed pair the readout is built from. */
@@ -1180,7 +1187,14 @@ export class RaceClient {
     // Null when the COG does not meet the line ahead at all — the boat is pointing away, or
     // along it. Kept as null rather than held at its last value: a time to a line you are
     // sailing away from is not a stale number, it is a wrong one.
-    this.smoothCogM = projection ? blend(this.smoothCogM, projection.distanceM) : null;
+    // PREDICTED, THEN BLENDED. The distance to the cut falls at the boat's speed, so a smoother
+    // that blended it straight would trail a steady approach by its whole time constant — two
+    // seconds of time-to-line too many, all the way in. Moving the last value on by the speed
+    // made first, and blending the reading into that, takes the jitter out without the lag.
+    const predicted = this.smoothCogM == null || this.smoothSogMs == null || !(seconds > 0)
+      ? this.smoothCogM
+      : Math.max(0, this.smoothCogM - this.smoothSogMs * seconds);
+    this.smoothCogM = projection ? blend(predicted, projection.distanceM) : null;
   }
 
   /** Where a step is measured to, in the local frame: the mean of its crossings' midpoints. */
@@ -1580,6 +1594,8 @@ export class RaceClient {
        */
       letter: this.starting ? 'S' : (this.atFinish() && !dwelling ? 'F' : step.letter),
       state: latched ? 'crossed' : status.state,
+      // Across the right way and the far side being proved: not yet crossed, and not wrong.
+      confirming: !latched && !!status.confirming,
       perpDistM: status.perpDistM,
       confirmed: status.confirmed ?? 0,
       confirmFixes: this.confirmFixes,

@@ -1860,6 +1860,9 @@ export const BASEMAP_INK = 0.32;
  */
 export function approachColour(state, prepared) {
   if (state.state === 'crossed') return 'var(--ok)';
+  // Over the right way and waiting for the fixes that prove it: grey, neither the red of the
+  // wrong side it is technically on nor the green it has not yet earned.
+  if (state.confirming) return 'var(--muted)';
   if (wrongSide(state, prepared)) return 'var(--warn)';
   return LINE_STATE_COLOUR[state.lineState];
 }
@@ -1869,7 +1872,7 @@ export function approachColour(state, prepared) {
  * the far side, with the line not yet crossed. On the line itself it is on neither.
  */
 export function wrongSide(state, prepared) {
-  if (state.state === 'crossed' || !state.point) return false;
+  if (state.state === 'crossed' || state.confirming || !state.point) return false;
   const approachSide = state.watched?.required === 'reverse' ? 1 : -1;
   const on = side(prepared, state.point);
   return on !== 0 && on !== approachSide;

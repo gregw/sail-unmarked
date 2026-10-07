@@ -511,10 +511,17 @@ export class CrossingDetector {
     const perpDistM = signedDistanceM(this.line, point);
     if (this.latched) return { state: 'crossed', perpDistM };
     const missed = this.rejected.some((r) => r.note.startsWith('side change was past'));
+    // CONFIRMING: the boat has crossed the right way and the far side is being proved. How many
+    // fixes are still wanted — at least one more while none so far has been clear of the line.
+    const confirming = !!this.pending && this.pending.fromSide === this.requiredSide;
     return {
       state: missed ? 'missed' : 'approaching',
       perpDistM,
       confirmed: this.runSide === this.requiredSide ? this.runCount : 0,
+      confirming,
+      awaiting: confirming
+        ? Math.max(this.confirmFixes - this.afterCount, this.afterClear ? 0 : 1)
+        : null,
     };
   }
 }

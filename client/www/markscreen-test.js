@@ -193,6 +193,9 @@ export function run(check) {
   // which is from the south (negative) side to the north.
   const sideLine = prepareLine({ id: 'a', port: at(-150, 0), starboard: at(150, 0) }, REF);
   const sideWatched = { required: 'forward' };
+  check('a line being confirmed is grey, neither the wrong side\'s red nor the crossed green',
+    approachColour({ watched: { required: 'forward' }, state: 'approaching', confirming: true, point: { x: 0, y: 50 } },
+      { port: { x: -100, y: 0 }, starboard: { x: 100, y: 0 }, d: { x: 200, y: 0 }, length: 200 }) === 'var(--muted)');
   const tint = (y, extra = {}) => approachColour({ watched: sideWatched, state: 'approaching', point: { x: 0, y }, ...extra }, sideLine);
   check('the line is its own blue while the boat is on the side to cross it from', tint(-50) === undefined);
   check('...red while it is on the wrong side', tint(50) === 'var(--warn)');
