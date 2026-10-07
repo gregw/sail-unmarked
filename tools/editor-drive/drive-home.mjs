@@ -26,7 +26,7 @@ for (const { club, series } of await json('/api/programmes')) {
         const taken = await post(`/api/lifecycle/${KEY}/snapshots`, { course, variant });
         if (taken.snapshot?.steps?.length >= 2) {
           await post(`/api/lifecycle/${KEY}/publications`, { publish: [{ course, variant }] });
-          shown = { club, series, course, variant, snapshot: taken.snapshot };
+          shown = { club, series, course, variant, snapshot: taken.snapshot, notes: body.notes ?? null };
         }
       } catch { /* incomplete, or a template */ }
       if (shown) break;
@@ -86,6 +86,8 @@ const lines = new Set(shown.snapshot.steps.flatMap((s) => s.crossings.map((c) =>
 ok('...with only the lines the course crosses', (chart.match(/<line [^>]*stroke-width="(2|3\.5)"/g) ?? []).length === lines);
 
 ok('...on the chart at full strength', /class="basemap"[^>]*opacity="1"/.test(chart));
+ok('the course\'s notes are under the chart, and only where it has some',
+  shown.notes ? $('h_notes').textContent === shown.notes.trim() && !$('h_notes').hidden : $('h_notes').hidden);
 
 const tall = Number(/<svg class="plot" viewBox="0 0 \d+ (\d+)"/.exec(chart)?.[1]);
 ok('in a tall window the chart grows to the bottom of it', tall === 1400);
@@ -100,6 +102,8 @@ await pick('h_series', '2026-windward-leeward');
 await pick('h_course', 'handicap/one-lap');
 ok('a handicap line is drawn as the striped rectangle its boats\' lines may lie in',
   html('h_chart').includes('handicap-stripes'));
+ok('...and a course with notes shows them under the chart',
+  !$('h_notes').hidden && ($('h_notes').textContent ?? '').length > 10);
 if (template && `${template.club}/${template.series}` === HKEY) {
   const key = `${template.course}/${template.variant}`;
   ok('a public template is offered as a course, and says it is a template',

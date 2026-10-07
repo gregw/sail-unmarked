@@ -99,6 +99,14 @@
             }
         }
 
+        /* A course's notes as written: their line breaks kept, and no wider than reads easily. */
+        .notes {
+            margin-top: 8px;
+            white-space: pre-line;
+            color: var(--ink);
+            max-width: 70ch;
+        }
+
         .foot {
             margin-top: 8px;
             font-size: 12px;
@@ -200,6 +208,7 @@
         <select id="h_course" aria-label="Course"></select>
     </div>
     <div id="h_chart"><p class="muted">Reading&hellip;</p></div>
+    <div id="h_notes" class="notes" hidden></div>
 </div>
 <!-- Where it comes from and how it works, for anybody who wants more than the front page. -->
 <p class="foot">

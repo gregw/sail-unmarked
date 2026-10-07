@@ -47,6 +47,7 @@ function flatten(courses) {
       out.push({
         club: course.club, series: course.series, course: course.course, variant: variant.variant,
         url: `/api/courses/${encodeURIComponent(variant.revision)}`,
+        notes: course.notes ?? null,
         label: many ? `${named} \u2014 ${variant.name ?? variant.variant}` : named,
       });
     }
@@ -55,6 +56,7 @@ function flatten(courses) {
         club: course.club, series: course.series, course: course.course, variant: variant.variant,
         url: ['/api/public', course.club, course.series, course.course, variant.variant]
           .map((part, i) => (i ? encodeURIComponent(part) : part)).join('/'),
+        notes: course.notes ?? null,
         label: `${many ? `${named} \u2014 ${variant.name ?? variant.variant}` : named} (template)`,
       });
     }
@@ -91,8 +93,18 @@ function renderSelectors() {
   return byKey.get(state.offer) ?? null;
 }
 
+/** The course's own notes, under the chart, where it has any. */
+function showNotes(offer) {
+  const notes = el('h_notes');
+  if (!notes) return;
+  const text = (offer?.notes ?? '').trim();
+  notes.hidden = !text;
+  notes.textContent = text;
+}
+
 async function show() {
   const offer = renderSelectors();
+  showNotes(offer);
   state.snapshot = null;
   if (!offer) {
     el('h_chart').innerHTML = '<p class="muted">No public course has been published yet.</p>';
@@ -128,9 +140,9 @@ function draw() {
     return;
   }
   const width = Math.max(260, Math.round(host.clientWidth || 600));
-  // At least the old proportion, and down to the bottom of the window where it is taller: the
-  // chart is the last thing on the page, so the room below it is the chart's. Measured from the
-  // top of the PAGE, so it is the same height wherever the page happens to be scrolled.
+  // At least the usual proportion, and down to the bottom of the window where it is taller,
+  // less whatever stands below it — the course's notes, the footer — so those stay in view.
+  // Measured from the top of the PAGE, so it is the same height wherever the page is scrolled.
   const least = Math.round(Math.min(width * 0.7, 520));
   const box = host.getBoundingClientRect?.() ?? {};
   const top = (box.top ?? 0) + (window.scrollY ?? 0);
