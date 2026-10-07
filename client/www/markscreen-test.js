@@ -927,6 +927,34 @@ export function run(check) {
     return seen;
   };
 
+  // THE COG STOPS AT THE LINE ONLY WHERE CROSSING IT COUNTS. Coming at it from the side it is to be
+  // crossed from, the dashes end in a ring where the course cuts it. From the far side — over
+  // early, or round the wrong way — a cut there counts for nothing, so the dashes run on out of
+  // the picture and nothing is ringed.
+  const cogFrom = (northM, cogDeg) => {
+    const flown = new RaceClient(snapshot);
+    let when = 0;
+    const view = new PlotView();
+    let svg = '';
+    for (let k = 0; k < 6; k++) {
+      const p = at(0, northM + (cogDeg === 0 ? k : -k) * 4);
+      flown.accept({ latitude: p.latitude, longitude: p.longitude, time: new Date((when += 1000)),
+        accuracyM: 3, satellites: 12, sogKn: 6, cogDeg });
+      const shown = flown.markState(when);
+      if (shown) svg = plot(shown, { orientation: 'north', view, width: W, height: Hgt });
+    }
+    const cog = /<line x1="([-\d.]+)" y1="([-\d.]+)" x2="([-\d.]+)" y2="([-\d.]+)" stroke="var\(--cog\)"/.exec(svg);
+    const end = cog ? { x: Number(cog[3]), y: Number(cog[4]) } : null;
+    return { svg, end, ringed: /r="6.5" fill="none"/.test(svg) };
+  };
+  const fromRight = cogFrom(-60, 0);
+  check('from the side to cross from, the COG stops where it cuts the line, and is ringed there',
+    fromRight.ringed && fromRight.end && fromRight.end.y > 0 && fromRight.end.y < Hgt);
+  const fromWrong = cogFrom(60, 180);
+  check('from the wrong side it runs on out of the picture, past the line',
+    !!fromWrong.end && (fromWrong.end.y > Hgt || fromWrong.end.y < 0 || fromWrong.end.x < 0 || fromWrong.end.x > W));
+  check('...with nothing ringed on the line, since crossing there counts for nothing', !fromWrong.ringed);
+
   // The line runs 150 m either side of the fixture's origin, so east 140 is all but on the pin.
   const middle = approach(0);
   const pin = approach(140);

@@ -1105,7 +1105,14 @@ export function plot(state, options = {}) {
   // THE COG PROJECTION, with a ring where it cuts. The ring is the warning made visual:
   // when it sits outside the line's ends, the present course is running out past the pin,
   // and it goes red to say so long before the boat gets there.
-  if (cut) {
+  //
+  // ON THE WRONG SIDE IT RUNS ON, out of the picture, and cuts nothing: a crossing from there is
+  // the wrong way and counts for nothing, so a ring on the line would mark a place worth nothing.
+  // What the boat needs is where its course goes — back round the end, or across and away.
+  if (wrongSide(state, prepared) && state.cogDeg != null) {
+    const far = to(alongCog(reach / scale));
+    out += `<line x1="${boatPx.x.toFixed(1)}" y1="${boatPx.y.toFixed(1)}" x2="${far.x.toFixed(1)}" y2="${far.y.toFixed(1)}" stroke="var(--cog)" stroke-width="1.7" stroke-dasharray="7,5"/>`;
+  } else if (cut) {
     const hit = to(cut);
     const colour = state.projection.warning === 'beyond-end'
       ? 'var(--warn)'
@@ -1853,10 +1860,19 @@ export const BASEMAP_INK = 0.32;
  */
 export function approachColour(state, prepared) {
   if (state.state === 'crossed') return 'var(--ok)';
-  const approachSide = state.watched?.required === 'reverse' ? 1 : -1;
-  const on = state.point ? side(prepared, state.point) : 0;
-  if (on !== 0 && on !== approachSide) return 'var(--warn)';
+  if (wrongSide(state, prepared)) return 'var(--warn)';
   return LINE_STATE_COLOUR[state.lineState];
+}
+
+/**
+ * Whether the boat is on the side of the line it has to come back from before it can cross it —
+ * the far side, with the line not yet crossed. On the line itself it is on neither.
+ */
+export function wrongSide(state, prepared) {
+  if (state.state === 'crossed' || !state.point) return false;
+  const approachSide = state.watched?.required === 'reverse' ? 1 : -1;
+  const on = side(prepared, state.point);
+  return on !== 0 && on !== approachSide;
 }
 
 /**
